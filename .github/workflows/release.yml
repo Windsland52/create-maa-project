@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - run: mkdir -p dist/npm && pnpm pack --pack-destination dist/npm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+
+  sea:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            asset_os: win
+            arch: x86_64
+          - runner: windows-11-arm
+            asset_os: win
+            arch: aarch64
+          - runner: ubuntu-latest
+            asset_os: linux
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            asset_os: linux
+            arch: aarch64
+          - runner: macos-15-intel
+            asset_os: macos
+            arch: x86_64
+          - runner: macos-latest
+            asset_os: macos
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:sea
+        env:
+          CREATE_MAA_PROJECT_RELEASE_OS: ${{ matrix.asset_os }}
+          CREATE_MAA_PROJECT_RELEASE_ARCH: ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sea-${{ matrix.asset_os }}-${{ matrix.arch }}
+          path: dist/sea/create-maa-project-${{ matrix.asset_os }}-${{ matrix.arch }}*
+          if-no-files-found: error
+
+  release-manifest:
+    needs: sea
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: sea-*
+          merge-multiple: true
+          path: dist/release-assets
+      - run: node scripts/create-release-manifest.mjs dist/release-assets dist/release/create-maa-project-manifest.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-manifest
+          path: dist/release/create-maa-project-manifest.json
+          if-no-files-found: error
+
+  github-release:
+    needs: release-manifest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: sea-*
+          merge-multiple: true
+          path: dist/release
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-manifest
+          path: dist/release
+      - uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: dist/release/*
+
+  npm:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: npm-package
+          path: dist/npm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm publish dist/npm/*.tgz --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  pypi:
+    needs: github-release
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-manifest
+          path: dist/release
+      - run: node scripts/prepare-pypi-release.mjs dist/release/create-maa-project-manifest.json
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1

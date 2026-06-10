@@ -239,4 +239,4 @@ function printScaffoldResult(title: string, result: ScaffoldResult): void {
     }
 }
 
-await main()
+void main()

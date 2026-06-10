@@ -8,9 +8,10 @@ import type {
     ManagedFileInput,
     ResourcePackConfig
 } from './types.js'
+import { embeddedBinaryTemplates, embeddedTextTemplates } from './template-assets.generated.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
-const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates')
+const TEMPLATE_ROOT = resolveTemplateRoot()
 const UPSTREAM_MAAFW_SCHEMA_FILES = [
     'interface.schema.json',
     'interface_config.schema.json',
@@ -31,7 +32,7 @@ const RELEASE_TARGETS = [
         runtimeArch: 'x64'
     },
     {
-        runner: 'windows-latest',
+        runner: 'windows-11-arm',
         artifactOs: 'win',
         arch: 'aarch64',
         ext: 'zip',
@@ -55,7 +56,7 @@ const RELEASE_TARGETS = [
         runtimeArch: 'arm64'
     },
     {
-        runner: 'macos-latest',
+        runner: 'macos-15-intel',
         artifactOs: 'macos',
         arch: 'x86_64',
         ext: 'tar.gz',
@@ -84,7 +85,7 @@ export type ProjectTemplateInput = {
 export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     const files: ManagedFileInput[] = [
         managed('.editorconfig', template('base/.editorconfig')),
-        once('.gitignore', template('base/.gitignore')),
+        once('.gitignore', template('base/gitignore.tmpl')),
         managed('.gitattributes', template('base/.gitattributes')),
         managed('.node-version', '24\n'),
         managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
@@ -1377,7 +1378,7 @@ function packageLicense(license: LicenseKind): string {
 }
 
 function template(path: string, values: Record<string, string> = {}): string {
-    let content = readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
+    let content = embeddedTextTemplates[path] ?? readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
     for (const [key, value] of Object.entries(values)) {
         content = content.replaceAll(`{{${key}}}`, value)
     }
@@ -1385,7 +1386,14 @@ function template(path: string, values: Record<string, string> = {}): string {
 }
 
 function templateBinary(path: string): Buffer {
+    const embedded = embeddedBinaryTemplates[path]
+    if (embedded !== undefined) return Buffer.from(embedded, 'base64')
     return readFileSync(join(TEMPLATE_ROOT, path))
+}
+
+function resolveTemplateRoot(): string {
+    const metaUrl = import.meta.url
+    return metaUrl ? join(dirname(fileURLToPath(metaUrl)), '..', 'templates') : join(process.cwd(), 'templates')
 }
 
 function jsonFragment(value: unknown): string {

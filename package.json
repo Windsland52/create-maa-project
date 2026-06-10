@@ -1,35 +1,40 @@
 {
     "name": "create-maa-project",
     "version": "0.1.0",
-    "private": true,
     "type": "module",
     "bin": {
         "create-maa-project": "./dist/index.js"
     },
     "files": [
-        "dist",
+        "dist/index.js",
         "templates",
         "README.md",
         "LICENSE"
     ],
     "scripts": {
         "build": "node scripts/build.mjs",
+        "build:sea": "node scripts/build-sea.mjs",
         "dev": "tsx src/index.ts",
+        "release:manifest": "node scripts/create-release-manifest.mjs",
+        "release:prepare-pypi": "node scripts/prepare-pypi-release.mjs",
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
-        "test": "vitest run",
+        "test": "vitest run && node scripts/test-python.mjs",
         "check": "pnpm typecheck && pnpm test"
     },
-    "dependencies": {},
     "devDependencies": {
         "@types/node": "24.0.0",
         "esbuild": "0.25.5",
+        "postject": "1.0.0-alpha.6",
         "tsx": "4.20.3",
         "typescript": "5.8.3",
         "vitest": "3.2.4"
     },
     "engines": {
         "node": ">=24"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "packageManager": "pnpm@11.5.1"
 }

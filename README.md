@@ -33,3 +33,11 @@ Current implementation covers the local pipeline scaffold core:
 - write lock, explicit stale-lock cleanup, local backups for file overwrites and non-empty target directories, cache cleanup, and backup restore
 
 Schema syncing is explicit and workflow-based rather than part of build.
+
+## Release
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the
+repo, builds the npm package, builds SEA binaries for Windows/Linux/macOS on
+`x86_64` and `aarch64`, writes `create-maa-project-manifest.json`, publishes the
+GitHub Release assets, publishes npm, then builds the PyPI wrapper with the
+release manifest digest embedded and publishes it through trusted publishing.

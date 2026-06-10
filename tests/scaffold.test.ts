@@ -14,10 +14,10 @@ import { sha256 } from '../src/utils.js'
 const cwdStack: string[] = []
 const EXPECTED_RELEASE_TARGETS = [
     ['windows-latest', 'win', 'x86_64', 'win', 'x64', 'zip'],
-    ['windows-latest', 'win', 'aarch64', 'win', 'arm64', 'zip'],
+    ['windows-11-arm', 'win', 'aarch64', 'win', 'arm64', 'zip'],
     ['ubuntu-latest', 'linux', 'x86_64', 'linux', 'x64', 'tar.gz'],
     ['ubuntu-latest', 'linux', 'aarch64', 'linux', 'arm64', 'tar.gz'],
-    ['macos-latest', 'macos', 'x86_64', 'osx', 'x64', 'tar.gz'],
+    ['macos-15-intel', 'macos', 'x86_64', 'osx', 'x64', 'tar.gz'],
     ['macos-latest', 'macos', 'aarch64', 'osx', 'arm64', 'tar.gz']
 ] as const
 

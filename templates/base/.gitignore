@@ -1,0 +1,9 @@
+# BEGIN create-maa-project
+node_modules/
+.venv/
+.uv-cache/
+config/
+dist/
+debug/
+.create-maa-project/
+# END create-maa-project

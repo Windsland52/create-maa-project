@@ -1,0 +1,447 @@
+import { execFile, spawn } from 'node:child_process'
+import { mkdir } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
+import { promisify } from 'node:util'
+import { baseProjectFiles, configFile } from './templates.js'
+import type {
+    CliOptions,
+    GitInitResult,
+    MaaProjectConfig,
+    PendingItem,
+    ScaffoldResult
+} from './types.js'
+import {
+    assertValidSlug,
+    exists,
+    normalizeSlug,
+    nowIso,
+    stripV
+} from './utils.js'
+import {
+    backupProjectSnapshot,
+    emptyLock,
+    listDirectoryEntries,
+    mergePending,
+    refreshManagedFileContent,
+    withProjectWriteLock,
+    writeGeneratedFiles,
+    writeProjectState
+} from './project.js'
+import {
+    resolveOcrManifestFromEnvironment,
+    type AssetDownloader,
+    type AssetManifestResolver,
+    type DownloadProgressReporter
+} from './assets.js'
+import { updateOcrModels } from './update.js'
+
+const CLI_VERSION = '0.1.0'
+const execFileAsync = promisify(execFile)
+
+export type GitRunner = (root: string, args: string[]) => Promise<void>
+export type GitTreeDetector = (path: string) => Promise<boolean>
+export type CommandRunner = (root: string, command: string, args: string[]) => Promise<void>
+export type ProgressReporter = (message: string) => void
+
+export async function createProject(
+    options: CliOptions,
+    environment: {
+        gitRunner?: GitRunner
+        detectGitTree?: GitTreeDetector
+        installNodeDeps?: boolean
+        downloadOcrModels?: boolean
+        commandRunner?: CommandRunner
+        ocrManifestResolver?: AssetManifestResolver
+        assetDownloader?: AssetDownloader
+        onProgress?: ProgressReporter
+        onDownloadProgress?: DownloadProgressReporter
+    } = {}
+): Promise<ScaffoldResult> {
+    assertPurePipelineOptions(options)
+    const targetRoot = resolve(process.cwd(), options.name ?? '.')
+    const detectGitTree = environment.detectGitTree ?? isInsideGitTree
+    const targetInsideGitTree = await detectGitTree(targetRoot)
+    const defaultName = options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
+    const slug = options.slug ? normalizeSlug(options.slug) : normalizeSlug(defaultName)
+    if (!slug) {
+        throw new Error(
+            `Project slug cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`
+        )
+    }
+    assertValidSlug(slug)
+    const displayName = requiredNonBlank(
+        options.displayName ?? options.label ?? defaultName,
+        'Project display name cannot be blank.'
+    )
+    const version = stripV(options.version ?? '0.1.0')
+    assertValidVersion(version)
+
+    const targetHadEntries = (await listDirectoryEntries(targetRoot)).length > 0
+    await assertCanCreateTarget(targetRoot, options, detectGitTree)
+    await mkdir(targetRoot, { recursive: true })
+
+    const config = createConfig({
+        slug,
+        displayName,
+        version,
+        options
+    })
+    const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
+    const pending = defaultPending({
+        options,
+        includeOcrPending: !shouldDownloadOcrModels
+    })
+    const files = [
+        ...baseProjectFiles({
+            slug,
+            displayName,
+            version,
+            controller: options.controller ?? 'ADB',
+            license: options.license ?? 'AGPL-3.0-or-later',
+            resources: config.resources
+        }),
+        configFile(config)
+    ]
+    const lock = emptyLock(CLI_VERSION)
+    const scaffold = await withProjectWriteLock(
+        targetRoot,
+        process.argv.join(' '),
+        async () => {
+            if (targetHadEntries) {
+                await backupProjectSnapshot(targetRoot)
+            }
+            const result = await writeGeneratedFiles(targetRoot, files, {
+                force: options.force,
+                backup: true
+            })
+            const written = new Set(result.written)
+            Object.assign(lock.managedFiles, result.lockEntries)
+            for (const file of files) {
+                if (!file.managed && result.written.includes(file.path)) {
+                    lock.createdFiles[file.path] = {
+                        createdAt: nowIso(),
+                        managed: false
+                    }
+                }
+            }
+            lock.pending = pending
+            if (shouldDownloadOcrModels) {
+                try {
+                    environment.onProgress?.('Downloading OCR models...')
+                    const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
+                    if (ocrResult) {
+                        for (const path of ocrResult.written) written.add(path)
+                        for (const path of await refreshManagedFileContent(targetRoot, lock, ocrResult.files)) {
+                            written.add(path)
+                        }
+                        environment.onProgress?.('OCR models downloaded.')
+                    }
+                } catch (error) {
+                    environment.onProgress?.(
+                        `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`
+                    )
+                    lock.pending = mergePending(lock.pending, [ocrDownloadPending(error)])
+                }
+            }
+            await writeProjectState(targetRoot, config, lock)
+
+            return {
+                root: targetRoot,
+                config,
+                lock,
+                written: [...written],
+                skipped: result.skipped,
+                pending: lock.pending
+            }
+        },
+        { clearStale: options.clearStaleLock }
+    )
+    const afterDependencies = await maybeInstallNodeDependencies(
+        scaffold,
+        options,
+        environment.commandRunner ?? runCommand,
+        environment.installNodeDeps === true,
+        environment.onProgress
+    )
+    const git = await maybeInitializeGit(
+        targetRoot,
+        options,
+        afterDependencies.pending,
+        targetInsideGitTree,
+        environment.gitRunner ?? runGit
+    )
+    return git ? { ...afterDependencies, git } : afterDependencies
+}
+
+function createOcrUpdateOptions(environment: {
+    ocrManifestResolver?: AssetManifestResolver
+    assetDownloader?: AssetDownloader
+    onDownloadProgress?: DownloadProgressReporter
+}): {
+    manifestResolver: AssetManifestResolver
+    downloader?: AssetDownloader
+    onDownloadProgress?: DownloadProgressReporter
+} {
+    const options: {
+        manifestResolver: AssetManifestResolver
+        downloader?: AssetDownloader
+        onDownloadProgress?: DownloadProgressReporter
+    } = {
+        manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment
+    }
+    if (environment.assetDownloader) options.downloader = environment.assetDownloader
+    if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
+    return options
+}
+
+function assertPurePipelineOptions(options: CliOptions): void {
+    if (options.template !== 'pipeline') {
+        throw new Error('--template must be pipeline in the pure pipeline scaffold.')
+    }
+    if (options.add.length > 0) {
+        throw new Error('--add is not supported in the pure pipeline scaffold.')
+    }
+}
+
+function createConfig(input: {
+    slug: string
+    displayName: string
+    version: string
+    options: CliOptions
+}): MaaProjectConfig {
+    return {
+        schemaVersion: 1,
+        project: {
+            slug: input.slug,
+            displayName: input.displayName,
+            version: input.version,
+            initialTemplate: 'pipeline'
+        },
+        features: {
+            ci: { enabled: true },
+            release: { enabled: true },
+            vscode: { enabled: true },
+            quality: { enabled: true }
+        },
+        addons: {},
+        controller: {
+            kind: input.options.controller ?? 'ADB'
+        },
+        resources: [
+            {
+                slug: 'base',
+                label: 'Base',
+                path: 'resource/base',
+                enabled: true
+            }
+        ],
+        maafw: {
+            channel: 'latest'
+        },
+        runtime: {
+            mfa: {
+                channel: 'latest',
+                enabled: true
+            }
+        },
+        network: {
+            mode: input.options.network ?? 'auto'
+        },
+        license: {
+            spdx: input.options.license ?? 'AGPL-3.0-or-later'
+        }
+    }
+}
+
+export async function assertCanCreateTarget(
+    targetRoot: string,
+    options: CliOptions,
+    detectGitTree: (path: string) => Promise<boolean> = isInsideGitTree
+): Promise<void> {
+    const entries = await listDirectoryEntries(targetRoot)
+    if (entries.length === 0) return
+    if (!options.force) {
+        throw new Error(
+            `Target directory is not empty: ${targetRoot}. Use --force to write missing files and replace existing generated files.`
+        )
+    }
+    const hasGit = await detectGitTree(targetRoot)
+    if (!hasGit && !options.allowNonGitDir) {
+        throw new Error(
+            'Refusing to write into a non-empty directory without Git protection. Re-run with --allow-non-git-dir after making a backup.'
+        )
+    }
+}
+
+async function isInsideGitTree(path: string): Promise<boolean> {
+    let current = path
+    for (;;) {
+        if (await exists(join(current, '.git'))) return true
+        const parent = resolve(current, '..')
+        if (parent === current) return false
+        current = parent
+    }
+}
+
+async function maybeInitializeGit(
+    root: string,
+    options: CliOptions,
+    pending: PendingItem[],
+    targetInsideGitTree: boolean,
+    gitRunner: GitRunner
+): Promise<GitInitResult | undefined> {
+    if (options.initializeGit !== true) return undefined
+    if (targetInsideGitTree) {
+        return {
+            initialized: false,
+            committed: false,
+            reason: 'target is inside an existing Git repository'
+        }
+    }
+
+    await gitRunner(root, ['init'])
+    if (pending.length > 0 && !options.allowPendingCommit) {
+        return {
+            initialized: true,
+            committed: false,
+            reason: 'project has pending actions'
+        }
+    }
+
+    await gitRunner(root, ['add', '.'])
+    await gitRunner(root, ['commit', '-m', 'chore: scaffold MaaFW project'])
+    return {
+        initialized: true,
+        committed: true
+    }
+}
+
+async function runGit(root: string, args: string[]): Promise<void> {
+    await execFileAsync('git', args, { cwd: root })
+}
+
+async function runCommand(root: string, command: string, args: string[]): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+        const child = spawn(command, args, {
+            cwd: root,
+            shell: process.platform === 'win32',
+            stdio: 'inherit'
+        })
+        child.on('error', (error) => {
+            reject(new Error(`Failed to run ${[command, ...args].join(' ')}. ${error.message}`))
+        })
+        child.on('exit', (code, signal) => {
+            if (code === 0) {
+                resolve()
+                return
+            }
+            const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
+            reject(new Error(`Command failed: ${[command, ...args].join(' ')} (${suffix})`))
+        })
+    })
+}
+
+async function maybeInstallNodeDependencies(
+    scaffold: ScaffoldResult,
+    options: CliOptions,
+    commandRunner: CommandRunner,
+    enabled: boolean,
+    onProgress?: ProgressReporter
+): Promise<ScaffoldResult> {
+    if (!enabled || options.skipDownload || !scaffold.pending.some((item) => item.kind === 'node-deps')) {
+        return scaffold
+    }
+
+    const root = scaffold.root
+    const config = scaffold.config
+    const lock = scaffold.lock
+    const written = new Set(scaffold.written)
+    try {
+        onProgress?.('Installing Node dependencies...')
+        await commandRunner(root, 'pnpm', ['install'])
+        onProgress?.('Node dependencies installed.')
+        lock.pending = lock.pending.filter((item) => item.kind !== 'node-deps')
+        if (await exists(join(root, 'pnpm-lock.yaml'))) {
+            written.add('pnpm-lock.yaml')
+        }
+    } catch (error) {
+        onProgress?.(`Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`)
+        lock.pending = replacePending(lock.pending, {
+            kind: 'node-deps',
+            reason: `pnpm install failed during project creation: ${errorMessage(error)}`,
+            command: 'create-maa-project --update node-deps'
+        })
+    }
+
+    await withProjectWriteLock(
+        root,
+        process.argv.join(' '),
+        async () => {
+            await writeProjectState(root, config, lock)
+        },
+        { clearStale: options.clearStaleLock }
+    )
+    written.add('maa-project.json')
+    written.add('maa-project.lock.json')
+    return {
+        ...scaffold,
+        lock,
+        written: [...written],
+        pending: lock.pending
+    }
+}
+
+function replacePending(pending: PendingItem[], next: PendingItem): PendingItem[] {
+    return [...pending.filter((item) => item.kind !== next.kind), next]
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+}
+
+function defaultPending(input: {
+    options: CliOptions
+    includeOcrPending?: boolean
+}): PendingItem[] {
+    const pending: PendingItem[] = [
+        {
+            kind: 'node-deps',
+            reason: 'Generated project dependencies are pinned in package.json but not installed by the scaffold.',
+            command: 'create-maa-project --update node-deps'
+        }
+    ]
+    if (input.includeOcrPending !== false && input.options.skipDownload) {
+        pending.push({
+            kind: 'ocr-model',
+            reason: 'OCR model download was skipped.',
+            command: 'create-maa-project --update ocr-models'
+        })
+    } else if (input.includeOcrPending !== false) {
+        pending.push({
+            kind: 'ocr-model',
+            reason: 'OCR model manifest source is not configured.',
+            command: 'create-maa-project --update ocr-models'
+        })
+    }
+    return pending
+}
+
+function ocrDownloadPending(error: unknown): PendingItem {
+    return {
+        kind: 'ocr-model',
+        reason: `OCR model download failed during project creation: ${errorMessage(error)}`,
+        command: 'create-maa-project --update ocr-models'
+    }
+}
+
+function assertValidVersion(version: string): void {
+    if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
+        throw new Error(`Invalid version "${version}". Use a SemVer version such as 0.1.0.`)
+    }
+}
+
+function requiredNonBlank(value: string, message: string): string {
+    const normalized = value.trim()
+    if (!normalized) throw new Error(message)
+    return normalized
+}

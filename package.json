@@ -1,0 +1,35 @@
+{
+    "name": "create-maa-project",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "bin": {
+        "create-maa-project": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "templates",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "dev": "tsx src/index.ts",
+        "sync:schema": "node scripts/sync-schema.mjs",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "check": "pnpm typecheck && pnpm test"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@types/node": "24.0.0",
+        "esbuild": "0.25.5",
+        "tsx": "4.20.3",
+        "typescript": "5.8.3",
+        "vitest": "3.2.4"
+    },
+    "engines": {
+        "node": ">=24"
+    },
+    "packageManager": "pnpm@11.5.1"
+}

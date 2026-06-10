@@ -17,6 +17,7 @@
         "dev": "tsx src/index.ts",
         "release:manifest": "node scripts/create-release-manifest.mjs",
         "release:prepare-pypi": "node scripts/prepare-pypi-release.mjs",
+        "release:sync-version": "node scripts/sync-release-version.mjs",
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
         "test": "vitest run && node scripts/test-python.mjs",

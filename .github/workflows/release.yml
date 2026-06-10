@@ -22,6 +22,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+      - run: node scripts/sync-release-version.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm build
@@ -64,6 +65,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - run: node scripts/sync-release-version.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:sea
         env:
@@ -83,6 +85,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+      - run: node scripts/sync-release-version.mjs
       - uses: actions/download-artifact@v7
         with:
           pattern: sea-*
@@ -149,6 +152,10 @@ jobs:
         with:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v8.1.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: node scripts/sync-release-version.mjs
       - uses: actions/download-artifact@v7
         with:
           name: release-manifest

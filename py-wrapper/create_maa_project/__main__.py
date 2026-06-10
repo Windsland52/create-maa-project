@@ -14,6 +14,8 @@ from typing import Optional
 from . import __version__
 from .release_manifest import RELEASE_MANIFEST_SHA256
 
+RELEASE_REPOSITORY = "Windsland52/create-maa-project"
+
 
 def main() -> None:
     try:
@@ -69,7 +71,7 @@ def ensure_binary() -> Path:
         )
 
     manifest_url = (
-        f"https://github.com/MaaXYZ/create-maa-project/releases/download/v{__version__}/"
+        f"https://github.com/{RELEASE_REPOSITORY}/releases/download/v{__version__}/"
         "create-maa-project-manifest.json"
     )
     try:

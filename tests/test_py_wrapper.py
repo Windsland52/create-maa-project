@@ -102,6 +102,11 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                                     wrapper_main.ensure_binary()
 
         self.assertEqual(download.call_count, 2)
+        self.assertEqual(
+            download.call_args_list[0].args[0],
+            f"https://github.com/Windsland52/create-maa-project/releases/download/v{__version__}/"
+            "create-maa-project-manifest.json",
+        )
 
     def test_ensure_binary_reuses_verified_cached_binary_without_download(self) -> None:
         binary_bytes = b"cached create-maa-project binary"

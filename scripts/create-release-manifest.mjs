@@ -9,7 +9,7 @@ const version = String(packageJson.version)
 const tag = process.env.GITHUB_REF_NAME?.startsWith('v')
     ? process.env.GITHUB_REF_NAME
     : `v${version}`
-const repository = process.env.GITHUB_REPOSITORY ?? 'MaaXYZ/create-maa-project'
+const repository = process.env.GITHUB_REPOSITORY ?? 'Windsland52/create-maa-project'
 const files = await readdir(inputDir)
 const assets = []
 

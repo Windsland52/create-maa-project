@@ -28,10 +28,11 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['--bad'])).toThrow('Unknown option')
     })
 
-    it('rejects add-ons in the pure create scaffold', () => {
-        expect(() => parseArgs(['--add', 'resource-pack', 'extra'])).toThrow(
-            '--add is not supported in the pure pipeline scaffold.'
-        )
+    it('parses add-on requests without scaffold validation', () => {
+        const options = parseArgs(['--add', 'ci', '--add', 'git-cliff'])
+
+        expect(options.add).toEqual(['ci', 'git-cliff'])
+        expect(options.name).toBeUndefined()
     })
 
     it('parses sync positional value', () => {

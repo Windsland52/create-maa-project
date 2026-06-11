@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from './args.js'
 import { runDoctor } from './doctor.js'
+import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger } from './log.js'
 import {
     resolveOcrManifestFromEnvironment,
@@ -107,6 +108,13 @@ async function main(): Promise<void> {
             progress.clear()
             clearActiveProgress = (): void => {}
             printScaffoldResult('Recorded update request', result)
+            console.log(`Log: ${logger.path}`)
+            return
+        }
+
+        if (options.add.length > 0 && !options.name) {
+            const lastResult = await applyIncrementalAddons(options)
+            if (lastResult) printScaffoldResult('Updated project', lastResult)
             console.log(`Log: ${logger.path}`)
             return
         }

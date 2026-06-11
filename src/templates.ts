@@ -214,8 +214,11 @@ export function schemaSyncFiles(): ManagedFileInput[] {
 export function communityFiles(input: Pick<ProjectTemplateInput, 'displayName'>): ManagedFileInput[] {
     return [
         once('CONTRIBUTING.md', generatedContributing(input)),
-        once('.github/ISSUE_TEMPLATE/bug_report.md', generatedBugReportTemplate(input)),
-        once('.github/ISSUE_TEMPLATE/feature_request.md', generatedFeatureRequestTemplate(input))
+        once('.github/ISSUE_TEMPLATE/config.yml', generatedIssueTemplateConfig()),
+        once('.github/ISSUE_TEMPLATE/bug_report.yml', generatedBugReportTemplate(input)),
+        once('.github/ISSUE_TEMPLATE/feature_request.yml', generatedFeatureRequestTemplate()),
+        once('.github/ISSUE_TEMPLATE/other_issue.yml', generatedOtherIssueTemplate(input)),
+        once('.github/PULL_REQUEST_TEMPLATE.md', generatedPullRequestTemplate())
     ]
 }
 
@@ -531,16 +534,28 @@ function generatedContributing(input: Pick<ProjectTemplateInput, 'displayName'>)
     })
 }
 
+function generatedIssueTemplateConfig(): string {
+    return template('addons/community/issue_config.yml')
+}
+
 function generatedBugReportTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
-    return template('addons/community/bug_report.md', {
-        displayName: input.displayName
+    return template('addons/community/bug_report.yml', {
+        displayName: jsonStringContent(input.displayName)
     })
 }
 
-function generatedFeatureRequestTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
-    return template('addons/community/feature_request.md', {
-        displayName: input.displayName
+function generatedFeatureRequestTemplate(): string {
+    return template('addons/community/feature_request.yml')
+}
+
+function generatedOtherIssueTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
+    return template('addons/community/other_issue.yml', {
+        displayName: jsonStringContent(input.displayName)
     })
+}
+
+function generatedPullRequestTemplate(): string {
+    return template('addons/community/PULL_REQUEST_TEMPLATE.md')
 }
 
 function licenseText(input: Pick<ProjectTemplateInput, 'license' | 'displayName'>): string {

@@ -884,16 +884,22 @@ describe('scaffold', () => {
         expect(communityResult.skipped).toContain('CONTRIBUTING.md')
         expect(communityResult.written).toEqual(
             expect.arrayContaining([
-                '.github/ISSUE_TEMPLATE/bug_report.md',
-                '.github/ISSUE_TEMPLATE/feature_request.md'
+                '.github/ISSUE_TEMPLATE/config.yml',
+                '.github/ISSUE_TEMPLATE/bug_report.yml',
+                '.github/ISSUE_TEMPLATE/feature_request.yml',
+                '.github/ISSUE_TEMPLATE/other_issue.yml',
+                '.github/PULL_REQUEST_TEMPLATE.md'
             ])
         )
         expect(await readFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), 'utf8')).toBe(
             '# User Guide\n'
         )
         expect(
-            await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.md'), 'utf8')
-        ).toContain('Report a problem in maa-addon-test')
+            await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.yml'), 'utf8')
+        ).toContain('maa-addon-test 版本 / maa-addon-test Version')
+        expect(
+            await readFile(join(root, 'maa-addon-test', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+        ).toContain('验证 / Validation')
         expect(dependabotResult.written).toContain('.github/dependabot.yml')
         expect(await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')).toContain(
             'package-ecosystem: npm'
@@ -911,8 +917,11 @@ describe('scaffold', () => {
                 '.github/dependabot.yml': expect.any(Object)
             },
             createdFiles: {
-                '.github/ISSUE_TEMPLATE/bug_report.md': expect.any(Object),
-                '.github/ISSUE_TEMPLATE/feature_request.md': expect.any(Object)
+                '.github/ISSUE_TEMPLATE/config.yml': expect.any(Object),
+                '.github/ISSUE_TEMPLATE/bug_report.yml': expect.any(Object),
+                '.github/ISSUE_TEMPLATE/feature_request.yml': expect.any(Object),
+                '.github/ISSUE_TEMPLATE/other_issue.yml': expect.any(Object),
+                '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object)
             }
         })
     })
@@ -932,8 +941,11 @@ describe('scaffold', () => {
             expect.arrayContaining([
                 '.github/cliff.toml',
                 'CONTRIBUTING.md',
-                '.github/ISSUE_TEMPLATE/bug_report.md',
-                '.github/ISSUE_TEMPLATE/feature_request.md',
+                '.github/ISSUE_TEMPLATE/config.yml',
+                '.github/ISSUE_TEMPLATE/bug_report.yml',
+                '.github/ISSUE_TEMPLATE/feature_request.yml',
+                '.github/ISSUE_TEMPLATE/other_issue.yml',
+                '.github/PULL_REQUEST_TEMPLATE.md',
                 '.github/dependabot.yml'
             ])
         )
@@ -951,6 +963,18 @@ describe('scaffold', () => {
         expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
             'Contributing to maa-create-addons'
         )
+        expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
+            '开发 / Development'
+        )
+        expect(
+            await readFile(join(root, 'maa-create-addons', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+        ).toContain('检查清单 / Checklist')
+        expect(
+            await readFile(join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/feature_request.yml'), 'utf8')
+        ).toContain('需求建议 / Feature Request')
+        expect(
+            await readFile(join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/other_issue.yml'), 'utf8')
+        ).toContain('maa-create-addons 版本 / maa-create-addons Version')
         expect(await readJson(join(root, 'maa-create-addons', 'maa-project.json'))).toMatchObject({
             addons: {
                 gitCliff: { enabled: true },

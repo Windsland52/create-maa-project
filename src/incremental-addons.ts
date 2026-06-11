@@ -3,11 +3,14 @@ import {
     incrementalAddonUnavailableMessage,
     isDefaultIncludedAddon
 } from './addons.js'
+import { addSchemaSync } from './scaffold.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
 
 type IncrementalAddonHandler = (options: CliOptions) => Promise<ScaffoldResult>
 
-const INCREMENTAL_ADDON_HANDLERS: Record<string, IncrementalAddonHandler> = {}
+const INCREMENTAL_ADDON_HANDLERS: Record<string, IncrementalAddonHandler> = {
+    'schema-sync': addSchemaSync
+}
 
 export async function applyIncrementalAddons(
     options: CliOptions,

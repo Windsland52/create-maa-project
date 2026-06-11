@@ -2,11 +2,12 @@ import { execFile, spawn } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { baseProjectFiles, configFile } from './templates.js'
+import { baseProjectFiles, configFile, schemaSyncFiles } from './templates.js'
 import type {
     CliOptions,
     GitInitResult,
     MaaProjectConfig,
+    ManagedFileInput,
     PendingItem,
     ScaffoldResult
 } from './types.js'
@@ -15,6 +16,8 @@ import {
     exists,
     normalizeSlug,
     nowIso,
+    readText,
+    stableJson,
     stripV
 } from './utils.js'
 import {
@@ -22,6 +25,8 @@ import {
     emptyLock,
     listDirectoryEntries,
     mergePending,
+    readProjectConfig,
+    readProjectLock,
     refreshManagedFileContent,
     withProjectWriteLock,
     writeGeneratedFiles,
@@ -200,6 +205,65 @@ function createOcrUpdateOptions(environment: {
     if (environment.assetDownloader) options.downloader = environment.assetDownloader
     if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
     return options
+}
+
+export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+
+    config.addons ??= {}
+    config.addons.schemaSync = { enabled: true }
+
+    const packageJson = await readJsonObject(root, 'package.json')
+    packageJson.scripts = {
+        ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
+        'sync:schema': 'node tools/sync-schema.mjs'
+    }
+
+    const files: ManagedFileInput[] = [
+        ...schemaSyncFiles(),
+        {
+            path: 'package.json',
+            content: stableJson(packageJson),
+            managed: false
+        },
+        configFile(config)
+    ]
+
+    return withProjectWriteLock(
+        root,
+        process.argv.join(' '),
+        async () => {
+            const result = await writeGeneratedFiles(root, files, {
+                force: true,
+                backup: true,
+                overwriteUnmanaged: true
+            })
+            Object.assign(lock.managedFiles, result.lockEntries)
+            for (const file of files) {
+                if (!file.managed && result.written.includes(file.path)) {
+                    lock.createdFiles[file.path] = {
+                        createdAt: nowIso(),
+                        managed: false
+                    }
+                }
+            }
+            lock.template.lastUpdatedBy = 'create-maa-project'
+            lock.template.templateVersion = CLI_VERSION
+            await writeProjectState(root, config, lock)
+
+            return {
+                root,
+                config,
+                lock,
+                written: result.written,
+                skipped: result.skipped,
+                pending: lock.pending
+            }
+        },
+        { clearStale: options.clearStaleLock }
+    )
 }
 
 function assertSupportedTemplateOptions(options: CliOptions): void {
@@ -519,4 +583,12 @@ function requiredNonBlank(value: string, message: string): string {
     const normalized = value.trim()
     if (!normalized) throw new Error(message)
     return normalized
+}
+
+async function readJsonObject(root: string, path: string): Promise<Record<string, unknown>> {
+    return JSON.parse(await readText(join(root, path))) as Record<string, unknown>
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

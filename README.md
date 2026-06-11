@@ -11,6 +11,7 @@ Current implementation covers the local scaffold core:
 - interactive create flow without LLM
 - default `resource/base` project shape
 - optional Python Agent template
+- `--add schema-sync` to enable generated schema sync files in an existing project
 - committed `maa-project.json` and `maa-project.lock.json`
 - project-owned files such as `interface.json`, `package.json`, `tasks/`, `resource/`, editor ignores/settings, and OCR model files are created once instead of managed as template baselines
 - metadata sync for interface, package, controller, license, network mode, display name, and validated GitHub repository URLs

@@ -21,7 +21,7 @@ describe('applyIncrementalAddons', () => {
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: none yet'
+            'Supported incremental add-ons: schema-sync'
         )
     })
 })

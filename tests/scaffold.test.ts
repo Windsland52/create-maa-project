@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { downloadManifestAssets, type DownloadProgress } from '../src/assets.js'
 import { runDoctor } from '../src/doctor.js'
+import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import { diffManagedFiles } from '../src/project.js'
 import { createProject, assertCanCreateTarget, type GitRunner } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
@@ -515,6 +516,42 @@ describe('pure pipeline scaffold', () => {
         expect(await previewTemplateUpdate(defaultOptions({ update: ['template'], diff: true }))).toEqual([
             'No template updates.'
         ])
+    })
+
+    it('adds schema sync files to an existing project', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+        await createProject(defaultOptions({ name: 'maa-schema-sync' }))
+        const projectRoot = join(root, 'maa-schema-sync')
+        process.chdir(projectRoot)
+
+        await rm(join(projectRoot, '.github/workflows/schema-sync.yml'), { force: true })
+        await rm(join(projectRoot, 'tools/sync-schema.mjs'), { force: true })
+        const packagePath = join(projectRoot, 'package.json')
+        const packageJson = (await readJson(packagePath)) as { scripts?: Record<string, string> }
+        delete packageJson.scripts?.['sync:schema']
+        await writeFile(packagePath, `${JSON.stringify(packageJson, null, 4)}\n`, 'utf8')
+
+        const result = await applyIncrementalAddons(defaultOptions({ add: ['schema-sync'] }))
+
+        expect(result?.written).toEqual(
+            expect.arrayContaining([
+                '.github/workflows/schema-sync.yml',
+                'tools/sync-schema.mjs',
+                'package.json',
+                'maa-project.json'
+            ])
+        )
+        expect(result?.config.addons).toMatchObject({
+            schemaSync: { enabled: true }
+        })
+        expect(await readFile(join(projectRoot, '.github/workflows/schema-sync.yml'), 'utf8')).toContain(
+            'Schema Sync'
+        )
+        expect(await readJson(packagePath)).toMatchObject({
+            scripts: { 'sync:schema': 'node tools/sync-schema.mjs' }
+        })
+        expect(await diffManagedFiles(projectRoot)).toEqual(['No managed file changes.'])
     })
 
     it('guards non-empty target directories and git initialization', async () => {

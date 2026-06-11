@@ -5,14 +5,13 @@ const PLANNED_ADDONS = new Set([
     'changelog',
     'community',
     'dependabot',
-    'schema-sync',
     'auto-format',
     'optimize-images',
     'git-cliff'
 ])
 const V1_RESERVED_ADDONS = new Set(['i18n', 'mirrorchyan', 'branding'])
 
-const SUPPORTED_INCREMENTAL_LIST = 'none yet'
+const SUPPORTED_INCREMENTAL_LIST = 'schema-sync'
 const DEFAULT_INCLUDED_LIST = 'ci, vscode, quality'
 
 export function isDefaultIncludedAddon(addon: string): boolean {

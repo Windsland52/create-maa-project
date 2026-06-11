@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process'
 import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 import { build } from 'esbuild'
 
 const execFileAsync = promisify(execFile)
+const require = createRequire(import.meta.url)
 const generatedTemplatesPath = 'src/template-assets.generated.ts'
 const originalGeneratedTemplates = await readFile(generatedTemplatesPath, 'utf8')
 
@@ -50,7 +52,8 @@ try {
     if (process.platform === 'darwin') {
         await execFileAsync('codesign', ['--remove-signature', binaryPath]).catch(() => undefined)
     }
-    await execFileAsync(postjectBin(), [
+    await execFileAsync(process.execPath, [
+        require.resolve('postject/dist/cli.js'),
         binaryPath,
         'NODE_SEA_BLOB',
         blobPath,
@@ -84,10 +87,4 @@ function releaseArch() {
     if (process.arch === 'x64') return 'x86_64'
     if (process.arch === 'arm64') return 'aarch64'
     throw new Error(`Unsupported release architecture: ${process.arch}`)
-}
-
-function postjectBin() {
-    return process.platform === 'win32'
-        ? join('node_modules', '.bin', 'postject.cmd')
-        : join('node_modules', '.bin', 'postject')
 }

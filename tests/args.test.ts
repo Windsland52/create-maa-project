@@ -28,11 +28,12 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['--bad'])).toThrow('Unknown option')
     })
 
-    it('parses add-on requests without scaffold validation', () => {
-        const options = parseArgs(['--add', 'ci', '--add', 'git-cliff'])
+    it('parses resource pack slug after --add resource-pack', () => {
+        const options = parseArgs(['--add', 'resource-pack', 'extra', '--label', '额外资源'])
 
-        expect(options.add).toEqual(['ci', 'git-cliff'])
-        expect(options.name).toBeUndefined()
+        expect(options.add).toEqual(['resource-pack'])
+        expect(options.resourcePackSlug).toBe('extra')
+        expect(options.label).toBe('额外资源')
     })
 
     it('parses sync positional value', () => {

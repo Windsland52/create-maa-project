@@ -2,7 +2,21 @@ import { execFile, spawn } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { baseProjectFiles, configFile, schemaSyncFiles } from './templates.js'
+import {
+    agentFiles,
+    baseProjectFiles,
+    changelogFile,
+    configFile,
+    communityFiles,
+    dependabotFile,
+    emptyPng,
+    interfaceAgent,
+    interfaceResourceItems,
+    maatoolsConfigFile,
+    projectCustomSchemaFiles,
+    releaseWorkflowFile,
+    schemaSyncFiles
+} from './templates.js'
 import type {
     CliOptions,
     GitInitResult,
@@ -16,6 +30,7 @@ import {
     exists,
     normalizeSlug,
     nowIso,
+    prettyJson,
     readText,
     stableJson,
     stripV
@@ -63,7 +78,6 @@ export async function createProject(
         onDownloadProgress?: DownloadProgressReporter
     } = {}
 ): Promise<ScaffoldResult> {
-    assertSupportedTemplateOptions(options)
     assertSupportedCreateAddons(options.add)
     const targetRoot = resolve(process.cwd(), options.name ?? '.')
     const detectGitTree = environment.detectGitTree ?? isInsideGitTree
@@ -87,7 +101,7 @@ export async function createProject(
     await assertCanCreateTarget(targetRoot, options, detectGitTree)
     await mkdir(targetRoot, { recursive: true })
 
-    const includeAgent = options.template === 'agent'
+    const includeAgent = options.template === 'agent' || options.add.includes('agent')
     const pythonDevCommand = includeAgent ? await detectPythonDevCommand() : undefined
     const config = createConfig({
         slug,
@@ -116,6 +130,7 @@ export async function createProject(
             pythonDevCommand,
             resources: config.resources
         }),
+        ...addonFilesForCreate(options.add, { displayName, version }),
         configFile(config)
     ]
     const lock = emptyLock(CLI_VERSION)
@@ -210,26 +225,152 @@ function createOcrUpdateOptions(environment: {
     return options
 }
 
-export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult> {
+export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     const root = process.cwd()
     const config = await readProjectConfig(root)
     const lock = await readProjectLock(root)
+    if (config.python) {
+        return {
+            root,
+            config,
+            lock,
+            written: [],
+            skipped: [],
+            pending: lock.pending
+        }
+    }
 
-    config.addons.schemaSync = { enabled: true }
-
+    config.project.initialTemplate = 'agent'
+    const pythonDevCommand = await detectPythonDevCommand()
+    config.python = {
+        requiresPython: '>=3.11,<3.14',
+        recommendedPython: '3.13'
+    }
+    if (pythonDevCommand) config.python.devCommand = pythonDevCommand
+    const interfaceJson = await readInterfaceJson(root)
+    interfaceJson.agent = [
+        interfaceAgent(config.project.slug, config.python.devCommand)
+    ]
     const packageJson = await readJsonObject(root, 'package.json')
     packageJson.scripts = {
         ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
-        'sync:schema': 'node tools/sync-schema.mjs'
+        'format:py': 'uv run --frozen ruff format .',
+        'lint:py': 'uv run --frozen ruff check .',
+        'typecheck:py': 'uv run --frozen pyright',
+        'check:py': 'pnpm lint:py && pnpm typecheck:py'
     }
-
+    const vscodeExtensions = await readJsonObject(root, '.vscode/extensions.json')
+    const recommendations = arrayOfStrings(vscodeExtensions.recommendations)
+    vscodeExtensions.recommendations = appendUnique(recommendations, [
+        'charliermarsh.ruff',
+        'ms-python.python',
+        'ms-python.vscode-pylance'
+    ])
+    const vscodeSettings = await readJsonObject(root, '.vscode/settings.json')
+    vscodeSettings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv/bin/python'
+    vscodeSettings['[python]'] = {
+        'editor.defaultFormatter': 'charliermarsh.ruff'
+    }
     const files: ManagedFileInput[] = [
-        ...schemaSyncFiles(),
+        ...agentFiles({
+            slug: config.project.slug,
+            version: config.project.version
+        }),
+        ...projectCustomSchemaFiles(true),
+        {
+            path: 'interface.json',
+            content: prettyJson(interfaceJson),
+            managed: false
+        },
         {
             path: 'package.json',
             content: stableJson(packageJson),
             managed: false
         },
+        {
+            path: '.vscode/extensions.json',
+            content: stableJson(vscodeExtensions),
+            managed: false
+        },
+        {
+            path: '.vscode/settings.json',
+            content: stableJson(vscodeSettings),
+            managed: false
+        },
+        releaseWorkflowFile({
+            slug: config.project.slug,
+            includeAgent: true
+        }),
+        configFile(config)
+    ]
+    return withProjectWriteLock(
+        root,
+        process.argv.join(' '),
+        async () => {
+            const result = await writeGeneratedFiles(root, files, {
+                force: true,
+                backup: true,
+                overwriteUnmanaged: true
+            })
+            Object.assign(lock.managedFiles, result.lockEntries)
+            recordCreatedFiles(lock, files, result.written)
+            lock.pending = mergePending(lock.pending, pythonPending(pythonDevCommand))
+            lock.template.lastUpdatedBy = 'create-maa-project'
+            lock.template.templateVersion = CLI_VERSION
+            await writeProjectState(root, config, lock)
+
+            return {
+                root,
+                config,
+                lock,
+                written: result.written,
+                skipped: result.skipped,
+                pending: lock.pending
+            }
+        },
+        { clearStale: _options.clearStaleLock }
+    )
+}
+
+export async function addResourcePack(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    const slug = normalizeSlug(options.resourcePackSlug ?? options.name ?? '')
+    assertValidSlug(slug)
+    if (config.resources.some((pack) => pack.slug === slug)) {
+        throw new Error(`Resource pack already exists: ${slug}`)
+    }
+    const label = requiredNonBlank(
+        options.label ?? options.displayName ?? slug,
+        'Resource pack label cannot be blank.'
+    )
+    config.resources.push({
+        slug,
+        label,
+        path: `resource/${slug}`,
+        enabled: true
+    })
+    const interfaceJson = await readInterfaceJson(root)
+    interfaceJson.resource = interfaceResourceItems(config.resources)
+    const resourcePaths = config.resources.map((pack) => `./${pack.path}`)
+    const files: ManagedFileInput[] = [
+        {
+            path: 'interface.json',
+            content: prettyJson(interfaceJson),
+            managed: false
+        },
+        {
+            path: `resource/${slug}/pipeline/.gitkeep`,
+            content: '',
+            managed: false
+        },
+        {
+            path: `resource/${slug}/image/empty.png`,
+            content: emptyPng(),
+            managed: false
+        },
+        maatoolsConfigFile(resourcePaths),
         configFile(config)
     ]
 
@@ -243,14 +384,7 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
                 overwriteUnmanaged: true
             })
             Object.assign(lock.managedFiles, result.lockEntries)
-            for (const file of files) {
-                if (!file.managed && result.written.includes(file.path)) {
-                    lock.createdFiles[file.path] = {
-                        createdAt: nowIso(),
-                        managed: false
-                    }
-                }
-            }
+            recordCreatedFiles(lock, files, result.written)
             lock.template.lastUpdatedBy = 'create-maa-project'
             lock.template.templateVersion = CLI_VERSION
             await writeProjectState(root, config, lock)
@@ -268,10 +402,81 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
     )
 }
 
-function assertSupportedTemplateOptions(options: CliOptions): void {
-    if (options.template !== 'pipeline' && options.template !== 'agent') {
-        throw new Error('--template must be pipeline or agent.')
+export async function addChangelog(_options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.changelog = { enabled: true }
+    return writeAddonFiles(
+        root,
+        config,
+        lock,
+        [
+            changelogFile({
+                displayName: config.project.displayName,
+                version: config.project.version
+            }),
+            configFile(config)
+        ],
+        _options
+    )
+}
+
+export async function addDependabot(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.dependabot = { enabled: true }
+    return writeAddonFiles(root, config, lock, [dependabotFile(), configFile(config)], options)
+}
+
+export async function addCommunity(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.community = { enabled: true }
+    return writeAddonFiles(
+        root,
+        config,
+        lock,
+        [
+            ...communityFiles({
+                displayName: config.project.displayName
+            }),
+            configFile(config)
+        ],
+        options
+    )
+}
+
+export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.schemaSync = { enabled: true }
+
+    const packageJson = await readJsonObject(root, 'package.json')
+    packageJson.scripts = {
+        ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
+        'sync:schema': 'node tools/sync-schema.mjs'
     }
+
+    return writeAddonFiles(
+        root,
+        config,
+        lock,
+        [
+            ...schemaSyncFiles(),
+            {
+                path: 'package.json',
+                content: stableJson(packageJson),
+                managed: false
+            },
+            configFile(config)
+        ],
+        options,
+        { overwriteUnmanaged: true }
+    )
 }
 
 function createConfig(input: {
@@ -296,7 +501,7 @@ function createConfig(input: {
             vscode: { enabled: true },
             quality: { enabled: true }
         },
-        addons: input.options.add.includes('schema-sync') ? { schemaSync: { enabled: true } } : {},
+        addons: initialAddons(input.options.add),
         controller: {
             kind: input.options.controller ?? 'ADB'
         },
@@ -332,6 +537,77 @@ function createConfig(input: {
         if (input.pythonDevCommand) config.python.devCommand = input.pythonDevCommand
     }
     return config
+}
+
+async function writeAddonFiles(
+    root: string,
+    config: MaaProjectConfig,
+    lock: Awaited<ReturnType<typeof readProjectLock>>,
+    files: ManagedFileInput[],
+    options: CliOptions,
+    writeOptions: { overwriteUnmanaged?: boolean } = {}
+): Promise<ScaffoldResult> {
+    return withProjectWriteLock(
+        root,
+        process.argv.join(' '),
+        async () => {
+            const result = await writeGeneratedFiles(root, files, {
+                force: true,
+                backup: true,
+                ...(writeOptions.overwriteUnmanaged ? { overwriteUnmanaged: true } : {})
+            })
+            Object.assign(lock.managedFiles, result.lockEntries)
+            recordCreatedFiles(lock, files, result.written)
+            lock.template.lastUpdatedBy = 'create-maa-project'
+            lock.template.templateVersion = CLI_VERSION
+            await writeProjectState(root, config, lock)
+
+            return {
+                root,
+                config,
+                lock,
+                written: result.written,
+                skipped: result.skipped,
+                pending: lock.pending
+            }
+        },
+        { clearStale: options.clearStaleLock }
+    )
+}
+
+function recordCreatedFiles(
+    lock: Awaited<ReturnType<typeof readProjectLock>>,
+    files: ManagedFileInput[],
+    written: string[]
+): void {
+    for (const file of files) {
+        if (!file.managed && written.includes(file.path)) {
+            lock.createdFiles[file.path] = {
+                createdAt: nowIso(),
+                managed: false
+            }
+        }
+    }
+}
+
+function initialAddons(addons: string[]): Record<string, unknown> {
+    const state: Record<string, unknown> = {}
+    if (addons.includes('changelog')) state.changelog = { enabled: true }
+    if (addons.includes('dependabot')) state.dependabot = { enabled: true }
+    if (addons.includes('community')) state.community = { enabled: true }
+    if (addons.includes('schema-sync')) state.schemaSync = { enabled: true }
+    return state
+}
+
+function addonFilesForCreate(
+    addons: string[],
+    input: { displayName: string; version: string }
+): ManagedFileInput[] {
+    const files: ManagedFileInput[] = []
+    if (addons.includes('changelog')) files.push(changelogFile(input))
+    if (addons.includes('dependabot')) files.push(dependabotFile())
+    if (addons.includes('community')) files.push(...communityFiles(input))
+    return files
 }
 
 export async function assertCanCreateTarget(
@@ -584,10 +860,24 @@ function requiredNonBlank(value: string, message: string): string {
     return normalized
 }
 
+async function readInterfaceJson(root: string): Promise<Record<string, unknown>> {
+    return JSON.parse(await readText(join(root, 'interface.json'))) as Record<string, unknown>
+}
+
 async function readJsonObject(root: string, path: string): Promise<Record<string, unknown>> {
     return JSON.parse(await readText(join(root, path))) as Record<string, unknown>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function arrayOfStrings(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function appendUnique(existing: string[], values: string[]): string[] {
+    const set = new Set(existing)
+    for (const value of values) set.add(value)
+    return [...set]
 }

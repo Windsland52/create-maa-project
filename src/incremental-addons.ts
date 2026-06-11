@@ -1,16 +1,18 @@
 import {
     defaultIncludedAddonMessage,
     incrementalAddonUnavailableMessage,
-    isDefaultIncludedAddon
+    isDefaultIncludedAddon,
+    isIncrementalAddon
 } from './addons.js'
-import { addSchemaSync } from './scaffold.js'
+import {
+    addAgent,
+    addChangelog,
+    addCommunity,
+    addDependabot,
+    addResourcePack,
+    addSchemaSync
+} from './scaffold.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
-
-type IncrementalAddonHandler = (options: CliOptions) => Promise<ScaffoldResult>
-
-const INCREMENTAL_ADDON_HANDLERS: Record<string, IncrementalAddonHandler> = {
-    'schema-sync': addSchemaSync
-}
 
 export async function applyIncrementalAddons(
     options: CliOptions,
@@ -18,15 +20,26 @@ export async function applyIncrementalAddons(
 ): Promise<ScaffoldResult | undefined> {
     let lastResult: ScaffoldResult | undefined
     for (const addon of options.add) {
-        const handler = INCREMENTAL_ADDON_HANDLERS[addon]
-        if (!handler) {
+        if (!isIncrementalAddon(addon)) {
             if (isDefaultIncludedAddon(addon)) {
                 writeLine(defaultIncludedAddonMessage(addon))
                 continue
             }
             throw new Error(incrementalAddonUnavailableMessage(addon))
         }
-        lastResult = await handler(options)
+        if (addon === 'agent') {
+            lastResult = await addAgent(options)
+        } else if (addon === 'resource-pack') {
+            lastResult = await addResourcePack(options)
+        } else if (addon === 'changelog') {
+            lastResult = await addChangelog(options)
+        } else if (addon === 'community') {
+            lastResult = await addCommunity(options)
+        } else if (addon === 'dependabot') {
+            lastResult = await addDependabot(options)
+        } else if (addon === 'schema-sync') {
+            lastResult = await addSchemaSync(options)
+        }
     }
     return lastResult
 }

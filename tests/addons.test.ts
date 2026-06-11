@@ -13,12 +13,6 @@ describe('applyIncrementalAddons', () => {
         expect(lines).toEqual(['ci is already included in the default template.'])
     })
 
-    it('dispatches supported schema sync add-on requests', async () => {
-        await expect(applyIncrementalAddons(options(['schema-sync']))).rejects.toThrow(
-            'No maa-project.json found'
-        )
-    })
-
     it('rejects planned add-ons until handlers are registered', async () => {
         await expect(applyIncrementalAddons(options(['git-cliff']))).rejects.toThrow(
             '--add git-cliff is planned but is not implemented in this version.'
@@ -27,7 +21,7 @@ describe('applyIncrementalAddons', () => {
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: schema-sync'
+            'Supported incremental add-ons: agent, resource-pack, changelog, community, dependabot, schema-sync'
         )
     })
 })

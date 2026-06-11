@@ -11,7 +11,9 @@ Current implementation covers the local scaffold core:
 - interactive create flow without LLM
 - default `resource/base` project shape
 - optional Python Agent template
-- `--add schema-sync` to enable generated schema sync files during creation or in an existing project
+- `--add resource-pack <slug> --label <display>`
+- `--add changelog`, `--add community`, `--add dependabot`, and `--add schema-sync`
+- planned and reserved add-on reporting for options such as `git-cliff` and `mirrorchyan`
 - committed `maa-project.json` and `maa-project.lock.json`
 - project-owned files such as `interface.json`, `package.json`, `tasks/`, `resource/`, editor ignores/settings, and OCR model files are created once instead of managed as template baselines
 - metadata sync for interface, package, controller, license, network mode, display name, and validated GitHub repository URLs
@@ -25,7 +27,7 @@ Current implementation covers the local scaffold core:
 - default asset downloads retry transient network failures; set `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` to override the default
 - OCR downloads can be seeded for local/offline verification with `CREATE_MAA_PROJECT_OCR_ZIP_PATH`
 - OCR model updates use a verified manifest from `CREATE_MAA_PROJECT_OCR_MANIFEST_URL` when configured, with the existing OCR zip as fallback
-- optional schema baseline sync through `--add schema-sync`, which adds `pnpm sync:schema` and the generated daily schema-sync workflow
+- optional schema baseline sync through `--add schema-sync`, including `pnpm sync:schema` and a generated daily schema-sync PR workflow
 - CLI project creation attempts OCR model download and `pnpm install` by default, keeping actionable pending items if either fails
 - conservative `--update template` with `--update template --diff` preview and `--force` overwrite
 - generated project lint and release dry-run smoke checks, including pending-action, pnpm lockfile, VS Code settings, and interface schema guards
@@ -35,7 +37,7 @@ Current implementation covers the local scaffold core:
 - write lock, explicit stale-lock cleanup, local backups for file overwrites and non-empty target directories, cache cleanup, and backup restore
 - PyPI wrapper trust-chain checks for the same-version release manifest and SEA asset, verified binary cache reuse, manual `npx`/source fallback guidance, and Windows execution diagnostics
 
-Schema syncing is explicit and workflow-based rather than part of build. The PyPI
+Schema syncing is explicit and PR-based rather than part of build. The PyPI
 wrapper source tree contains the trust-chain code; release wheels must embed the
 matching release manifest digest before they can download and cache a SEA binary.
 

@@ -96,7 +96,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
         once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
         managed('.vscode/tasks.json', vscodeTasks()),
-        managed('.github/workflows/check.yml', checkWorkflow(input.includeAgent)),
+        managed('.github/workflows/check.yml', checkWorkflow()),
         releaseWorkflowFile(input),
         ...(input.includeSchemaSync ? schemaSyncFiles() : []),
         managed('tools/check-project.mjs', checkProjectScript()),
@@ -162,6 +162,14 @@ export function maatoolsConfigFile(resources: string[]): ManagedFileInput {
     return once('maatools.config.mts', maatoolsConfig(resources))
 }
 
+export function changelogFile(input: Pick<ProjectTemplateInput, 'displayName' | 'version'>): ManagedFileInput {
+    return once('CHANGELOG.md', generatedChangelog(input))
+}
+
+export function dependabotFile(): ManagedFileInput {
+    return managed('.github/dependabot.yml', dependabotConfig())
+}
+
 export function releaseWorkflowFile(
     input: Pick<ProjectTemplateInput, 'slug' | 'includeAgent'>
 ): ManagedFileInput {
@@ -172,6 +180,14 @@ export function schemaSyncFiles(): ManagedFileInput[] {
     return [
         managed('.github/workflows/schema-sync.yml', template('base/.github/workflows/schema-sync.yml')),
         managed('tools/sync-schema.mjs', template('base/tools/sync-schema.mjs'))
+    ]
+}
+
+export function communityFiles(input: Pick<ProjectTemplateInput, 'displayName'>): ManagedFileInput[] {
+    return [
+        once('CONTRIBUTING.md', generatedContributing(input)),
+        once('.github/ISSUE_TEMPLATE/bug_report.md', generatedBugReportTemplate(input)),
+        once('.github/ISSUE_TEMPLATE/feature_request.md', generatedFeatureRequestTemplate(input))
     ]
 }
 
@@ -238,7 +254,7 @@ export function interfaceAgent(
     slug: string,
     command: string[] | undefined
 ): { child_exec: string; child_args?: string[]; identifier: string } {
-    const [childExec = 'python', ...childArgs] = command ?? ['python', 'agent/bootstrap.py']
+    const [childExec = '', ...childArgs] = command ?? []
     return {
         child_exec: childExec,
         ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
@@ -308,14 +324,14 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
         'release:dry-run': 'node tools/build-release.mjs --dry-run',
         'sync:runtime': 'node tools/sync-runtime.mjs'
     }
+    if (input.includeSchemaSync) {
+        scripts['sync:schema'] = 'node tools/sync-schema.mjs'
+    }
     if (input.includeAgent) {
         scripts['format:py'] = 'uv run --frozen ruff format .'
         scripts['lint:py'] = 'uv run --frozen ruff check .'
         scripts['typecheck:py'] = 'uv run --frozen pyright'
         scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
-    }
-    if (input.includeSchemaSync) {
-        scripts['sync:schema'] = 'node tools/sync-schema.mjs'
     }
     return stableJson({
         name: input.slug,
@@ -354,21 +370,7 @@ export default defineConfig({
 `
 }
 
-function pythonWorkflowSetup(includeAgent: boolean): string {
-    return includeAgent
-        ? `      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - uses: astral-sh/setup-uv@v8.1.0
-`
-        : ''
-}
-
-function pythonWorkflowCheck(includeAgent: boolean): string {
-    return includeAgent ? `      - run: pnpm check:py\n` : ''
-}
-
-function checkWorkflow(includeAgent: boolean): string {
+function checkWorkflow(): string {
     return `name: Check
 
 on:
@@ -383,7 +385,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-${pythonWorkflowSetup(includeAgent)}
+      - uses: actions/setup-python@v6
+        if: hashFiles('pyproject.toml') != ''
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.1.0
+        if: hashFiles('pyproject.toml') != ''
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -392,11 +399,12 @@ ${pythonWorkflowSetup(includeAgent)}
       - run: node tools/check-project.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-${pythonWorkflowCheck(includeAgent)}
+      - run: pnpm check:py
+        if: hashFiles('pyproject.toml') != ''
 `
 }
 
-function releaseWorkflow(slug: string, includeAgent: boolean): string {
+function releaseWorkflow(slug: string, _includeAgent: boolean): string {
     return `name: Release
 
 on:
@@ -417,7 +425,12 @@ ${releaseTargetMatrixYaml()}
     runs-on: \${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-${pythonWorkflowSetup(includeAgent)}
+      - uses: actions/setup-python@v6
+        if: hashFiles('pyproject.toml') != ''
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.1.0
+        if: hashFiles('pyproject.toml') != ''
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -426,7 +439,8 @@ ${pythonWorkflowSetup(includeAgent)}
       - run: node tools/check-project.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-${pythonWorkflowCheck(includeAgent)}
+      - run: pnpm check:py
+        if: hashFiles('pyproject.toml') != ''
       - run: pnpm release:dry-run
         if: github.event_name == 'workflow_dispatch'
       - run: pnpm sync:runtime
@@ -611,9 +625,11 @@ if (readFileSync('.node-version', 'utf8').trim() !== '24') {
     throw new Error('.node-version must pin Node 24')
 }
 
-const workflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
-if (project.addons?.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
-for (const workflow of workflows) {
+const requiredWorkflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
+if (project.addons?.schemaSync) {
+    requiredWorkflows.push('.github/workflows/schema-sync.yml')
+}
+for (const workflow of requiredWorkflows) {
     if (!existsSync(workflow)) {
         throw new Error(\`\${workflow} is missing\`)
     }
@@ -759,7 +775,7 @@ function interfaceController(kind) {
 
 function interfaceAgent(project) {
     if (!project.python) return undefined
-    const [childExec = 'python', ...childArgs] = project.python.devCommand ?? ['python', 'agent/bootstrap.py']
+    const [childExec = '', ...childArgs] = project.python.devCommand ?? []
     return [
         {
             child_exec: childExec,
@@ -1258,7 +1274,6 @@ function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
     renameMfaaEntrypoint('dist/package', runtimePlatform)
     writeJson('dist/package/interface.json', interfaceJson)
     for (const path of packagePaths) {
-        if (path === 'python' && !existsSync(path)) continue
         copyPath(path, join('dist/package', path))
     }
     if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0 && existsSync('agent')) {
@@ -1536,6 +1551,41 @@ function generatedEnglishReadme(input: ProjectTemplateInput): string {
     return template(input.includeAgent ? 'agent/README.en.md' : 'base/README.en.md', {
         displayName: input.displayName,
         version: input.version
+    })
+}
+
+function generatedChangelog(input: Pick<ProjectTemplateInput, 'displayName' | 'version'>): string {
+    return template('addons/changelog/CHANGELOG.md', {
+        displayName: input.displayName,
+        version: input.version
+    })
+}
+
+function dependabotConfig(): string {
+    return `version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+`
+}
+
+function generatedContributing(input: Pick<ProjectTemplateInput, 'displayName'>): string {
+    return template('addons/community/CONTRIBUTING.md', {
+        displayName: input.displayName
+    })
+}
+
+function generatedBugReportTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
+    return template('addons/community/bug_report.md', {
+        displayName: input.displayName
+    })
+}
+
+function generatedFeatureRequestTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
+    return template('addons/community/feature_request.md', {
+        displayName: input.displayName
     })
 }
 

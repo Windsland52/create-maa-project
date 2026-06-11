@@ -102,7 +102,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         managed('tools/validate-schema.mjs', validateSchemaScript()),
         managed('tools/build-release.mjs', buildReleaseScript(input.slug)),
         managed('tools/sync-runtime.mjs', syncRuntimeScript()),
-        ...schemaFiles(),
+        ...schemaFiles(input.includeAgent),
         once('interface.json', interfaceJson(input)),
         once('tasks/tutorial.json', tutorialTaskJson()),
         once('resource/base/default_pipeline.json', defaultPipelineJson()),
@@ -276,14 +276,19 @@ function ocrManifestJson(): string {
     })
 }
 
-function schemaFiles(): ManagedFileInput[] {
+export function projectCustomSchemaFiles(includeAgent: boolean): ManagedFileInput[] {
+    const customSchemaRoot = includeAgent ? 'agent/tools/schema' : 'base/tools/schema'
+    return PROJECT_CUSTOM_SCHEMA_FILES.map((file) =>
+        once(`tools/schema/${file}`, template(`${customSchemaRoot}/${file}`))
+    )
+}
+
+function schemaFiles(includeAgent: boolean): ManagedFileInput[] {
     return [
         ...UPSTREAM_MAAFW_SCHEMA_FILES.map((file) =>
             managed(`tools/schema/${file}`, template(`base/tools/schema/${file}`))
         ),
-        ...PROJECT_CUSTOM_SCHEMA_FILES.map((file) =>
-            once(`tools/schema/${file}`, template(`base/tools/schema/${file}`))
-        ),
+        ...projectCustomSchemaFiles(includeAgent),
         managed(
             'tools/schema/schema-manifest.json',
             template('base/tools/schema/schema-manifest.json')

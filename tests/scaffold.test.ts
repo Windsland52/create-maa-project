@@ -93,6 +93,25 @@ describe('pure pipeline scaffold', () => {
         })
         expect(packageJson.scripts).not.toHaveProperty('check:py')
 
+        const customActionSchema = await readJson(join(projectRoot, 'tools/schema/custom.action.schema.json'))
+        const customRecognitionSchema = await readJson(
+            join(projectRoot, 'tools/schema/custom.recognition.schema.json')
+        )
+        expect(customActionSchema).toMatchObject({
+            properties: {
+                custom_action: {},
+                custom_action_param: {}
+            }
+        })
+        expect(customActionSchema).not.toHaveProperty('$defs')
+        expect(customRecognitionSchema).toMatchObject({
+            properties: {
+                custom_recognition: {},
+                custom_recognition_param: {}
+            }
+        })
+        expect(customRecognitionSchema).not.toHaveProperty('$defs')
+
         const license = await readFile(join(projectRoot, 'LICENSE'), 'utf8')
         expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
         expect(license).toContain('Version 3, 19 November 2007')
@@ -207,6 +226,32 @@ describe('pure pipeline scaffold', () => {
                 'lint:py': 'uv run --frozen ruff check .',
                 'typecheck:py': 'uv run --frozen pyright',
                 'check:py': 'pnpm lint:py && pnpm typecheck:py'
+            }
+        })
+        expect(await readJson(join(projectRoot, 'tools/schema/custom.action.schema.json'))).toMatchObject({
+            $defs: {
+                DisableNodeParam: {
+                    required: ['node_name']
+                },
+                SubTaskParam: {
+                    required: ['sub']
+                }
+            }
+        })
+        expect(
+            await readJson(join(projectRoot, 'tools/schema/custom.recognition.schema.json'))
+        ).toMatchObject({
+            $defs: {
+                ExampleRecognitionParam: {
+                    properties: {
+                        node: {
+                            type: 'string'
+                        },
+                        box: {
+                            $ref: '#/$defs/Rect'
+                        }
+                    }
+                }
             }
         })
         expect(await readJson(join(projectRoot, '.vscode/extensions.json'))).toMatchObject({

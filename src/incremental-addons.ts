@@ -7,10 +7,10 @@ import {
 } from './addons.js'
 import {
     addAgent,
-    addChangelog,
     addCommunity,
     addDependabot,
     addDevTools,
+    addGitCliff,
     addGithub,
     addResourcePack,
     addSchemaSync
@@ -38,8 +38,8 @@ export async function applyIncrementalAddons(
             lastResult = await addAgent(options)
         } else if (addon === 'resource-pack') {
             lastResult = await addResourcePack(options)
-        } else if (addon === 'changelog') {
-            lastResult = await addChangelog(options)
+        } else if (addon === 'git-cliff') {
+            lastResult = await addGitCliff(options)
         } else if (addon === 'community') {
             lastResult = await addCommunity(options)
         } else if (addon === 'dependabot') {

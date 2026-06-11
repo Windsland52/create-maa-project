@@ -1,10 +1,10 @@
-const CREATE_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'changelog', 'community', 'dependabot', 'schema-sync'])
-const INCREMENTAL_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'changelog', 'community', 'dependabot', 'schema-sync'])
+const CREATE_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'community', 'dependabot', 'schema-sync'])
+const INCREMENTAL_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'community', 'dependabot', 'schema-sync'])
 const DEFAULT_INCLUDED_ADDONS = new Set<string>()
-const PLANNED_ADDONS = new Set(['auto-format', 'optimize-images', 'git-cliff'])
+const PLANNED_ADDONS = new Set(['auto-format', 'optimize-images'])
 const V1_RESERVED_ADDONS = new Set(['i18n', 'mirrorchyan', 'branding'])
 
-const SUPPORTED_INCREMENTAL_LIST = 'dev-tools, github, agent, resource-pack, changelog, community, dependabot, schema-sync'
+const SUPPORTED_INCREMENTAL_LIST = 'dev-tools, github, agent, resource-pack, git-cliff, community, dependabot, schema-sync'
 const DEFAULT_INCLUDED_LIST = 'none'
 
 export function assertSupportedCreateAddons(addons: string[]): void {
@@ -23,16 +23,17 @@ export function isDefaultIncludedAddon(addon: string): boolean {
 }
 
 export function resolveAddonDependencies(addons: string[], input: { includeAgent?: boolean } = {}): string[] {
-    const resolved = new Set(addons)
+    const requested = addons
+    const resolved = new Set(requested)
     if (input.includeAgent || resolved.has('agent')) resolved.add('dev-tools')
-    if (resolved.has('github') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
+    if (resolved.has('github') || resolved.has('git-cliff') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
         resolved.add('dev-tools')
     }
-    if (resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
+    if (resolved.has('git-cliff') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
         resolved.add('github')
     }
-    const order = ['dev-tools', 'github', 'agent', 'resource-pack', 'changelog', 'community', 'dependabot', 'schema-sync']
-    return [...order.filter((addon) => resolved.has(addon)), ...addons.filter((addon) => !order.includes(addon))]
+    const order = ['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'community', 'dependabot', 'schema-sync']
+    return [...order.filter((addon) => resolved.has(addon)), ...requested.filter((addon) => !order.includes(addon))]
 }
 
 export function defaultIncludedAddonMessage(addon: string): string {

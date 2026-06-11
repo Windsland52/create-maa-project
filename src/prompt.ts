@@ -116,7 +116,7 @@ async function controllerMultiChoice(rl: ReturnType<typeof createInterface>): Pr
 
 function setupAddons(setup: SetupPreset, current: string[]): string[] {
     if (setup === 'minimal') return current
-    if (setup === 'all') return addUnique(current, ['dev-tools', 'github', 'schema-sync', 'community'])
+    if (setup === 'all') return addUnique(current, ['dev-tools', 'github', 'git-cliff', 'schema-sync', 'community'])
     return current
 }
 
@@ -127,6 +127,7 @@ async function customRepositoryFeatures(rl: ReturnType<typeof createInterface>):
         [
             { value: 'dev-tools', label: 'dev-tools' },
             { value: 'github', label: '  github' },
+            { value: 'git-cliff', label: '    git-cliff' },
             { value: 'schema-sync', label: '    schema-sync' },
             { value: 'community', label: '    community' }
         ],

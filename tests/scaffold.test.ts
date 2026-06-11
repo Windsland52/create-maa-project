@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     createProject,
     addAgent,
-    addChangelog,
     addCommunity,
     addDependabot,
+    addGitCliff,
     addResourcePack,
     assertCanCreateTarget,
     type GitRunner
@@ -331,6 +331,9 @@ describe('scaffold', () => {
         expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
         expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
         expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
+        expect(releaseWorkflow).toContain('actions/download-artifact@v7')
+        expect(releaseWorkflow).toContain('generate_release_notes: true')
+        expect(releaseWorkflow).not.toContain('orhun/git-cliff-action@v4')
         expect(releaseWorkflow).not.toContain('package_paths=')
         expect(releaseWorkflow).not.toContain('|| true')
         expect(result.pending).toEqual(
@@ -850,7 +853,7 @@ describe('scaffold', () => {
         ).rejects.toThrow('Resource pack label cannot be blank')
     })
 
-    it('adds changelog, community, and dependabot incrementally', async () => {
+    it('adds git-cliff, community, and dependabot incrementally', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
         await createProject(defaultOptions({ name: 'maa-addon-test' }))
@@ -858,14 +861,26 @@ describe('scaffold', () => {
 
         await writeFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), '# User Changelog\n', 'utf8')
         await writeFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), '# User Guide\n', 'utf8')
-        const changelogResult = await addChangelog(defaultOptions({ add: ['changelog'] }))
+        const gitCliffResult = await addGitCliff(defaultOptions({ add: ['git-cliff'] }))
         const communityResult = await addCommunity(defaultOptions({ add: ['community'] }))
         const dependabotResult = await addDependabot(defaultOptions({ add: ['dependabot'] }))
 
-        expect(changelogResult.skipped).toContain('CHANGELOG.md')
+        expect(gitCliffResult.written).toEqual(
+            expect.arrayContaining(['.github/cliff.toml', '.github/workflows/release.yml'])
+        )
+        expect(gitCliffResult.skipped).not.toContain('CHANGELOG.md')
         expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe(
             '# User Changelog\n'
         )
+        expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain(
+            '[git.github]'
+        )
+        expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain(
+            '新功能 | Features'
+        )
+        expect(
+            await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
+        ).toContain('orhun/git-cliff-action@v4')
         expect(communityResult.skipped).toContain('CONTRIBUTING.md')
         expect(communityResult.written).toEqual(
             expect.arrayContaining([
@@ -885,13 +900,14 @@ describe('scaffold', () => {
         )
         expect(await readJson(join(root, 'maa-addon-test', 'maa-project.json'))).toMatchObject({
             addons: {
-                changelog: { enabled: true },
+                gitCliff: { enabled: true },
                 community: { enabled: true },
                 dependabot: { enabled: true }
             }
         })
         expect(await readJson(join(root, 'maa-addon-test', 'maa-project.lock.json'))).toMatchObject({
             managedFiles: {
+                '.github/cliff.toml': expect.any(Object),
                 '.github/dependabot.yml': expect.any(Object)
             },
             createdFiles: {
@@ -901,35 +917,43 @@ describe('scaffold', () => {
         })
     })
 
-    it('supports changelog, community, and dependabot during project creation', async () => {
+    it('supports git-cliff, community, and dependabot during project creation', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
 
         const result = await createProject(
             defaultOptions({
                 name: 'maa-create-addons',
-                add: ['changelog', 'community', 'dependabot']
+                add: ['git-cliff', 'community', 'dependabot']
             })
         )
 
         expect(result.written).toEqual(
             expect.arrayContaining([
-                'CHANGELOG.md',
+                '.github/cliff.toml',
                 'CONTRIBUTING.md',
                 '.github/ISSUE_TEMPLATE/bug_report.md',
                 '.github/ISSUE_TEMPLATE/feature_request.md',
                 '.github/dependabot.yml'
             ])
         )
-        expect(await readFile(join(root, 'maa-create-addons', 'CHANGELOG.md'), 'utf8')).toContain(
-            '## v0.1.0'
+        expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
+            '[git.github]'
+        )
+        expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
+            '问题修复 | Bug Fixes'
+        )
+        expect(
+            await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
+        ).toContain(
+            'body: ${{ needs.git_cliff.outputs.release_body }}'
         )
         expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
             'Contributing to maa-create-addons'
         )
         expect(await readJson(join(root, 'maa-create-addons', 'maa-project.json'))).toMatchObject({
             addons: {
-                changelog: { enabled: true },
+                gitCliff: { enabled: true },
                 community: { enabled: true },
                 dependabot: { enabled: true }
             }
@@ -944,11 +968,37 @@ describe('scaffold', () => {
             createProject(defaultOptions({ name: 'maa-reserved-addon', add: ['mirrorchyan'] }))
         ).rejects.toThrow('--add mirrorchyan is reserved for v1.x and is not implemented in this version')
         await expect(
-            createProject(defaultOptions({ name: 'maa-planned-addon', add: ['git-cliff'] }))
-        ).rejects.toThrow('--add git-cliff is planned but is not implemented in this version')
+            createProject(defaultOptions({ name: 'maa-old-changelog-addon', add: ['changelog'] }))
+        ).rejects.toThrow('Unsupported add-on: changelog')
         await expect(
             createProject(defaultOptions({ name: 'maa-unknown-addon', add: ['unknown-addon'] }))
         ).rejects.toThrow('Unsupported add-on: unknown-addon')
+    })
+
+    it('supports git-cliff during project creation', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(defaultOptions({ name: 'maa-git-cliff-addon', add: ['git-cliff'] }))
+
+        expect(result.written).toEqual(
+            expect.arrayContaining([
+                '.github/cliff.toml',
+                '.github/workflows/check.yml',
+                '.github/workflows/release.yml',
+                'package.json'
+            ])
+        )
+        expect(await readJson(join(root, 'maa-git-cliff-addon', 'maa-project.json'))).toMatchObject({
+            addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
+                gitCliff: { enabled: true }
+            }
+        })
+        expect(await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')).toContain(
+            'orhun/git-cliff-action@v4'
+        )
     })
 
     it('records schema-sync add-on state during project creation', async () => {

@@ -585,6 +585,7 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
         includeDevTools: hasDevTools(config),
         includeGithub: hasGithubAutomation(config),
         includeAgent: config.python !== undefined,
+        includeGitCliff: Boolean(config.addons.gitCliff),
         includeSchemaSync: Boolean(config.addons.schemaSync),
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources

@@ -5,12 +5,12 @@ import { promisify } from 'node:util'
 import {
     agentFiles,
     baseProjectFiles,
-    changelogFile,
     configFile,
     communityFiles,
     dependabotFile,
     devToolFiles,
     emptyPng,
+    gitCliffFiles,
     githubFiles,
     interfaceAgent,
     interfaceResourceItems,
@@ -137,11 +137,12 @@ export async function createProject(
             includeDevTools,
             includeGithub,
             includeAgent,
+            includeGitCliff: resolvedAddons.includes('git-cliff'),
             includeSchemaSync: resolvedAddons.includes('schema-sync'),
             pythonDevCommand,
             resources: config.resources
         }),
-        ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, version }),
+        ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName }),
         configFile(config)
     ]
     const lock = emptyLock(CLI_VERSION)
@@ -300,6 +301,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     }
     const files = [
         ...githubFiles(templateInputFromConfig(config)),
+        ...(config.addons.gitCliff ? gitCliffFiles() : []),
         {
             path: 'package.json',
             content: stableJson(packageJson),
@@ -387,7 +389,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     if (hasGithubAutomation(config)) {
         files.push(releaseWorkflowFile({
             slug: config.project.slug,
-            includeAgent: true
+            includeGitCliff: Boolean(config.addons.gitCliff)
         }))
     }
     return withProjectWriteLock(
@@ -489,22 +491,23 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
     )
 }
 
-export async function addChangelog(_options: CliOptions): Promise<ScaffoldResult> {
+export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult> {
     const root = process.cwd()
     const config = await readProjectConfig(root)
     const lock = await readProjectLock(root)
-    config.addons.changelog = { enabled: true }
+    config.addons.gitCliff = { enabled: true }
+    const files: ManagedFileInput[] = [
+        ...gitCliffFiles(),
+        configFile(config)
+    ]
+    if (hasGithubAutomation(config)) {
+        files.push(releaseWorkflowFile(templateInputFromConfig(config)))
+    }
     return writeAddonFiles(
         root,
         config,
         lock,
-        [
-            changelogFile({
-                displayName: config.project.displayName,
-                version: config.project.version
-            }),
-            configFile(config)
-        ],
+        files,
         _options
     )
 }
@@ -680,7 +683,7 @@ function initialAddons(addons: string[]): Record<string, unknown> {
     const state: Record<string, unknown> = {}
     if (addons.includes('dev-tools')) state.devTools = { enabled: true }
     if (addons.includes('github')) state.github = { enabled: true }
-    if (addons.includes('changelog')) state.changelog = { enabled: true }
+    if (addons.includes('git-cliff')) state.gitCliff = { enabled: true }
     if (addons.includes('dependabot')) state.dependabot = { enabled: true }
     if (addons.includes('community')) state.community = { enabled: true }
     if (addons.includes('schema-sync')) state.schemaSync = { enabled: true }
@@ -715,7 +718,7 @@ function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
 function addonFilesForCreate(
     options: CliOptions,
     resources: MaaProjectConfig['resources'],
-    input: { displayName: string; version: string }
+    input: { displayName: string }
 ): ManagedFileInput[] {
     const files: ManagedFileInput[] = []
     for (const pack of resources.slice(1)) {
@@ -733,7 +736,6 @@ function addonFilesForCreate(
         )
     }
     const addons = options.add
-    if (addons.includes('changelog')) files.push(changelogFile(input))
     if (addons.includes('dependabot')) files.push(dependabotFile())
     if (addons.includes('community')) files.push(...communityFiles(input))
     return files
@@ -749,6 +751,7 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
         includeDevTools: hasDevTools(config),
         includeGithub: hasGithubAutomation(config),
         includeAgent: config.python !== undefined,
+        includeGitCliff: Boolean(config.addons.gitCliff),
         includeSchemaSync: Boolean(config.addons.schemaSync),
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources

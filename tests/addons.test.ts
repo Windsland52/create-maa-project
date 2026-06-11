@@ -7,6 +7,7 @@ describe('applyIncrementalAddons', () => {
     it('resolves add-on dependencies in template order', () => {
         expect(resolveAddonDependencies(['schema-sync'])).toEqual(['dev-tools', 'github', 'schema-sync'])
         expect(resolveAddonDependencies(['community'])).toEqual(['dev-tools', 'github', 'community'])
+        expect(resolveAddonDependencies(['git-cliff'])).toEqual(['dev-tools', 'github', 'git-cliff'])
         expect(resolveAddonDependencies(['agent'])).toEqual(['dev-tools', 'agent'])
     })
 
@@ -14,17 +15,20 @@ describe('applyIncrementalAddons', () => {
         await expect(
             applyIncrementalAddons(options(['ci']))
         ).rejects.toThrow('Unsupported add-on: ci')
+        await expect(
+            applyIncrementalAddons(options(['changelog']))
+        ).rejects.toThrow('Unsupported add-on: changelog')
     })
 
     it('rejects planned add-ons until handlers are registered', async () => {
-        await expect(applyIncrementalAddons(options(['git-cliff']))).rejects.toThrow(
-            '--add git-cliff is planned but is not implemented in this version.'
+        await expect(applyIncrementalAddons(options(['auto-format']))).rejects.toThrow(
+            '--add auto-format is planned but is not implemented in this version.'
         )
     })
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, changelog, community, dependabot, schema-sync'
+            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, community, dependabot, schema-sync'
         )
     })
 })

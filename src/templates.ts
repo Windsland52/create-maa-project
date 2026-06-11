@@ -82,6 +82,7 @@ export type ProjectTemplateInput = {
     includeDevTools: boolean
     includeGithub: boolean
     includeAgent: boolean
+    includeGitCliff: boolean
     includeSchemaSync: boolean
     pythonDevCommand?: string[] | undefined
     resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
@@ -114,6 +115,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
 
     if (input.includeGithub) {
         files.push(...githubFiles(input))
+    }
+
+    if (input.includeGitCliff) {
+        files.push(...gitCliffFiles())
     }
 
     if (input.includeSchemaSync) {
@@ -185,8 +190,8 @@ export function maatoolsConfigFile(resources: string[]): ManagedFileInput {
     return once('maatools.config.mts', maatoolsConfig(resources))
 }
 
-export function changelogFile(input: Pick<ProjectTemplateInput, 'displayName' | 'version'>): ManagedFileInput {
-    return once('CHANGELOG.md', generatedChangelog(input))
+export function gitCliffFiles(): ManagedFileInput[] {
+    return [managed('.github/cliff.toml', gitCliffConfig())]
 }
 
 export function dependabotFile(): ManagedFileInput {
@@ -194,9 +199,9 @@ export function dependabotFile(): ManagedFileInput {
 }
 
 export function releaseWorkflowFile(
-    input: Pick<ProjectTemplateInput, 'slug' | 'includeAgent'>
+    input: Pick<ProjectTemplateInput, 'slug' | 'includeGitCliff'>
 ): ManagedFileInput {
-    return managed('.github/workflows/release.yml', releaseWorkflow(input.slug, input.includeAgent))
+    return managed('.github/workflows/release.yml', releaseWorkflow(input))
 }
 
 export function schemaSyncFiles(): ManagedFileInput[] {
@@ -392,11 +397,42 @@ function checkWorkflow(): string {
     return template('addons/github/.github/workflows/check.yml')
 }
 
-function releaseWorkflow(slug: string, _includeAgent: boolean): string {
-    return template('addons/github/.github/workflows/release.yml', {
-        slug,
-        releaseTargetMatrix: releaseTargetMatrixYaml()
-    })
+function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'includeGitCliff'>): string {
+    return trimTrailingWhitespace(
+        template('addons/github/.github/workflows/release.yml', {
+            slug: input.slug,
+            releaseTargetMatrix: releaseTargetMatrixYaml(),
+            gitCliffJob: input.includeGitCliff ? gitCliffWorkflowJob() : '',
+            releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
+            releaseNotesInput: input.includeGitCliff
+                ? 'body: ${{ needs.git_cliff.outputs.release_body }}'
+                : 'generate_release_notes: true'
+        })
+    )
+}
+
+function gitCliffWorkflowJob(): string {
+    return `git_cliff:
+    name: Generate release notes
+    runs-on: ubuntu-latest
+    outputs:
+      release_body: \${{ steps.git-cliff.outputs.content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: .github/cliff.toml
+          args: -vv --latest --strip header
+        env:
+          OUTPUT: CHANGES.md
+          GITHUB_REPO: \${{ github.repository }}
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+`
 }
 
 function vscodeExtensions(includeAgent: boolean): string {
@@ -440,13 +476,13 @@ function buildReleaseScript(slug: string): string {
 
 function releaseTargetMatrixYaml(): string {
     return RELEASE_TARGETS.map(
-        (target) => `          - os: ${target.runner}
+        (target) => `- os: ${target.runner}
             artifact_os: ${target.artifactOs}
             arch: ${target.arch}
             runtime_os: ${target.runtimeOs}
             runtime_arch: ${target.runtimeArch}
             ext: ${target.ext}`
-    ).join('\n')
+    ).join('\n          ')
 }
 
 function releaseTargetArtifactTuples(): string {
@@ -477,11 +513,12 @@ function generatedEnglishReadme(input: ProjectTemplateInput): string {
     })
 }
 
-function generatedChangelog(input: Pick<ProjectTemplateInput, 'displayName' | 'version'>): string {
-    return template('addons/changelog/CHANGELOG.md', {
-        displayName: input.displayName,
-        version: input.version
-    })
+function gitCliffConfig(): string {
+    return template('addons/git-cliff/.github/cliff.toml')
+}
+
+function trimTrailingWhitespace(content: string): string {
+    return content.replace(/[ \t]+$/gm, '')
 }
 
 function dependabotConfig(): string {

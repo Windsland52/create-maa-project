@@ -7,6 +7,7 @@ import {
 } from './addons.js'
 import {
     addAgent,
+    addAutoFormat,
     addCommunity,
     addDependabot,
     addDevTools,
@@ -40,6 +41,8 @@ export async function applyIncrementalAddons(
             lastResult = await addResourcePack(options)
         } else if (addon === 'git-cliff') {
             lastResult = await addGitCliff(options)
+        } else if (addon === 'auto-format') {
+            lastResult = await addAutoFormat(options)
         } else if (addon === 'community') {
             lastResult = await addCommunity(options)
         } else if (addon === 'dependabot') {

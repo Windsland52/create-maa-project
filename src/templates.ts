@@ -83,6 +83,7 @@ export type ProjectTemplateInput = {
     includeGithub: boolean
     includeAgent: boolean
     includeGitCliff: boolean
+    includeAutoFormat: boolean
     includeSchemaSync: boolean
     pythonDevCommand?: string[] | undefined
     resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
@@ -119,6 +120,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
 
     if (input.includeGitCliff) {
         files.push(...gitCliffFiles())
+    }
+
+    if (input.includeAutoFormat) {
+        files.push(...autoFormatFiles())
     }
 
     if (input.includeSchemaSync) {
@@ -192,6 +197,10 @@ export function maatoolsConfigFile(resources: string[]): ManagedFileInput {
 
 export function gitCliffFiles(): ManagedFileInput[] {
     return [managed('.github/cliff.toml', gitCliffConfig())]
+}
+
+export function autoFormatFiles(): ManagedFileInput[] {
+    return [managed('.github/workflows/format.yml', autoFormatWorkflow())]
 }
 
 export function dependabotFile(): ManagedFileInput {
@@ -518,6 +527,10 @@ function generatedEnglishReadme(input: ProjectTemplateInput): string {
 
 function gitCliffConfig(): string {
     return template('addons/git-cliff/.github/cliff.toml')
+}
+
+function autoFormatWorkflow(): string {
+    return template('addons/auto-format/.github/workflows/format.yml')
 }
 
 function trimTrailingWhitespace(content: string): string {

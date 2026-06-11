@@ -17,8 +17,9 @@ Current implementation covers the local scaffold core:
 - `--add agent` for adding the Python Agent files to an existing project
 - `--add resource-pack <folder> --label <display>`
 - `--add git-cliff` for git-cliff release notes
+- `--add auto-format` for a scheduled/manual formatting workflow
 - `--add community`, `--add dependabot`, and `--add schema-sync`
-- planned and reserved add-on reporting for options such as `auto-format` and `mirrorchyan`
+- planned and reserved add-on reporting for options such as `optimize-images` and `mirrorchyan`
 - committed `maa-project.json` and `maa-project.lock.json`
 - project-owned files such as `interface.json`, `package.json`, `tasks/`, `resource/`, editor ignores/settings, and OCR model files are created once instead of managed as template baselines
 - metadata sync for interface, package, controller, license, network mode, display name, and validated GitHub repository URLs

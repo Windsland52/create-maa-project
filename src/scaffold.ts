@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import {
     agentFiles,
+    autoFormatFiles,
     baseProjectFiles,
     configFile,
     communityFiles,
@@ -138,6 +139,7 @@ export async function createProject(
             includeGithub,
             includeAgent,
             includeGitCliff: resolvedAddons.includes('git-cliff'),
+            includeAutoFormat: resolvedAddons.includes('auto-format'),
             includeSchemaSync: resolvedAddons.includes('schema-sync'),
             pythonDevCommand,
             resources: config.resources
@@ -302,6 +304,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     const files = [
         ...githubFiles(templateInputFromConfig(config)),
         ...(config.addons.gitCliff ? gitCliffFiles() : []),
+        ...(config.addons.autoFormat ? autoFormatFiles() : []),
         {
             path: 'package.json',
             content: stableJson(packageJson),
@@ -512,6 +515,14 @@ export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult>
     )
 }
 
+export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.autoFormat = { enabled: true }
+    return writeAddonFiles(root, config, lock, [...autoFormatFiles(), configFile(config)], options)
+}
+
 export async function addDependabot(options: CliOptions): Promise<ScaffoldResult> {
     const root = process.cwd()
     const config = await readProjectConfig(root)
@@ -684,6 +695,7 @@ function initialAddons(addons: string[]): Record<string, unknown> {
     if (addons.includes('dev-tools')) state.devTools = { enabled: true }
     if (addons.includes('github')) state.github = { enabled: true }
     if (addons.includes('git-cliff')) state.gitCliff = { enabled: true }
+    if (addons.includes('auto-format')) state.autoFormat = { enabled: true }
     if (addons.includes('dependabot')) state.dependabot = { enabled: true }
     if (addons.includes('community')) state.community = { enabled: true }
     if (addons.includes('schema-sync')) state.schemaSync = { enabled: true }
@@ -752,6 +764,7 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
         includeGithub: hasGithubAutomation(config),
         includeAgent: config.python !== undefined,
         includeGitCliff: Boolean(config.addons.gitCliff),
+        includeAutoFormat: Boolean(config.addons.autoFormat),
         includeSchemaSync: Boolean(config.addons.schemaSync),
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources

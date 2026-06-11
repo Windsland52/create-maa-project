@@ -8,6 +8,7 @@ describe('applyIncrementalAddons', () => {
         expect(resolveAddonDependencies(['schema-sync'])).toEqual(['dev-tools', 'github', 'schema-sync'])
         expect(resolveAddonDependencies(['community'])).toEqual(['dev-tools', 'github', 'community'])
         expect(resolveAddonDependencies(['git-cliff'])).toEqual(['dev-tools', 'github', 'git-cliff'])
+        expect(resolveAddonDependencies(['auto-format'])).toEqual(['dev-tools', 'github', 'auto-format'])
         expect(resolveAddonDependencies(['agent'])).toEqual(['dev-tools', 'agent'])
     })
 
@@ -21,14 +22,14 @@ describe('applyIncrementalAddons', () => {
     })
 
     it('rejects planned add-ons until handlers are registered', async () => {
-        await expect(applyIncrementalAddons(options(['auto-format']))).rejects.toThrow(
-            '--add auto-format is planned but is not implemented in this version.'
+        await expect(applyIncrementalAddons(options(['optimize-images']))).rejects.toThrow(
+            '--add optimize-images is planned but is not implemented in this version.'
         )
     })
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, community, dependabot, schema-sync'
+            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, community, dependabot, schema-sync'
         )
     })
 })

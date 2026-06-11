@@ -1025,6 +1025,63 @@ describe('scaffold', () => {
         )
     })
 
+    it('supports auto-format during project creation', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(defaultOptions({ name: 'maa-auto-format-create', add: ['auto-format'] }))
+
+        expect(result.written).toEqual(
+            expect.arrayContaining([
+                '.github/workflows/check.yml',
+                '.github/workflows/release.yml',
+                '.github/workflows/format.yml',
+                'package.json'
+            ])
+        )
+        expect(await readJson(join(root, 'maa-auto-format-create', 'maa-project.json'))).toMatchObject({
+            addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
+                autoFormat: { enabled: true }
+            }
+        })
+        const formatWorkflow = await readFile(
+            join(root, 'maa-auto-format-create', '.github/workflows/format.yml'),
+            'utf8'
+        )
+        expect(formatWorkflow).toContain('pnpm format')
+        expect(formatWorkflow).toContain('pnpm format:py')
+        expect(formatWorkflow).toContain('[skip changelog]')
+        expect(formatWorkflow).not.toContain('actions-js/push')
+    })
+
+    it('adds auto-format files to an existing project', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+        await createProject(minimalOptions({ name: 'maa-auto-format-addon' }))
+        const projectRoot = join(root, 'maa-auto-format-addon')
+        process.chdir(projectRoot)
+
+        const result = await applyIncrementalAddons(defaultOptions({ add: ['auto-format'] }))
+
+        expect(result?.written).toEqual(expect.arrayContaining(['.github/workflows/format.yml']))
+        expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
+            addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
+                autoFormat: { enabled: true }
+            }
+        })
+        await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/format.yml'))).resolves.toBe(true)
+        expect(await readFile(join(projectRoot, '.github/workflows/format.yml'), 'utf8')).toContain(
+            'git commit -m "style: auto format code [skip changelog]"'
+        )
+    })
+
     it('records schema-sync add-on state during project creation', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)

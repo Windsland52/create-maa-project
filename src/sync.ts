@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { CONFIG_FILE, readProjectConfig, readProjectLock, withProjectWriteLock, writeGeneratedFiles, writeProjectState } from './project.js'
-import { interfaceController, interfaceResourceItems, maatoolsConfigFile } from './templates.js'
+import { interfaceAgent, interfaceController, interfaceResourceItems, maatoolsConfigFile } from './templates.js'
 import type { CliOptions, ControllerKind, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
-import { addV, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { addV, exists, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
 
 const CLI_VERSION = '0.1.0'
 
@@ -62,6 +62,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
 
     applyInterfaceMetadata(interfaceJson, config)
     applyPackageMetadata(packageJson, config)
+    const pyproject = await syncedPyproject(root, config)
 
     files.push(
         { path: 'interface.json', content: prettyJson(interfaceJson), managed: false },
@@ -69,6 +70,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
         { path: 'package.json', content: stableJson(packageJson), managed: false },
         { path: CONFIG_FILE, content: stableJson(config), managed: false }
     )
+    if (pyproject) files.push(pyproject)
 
     return withProjectWriteLock(
         root,
@@ -172,7 +174,48 @@ function applyInterfaceMetadata(
     } else {
         delete interfaceJson.github
     }
-    delete interfaceJson.agent
+    if (config.python) {
+        interfaceJson.agent = [
+            interfaceAgent(config.project.slug, config.python.devCommand)
+        ]
+    } else {
+        delete interfaceJson.agent
+    }
+}
+
+async function syncedPyproject(
+    root: string,
+    config: Awaited<ReturnType<typeof readProjectConfig>>
+): Promise<ManagedFileInput | undefined> {
+    if (!config.python) return undefined
+    const path = 'pyproject.toml'
+    const fullPath = join(root, path)
+    if (!(await exists(fullPath))) return undefined
+    const content = await readText(fullPath)
+    return {
+        path,
+        content: syncTomlProjectMetadata(content, config.project.slug, config.project.version),
+        managed: true
+    }
+}
+
+function syncTomlProjectMetadata(content: string, name: string, version: string): string {
+    return syncTomlProjectField(syncTomlProjectField(content, 'name', name), 'version', version)
+}
+
+function syncTomlProjectField(content: string, key: 'name' | 'version', value: string): string {
+    const projectStart = content.search(/^\[project\]\s*$/m)
+    if (projectStart < 0) return content
+    const afterProject = content.slice(projectStart + '[project]'.length)
+    const nextSection = afterProject.search(/^\[[^\]]+\]\s*$/m)
+    const sectionEnd =
+        nextSection < 0 ? content.length : projectStart + '[project]'.length + nextSection
+    const before = content.slice(0, projectStart)
+    const section = content.slice(projectStart, sectionEnd)
+    const after = content.slice(sectionEnd)
+    const pattern = new RegExp(`^${key}\\s*=\\s*"[^"]*"\\s*$`, 'm')
+    if (!pattern.test(section)) return content
+    return `${before}${section.replace(pattern, `${key} = "${value}"`)}${after}`
 }
 
 function normalizeConfig(config: MaaProjectConfig): void {

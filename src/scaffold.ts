@@ -57,7 +57,7 @@ export async function createProject(
         onDownloadProgress?: DownloadProgressReporter
     } = {}
 ): Promise<ScaffoldResult> {
-    assertPurePipelineOptions(options)
+    assertSupportedTemplateOptions(options)
     const targetRoot = resolve(process.cwd(), options.name ?? '.')
     const detectGitTree = environment.detectGitTree ?? isInsideGitTree
     const targetInsideGitTree = await detectGitTree(targetRoot)
@@ -80,15 +80,21 @@ export async function createProject(
     await assertCanCreateTarget(targetRoot, options, detectGitTree)
     await mkdir(targetRoot, { recursive: true })
 
+    const includeAgent = options.template === 'agent'
+    const pythonDevCommand = includeAgent ? await detectPythonDevCommand() : undefined
     const config = createConfig({
         slug,
         displayName,
         version,
+        includeAgent,
+        pythonDevCommand,
         options
     })
     const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
     const pending = defaultPending({
+        includeAgent,
         options,
+        pythonDevCommand,
         includeOcrPending: !shouldDownloadOcrModels
     })
     const files = [
@@ -98,6 +104,8 @@ export async function createProject(
             version,
             controller: options.controller ?? 'ADB',
             license: options.license ?? 'AGPL-3.0-or-later',
+            includeAgent,
+            pythonDevCommand,
             resources: config.resources
         }),
         configFile(config)
@@ -194,9 +202,9 @@ function createOcrUpdateOptions(environment: {
     return options
 }
 
-function assertPurePipelineOptions(options: CliOptions): void {
-    if (options.template !== 'pipeline') {
-        throw new Error('--template must be pipeline in the pure pipeline scaffold.')
+function assertSupportedTemplateOptions(options: CliOptions): void {
+    if (options.template !== 'pipeline' && options.template !== 'agent') {
+        throw new Error('--template must be pipeline or agent.')
     }
     if (options.add.length > 0) {
         throw new Error('--add is not supported in the pure pipeline scaffold.')
@@ -207,15 +215,17 @@ function createConfig(input: {
     slug: string
     displayName: string
     version: string
+    includeAgent: boolean
+    pythonDevCommand?: string[] | undefined
     options: CliOptions
 }): MaaProjectConfig {
-    return {
+    const config: MaaProjectConfig = {
         schemaVersion: 1,
         project: {
             slug: input.slug,
             displayName: input.displayName,
             version: input.version,
-            initialTemplate: 'pipeline'
+            initialTemplate: input.includeAgent ? 'agent' : 'pipeline'
         },
         features: {
             ci: { enabled: true },
@@ -251,6 +261,14 @@ function createConfig(input: {
             spdx: input.options.license ?? 'AGPL-3.0-or-later'
         }
     }
+    if (input.includeAgent) {
+        config.python = {
+            requiresPython: '>=3.11,<3.14',
+            recommendedPython: '3.13'
+        }
+        if (input.pythonDevCommand) config.python.devCommand = input.pythonDevCommand
+    }
+    return config
 }
 
 export async function assertCanCreateTarget(
@@ -400,7 +418,9 @@ function errorMessage(error: unknown): string {
 }
 
 function defaultPending(input: {
+    includeAgent: boolean
     options: CliOptions
+    pythonDevCommand?: string[] | undefined
     includeOcrPending?: boolean
 }): PendingItem[] {
     const pending: PendingItem[] = [
@@ -423,6 +443,9 @@ function defaultPending(input: {
             command: 'create-maa-project --update ocr-models'
         })
     }
+    if (input.includeAgent) {
+        pending.push(...pythonPending(input.pythonDevCommand))
+    }
     return pending
 }
 
@@ -432,6 +455,58 @@ function ocrDownloadPending(error: unknown): PendingItem {
         reason: `OCR model download failed during project creation: ${errorMessage(error)}`,
         command: 'create-maa-project --update ocr-models'
     }
+}
+
+function pythonPending(pythonDevCommand: string[] | undefined): PendingItem[] {
+    const pending: PendingItem[] = [
+        {
+            kind: 'python-deps',
+            reason: 'Agent dependencies are managed by uv and need to be synchronized locally.',
+            command: 'create-maa-project --update python-deps'
+        }
+    ]
+    if (!pythonDevCommand) {
+        pending.push({
+            kind: 'python-runtime',
+            reason: 'No compatible local Python command was detected for Agent development.',
+            command: 'Install Python >=3.11,<3.14, then run create-maa-project --sync metadata'
+        })
+    }
+    return pending
+}
+
+async function detectPythonDevCommand(): Promise<string[] | undefined> {
+    const candidates =
+        process.platform === 'win32'
+            ? [
+                  ['py', '-3.13'],
+                  ['python'],
+                  ['python3']
+              ]
+            : [['python3.13'], ['python3'], ['python']]
+    for (const candidate of candidates) {
+        const [command, ...baseArgs] = candidate
+        if (!command) continue
+        try {
+            const result = await execFileAsync(command, [...baseArgs, '--version'], {
+                timeout: 3000
+            })
+            const versionOutput = `${result.stdout} ${result.stderr}`
+            if (!isCompatiblePythonVersion(versionOutput)) continue
+            return [...candidate, 'agent/bootstrap.py']
+        } catch {
+            continue
+        }
+    }
+    return undefined
+}
+
+function isCompatiblePythonVersion(output: string): boolean {
+    const match = output.match(/Python\s+(\d+)\.(\d+)\.(\d+)/)
+    if (!match) return false
+    const major = Number(match[1])
+    const minor = Number(match[2])
+    return major === 3 && minor >= 11 && minor < 14
 }
 
 function assertValidVersion(version: string): void {

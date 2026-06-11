@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { join, resolve } from 'node:path'
-import type { CliOptions, ControllerKind, LicenseKind } from './types.js'
+import type { CliOptions, ControllerKind, LicenseKind, TemplateName } from './types.js'
 import { exists, normalizeSlug } from './utils.js'
 
 export async function promptForCreateOptions(options: CliOptions): Promise<CliOptions> {
@@ -9,6 +9,7 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
     if (
         options.name &&
         options.displayName &&
+        options.explicitTemplate &&
         options.controller &&
         options.license &&
         options.initializeGit !== undefined
@@ -37,6 +38,9 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
             const fallbackDisplayName = rawProjectName ?? options.name
             const answer = await rl.question(`Display name [${fallbackDisplayName}]: `)
             options.displayName = answer.trim() || fallbackDisplayName
+        }
+        if (!options.explicitTemplate) {
+            options.template = await choice<TemplateName>(rl, 'Template', ['pipeline', 'agent'], 'pipeline')
         }
         if (!options.controller) {
             options.controller = await choice<ControllerKind>(rl, 'Controller', ['ADB', 'Win32', 'None'], 'ADB')

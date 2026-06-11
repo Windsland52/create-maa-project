@@ -7,6 +7,8 @@ describe('parseArgs', () => {
             '测试项目',
             '--name',
             '显示名',
+            '--template',
+            'agent',
             '--skip-download',
             '--slug',
             'arknights-helper',
@@ -16,7 +18,7 @@ describe('parseArgs', () => {
 
         expect(options.name).toBe('测试项目')
         expect(options.displayName).toBe('显示名')
-        expect(options.template).toBe('pipeline')
+        expect(options.template).toBe('agent')
         expect(options.slug).toBe('arknights-helper')
         expect(options.skipDownload).toBe(true)
         expect(options.controller).toBe('Win32')
@@ -26,8 +28,7 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['--bad'])).toThrow('Unknown option')
     })
 
-    it('rejects agent template and add-ons in the pure pipeline scaffold', () => {
-        expect(() => parseArgs(['--template', 'agent'])).toThrow('--template must be one of: pipeline')
+    it('rejects add-ons in the pure create scaffold', () => {
         expect(() => parseArgs(['--add', 'resource-pack', 'extra'])).toThrow(
             '--add is not supported in the pure pipeline scaffold.'
         )

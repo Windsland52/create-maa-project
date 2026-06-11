@@ -1,4 +1,4 @@
-export type TemplateName = 'pipeline'
+export type TemplateName = 'pipeline' | 'agent'
 export type ControllerKind = 'ADB' | 'Win32' | 'None'
 export type LicenseKind = 'AGPL-3.0-or-later' | 'MIT' | 'None'
 export type NetworkMode = 'auto' | 'official'
@@ -30,6 +30,11 @@ export type MaaProjectConfig = {
             channel: 'latest' | string
             enabled: boolean
         }
+    }
+    python?: {
+        devCommand?: string[]
+        requiresPython: string
+        recommendedPython: string
     }
     network: {
         mode: NetworkMode

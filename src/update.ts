@@ -6,6 +6,7 @@ import {
     readProjectConfig,
     readProjectLock,
     refreshManagedFileContent,
+    refreshManagedFileState,
     withProjectWriteLock,
     writeGeneratedFiles,
     writeProjectState
@@ -57,6 +58,16 @@ const UPDATE_PENDING: Record<string, PendingItem> = {
         kind: 'node-deps',
         reason: 'Node dependencies need to be installed or refreshed locally.',
         command: 'create-maa-project --update node-deps'
+    },
+    'python-deps': {
+        kind: 'python-deps',
+        reason: 'Python dependencies need to be synchronized locally.',
+        command: 'create-maa-project --update python-deps'
+    },
+    'python-runtime': {
+        kind: 'python-runtime',
+        reason: 'Embedded Python runtime asset update is pending.',
+        command: 'create-maa-project --update python-runtime'
     },
     template: {
         kind: 'template',
@@ -123,6 +134,17 @@ export async function recordUpdateRequests(
                     await updateNodeDeps(root, commandRunner)
                     lock.pending = removePending(lock.pending, 'node-deps')
                     if (await exists(join(root, 'pnpm-lock.yaml'))) written.add('pnpm-lock.yaml')
+                    continue
+                }
+                if (target === 'python-deps') {
+                    await updatePythonDeps(root, commandRunner)
+                    lock.pending = removePending(lock.pending, 'python-deps')
+                    for (const path of await refreshManagedFileState(root, lock, [
+                        'uv.lock',
+                        'requirements.txt'
+                    ])) {
+                        written.add(path)
+                    }
                     continue
                 }
                 if (target === 'maafw') {
@@ -265,6 +287,21 @@ function remoteAssetPending(target: string): PendingItem {
 
 async function updateNodeDeps(root: string, commandRunner: UpdateCommandRunner): Promise<void> {
     await commandRunner(root, 'pnpm', ['install'])
+}
+
+async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner): Promise<void> {
+    if (!(await exists(join(root, 'pyproject.toml')))) {
+        throw new Error('--update python-deps requires an Agent project with pyproject.toml.')
+    }
+    await commandRunner(root, 'uv', ['lock'])
+    await commandRunner(root, 'uv', [
+        'export',
+        '--format',
+        'requirements-txt',
+        '--no-hashes',
+        '--output-file',
+        'requirements.txt'
+    ])
 }
 
 export async function updateOcrModels(
@@ -544,6 +581,8 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
         version: config.project.version,
         controller,
         license: config.license.spdx,
+        includeAgent: config.python !== undefined,
+        pythonDevCommand: config.python?.devCommand,
         resources: config.resources
     }).filter((file) => file.managed && file.path !== 'maa-project.json')
         .filter((file) => !file.path.startsWith('resource/base/model/ocr/'))

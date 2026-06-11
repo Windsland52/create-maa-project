@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { managedFileHash, readProjectConfig, readProjectLock } from './project.js'
-import { interfaceController, interfaceResourceItems } from './templates.js'
+import { interfaceAgent, interfaceController, interfaceResourceItems } from './templates.js'
 import type { ControllerKind, MaaProjectConfig, MaaProjectLock } from './types.js'
 import { addV, exists, readText } from './utils.js'
 
@@ -22,6 +22,7 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
     ok = (await checkNodeToolingFiles(root, lines)) && ok
     ok = (await checkVscodeSettings(root, lines)) && ok
     ok = (await checkNodeLockfile(root, lock, lines)) && ok
+    ok = (await checkPyprojectMetadata(root, config, lines)) && ok
     ok = (await checkResourceOrder(root, config, lines)) && ok
     ok = (await checkReferencedPaths(root, lines)) && ok
     ok = (await checkMaaJsonPaths(root, lines)) && ok
@@ -58,6 +59,7 @@ async function checkInterfaceMetadata(
         label?: unknown
         version?: unknown
         github?: unknown
+        agent?: unknown
         controller?: unknown
     }
     let ok = true
@@ -73,6 +75,16 @@ async function checkInterfaceMetadata(
     }
     if (interfaceJson.version !== addV(config.project.version)) {
         lines.push('[ERR] interface.json version differs from maa-project.json project.version.')
+        lines.push('      To fix: create-maa-project --sync metadata')
+        ok = false
+    }
+    if (interfaceJson.agent !== undefined && !Array.isArray(interfaceJson.agent)) {
+        lines.push('[ERR] interface.json agent must be an array.')
+        lines.push('      To fix: create-maa-project --sync metadata')
+        ok = false
+    }
+    if (JSON.stringify(interfaceJson.agent) !== JSON.stringify(expectedInterfaceAgent(config))) {
+        lines.push('[ERR] interface.json agent differs from maa-project.json python config.')
         lines.push('      To fix: create-maa-project --sync metadata')
         ok = false
     }
@@ -96,6 +108,10 @@ async function checkInterfaceMetadata(
 function projectControllerKind(config: MaaProjectConfig): ControllerKind {
     const raw = (config as MaaProjectConfig & { controller?: { kind?: unknown } }).controller?.kind
     return raw === 'ADB' || raw === 'Win32' || raw === 'None' ? raw : 'ADB'
+}
+
+function expectedInterfaceAgent(config: MaaProjectConfig): ReturnType<typeof interfaceAgent>[] | undefined {
+    return config.python ? [interfaceAgent(config.project.slug, config.python.devCommand)] : undefined
 }
 
 async function checkPackageMetadata(
@@ -157,7 +173,7 @@ async function checkPackageMetadata(
             ok = false
         }
     }
-    for (const [name, command] of Object.entries(expectedPackageScripts())) {
+    for (const [name, command] of Object.entries(expectedPackageScripts(config))) {
         if (packageJson.scripts?.[name] !== command) {
             const message =
                 name === 'check:maa'
@@ -267,6 +283,32 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
         ok = false
     }
     if (ok) lines.push('[OK] VS Code settings configure Prettier and interface schema.')
+    return ok
+}
+
+async function checkPyprojectMetadata(
+    root: string,
+    config: MaaProjectConfig,
+    lines: string[]
+): Promise<boolean> {
+    if (!config.python) return true
+
+    const pyprojectPath = join(root, 'pyproject.toml')
+    if (!(await exists(pyprojectPath))) return true
+
+    const metadata = parseTomlProjectMetadata(await readText(pyprojectPath))
+    let ok = true
+    if (metadata.name !== config.project.slug) {
+        lines.push('[ERR] pyproject.toml project.name differs from maa-project.json project.slug.')
+        lines.push('      To fix: create-maa-project --sync metadata')
+        ok = false
+    }
+    if (metadata.version !== config.project.version) {
+        lines.push('[ERR] pyproject.toml project.version differs from maa-project.json project.version.')
+        lines.push('      To fix: create-maa-project --sync metadata')
+        ok = false
+    }
+    if (ok) lines.push('[OK] Python project metadata matches project config.')
     return ok
 }
 
@@ -485,8 +527,8 @@ function expectedDevDependencies(): Record<string, string> {
     }
 }
 
-function expectedPackageScripts(): Record<string, string> {
-    return {
+function expectedPackageScripts(config: MaaProjectConfig): Record<string, string> {
+    const scripts: Record<string, string> = {
         format: 'prettier --write .',
         'format:check': 'prettier --check .',
         lint: 'node tools/check-project.mjs',
@@ -497,6 +539,13 @@ function expectedPackageScripts(): Record<string, string> {
         'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
     }
+    if (config.python) {
+        scripts['format:py'] = 'uv run --frozen ruff format .'
+        scripts['lint:py'] = 'uv run --frozen ruff check .'
+        scripts['typecheck:py'] = 'uv run --frozen pyright'
+        scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
+    }
+    return scripts
 }
 
 function parseMaatoolsResourceArray(content: string): string[] | undefined {
@@ -508,4 +557,34 @@ function parseMaatoolsResourceArray(content: string): string[] | undefined {
     } catch {
         return undefined
     }
+}
+
+function parseTomlProjectMetadata(content: string): {
+    name: string | undefined
+    version: string | undefined
+} {
+    const section = tomlProjectSection(content)
+    return {
+        name: parseTomlStringField(section, 'name'),
+        version: parseTomlStringField(section, 'version')
+    }
+}
+
+function tomlProjectSection(content: string): string {
+    const section: string[] = []
+    let inside = false
+    for (const line of content.split(/\r?\n/)) {
+        if (/^\s*\[project\]\s*$/.test(line)) {
+            inside = true
+            continue
+        }
+        if (inside && /^\s*\[[^\]]+\]\s*$/.test(line)) break
+        if (inside) section.push(line)
+    }
+    return section.join('\n')
+}
+
+function parseTomlStringField(section: string, key: 'name' | 'version'): string | undefined {
+    const match = section.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"\\s*$`, 'm'))
+    return match?.[1]
 }

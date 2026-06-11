@@ -163,7 +163,7 @@ export function parseArgs(argv: string[]): CliOptions {
         }
     }
 
-    validateEnum(options.template, ['pipeline'], '--template')
+    validateEnum(options.template, ['pipeline', 'agent'], '--template')
     if (options.add.length > 0) {
         throw new Error('--add is not supported in the pure pipeline scaffold.')
     }

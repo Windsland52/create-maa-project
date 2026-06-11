@@ -123,7 +123,6 @@ describe('pure pipeline scaffold', () => {
         const buildReleaseScript = await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')
         expect(buildReleaseScript).toContain("copyDirectoryContents(mfaaGuiPath(runtimePlatform), 'dist/package')")
         expect(buildReleaseScript).toContain("copyPath(path, join('dist/package', path))")
-        expect(buildReleaseScript).not.toContain("copyPath('agent'")
 
         const lock = (await readJson(join(projectRoot, 'maa-project.lock.json'))) as {
             managedFiles: Record<string, unknown>
@@ -156,6 +155,78 @@ describe('pure pipeline scaffold', () => {
         const doctorOutput = (await runDoctor(projectRoot)).lines.join('\n')
         expect(doctorOutput).toContain('create-maa-project --update node-deps')
         expect(doctorOutput).toContain('create-maa-project --update ocr-models')
+    })
+
+    it('creates a Python Agent project', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(defaultOptions({ name: 'maa-agent-test', template: 'agent' }))
+        const projectRoot = join(root, 'maa-agent-test')
+
+        expect(result.config.project.initialTemplate).toBe('agent')
+        expect(result.config.python).toMatchObject({
+            requiresPython: '>=3.11,<3.14',
+            recommendedPython: '3.13'
+        })
+        expect(result.pending).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    kind: 'python-deps',
+                    command: 'create-maa-project --update python-deps'
+                })
+            ])
+        )
+
+        const pyproject = await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')
+        const main = await readFile(join(projectRoot, 'agent/main.py'), 'utf8')
+        const agentRuntime = await readFile(join(projectRoot, 'agent/agent_runtime.py'), 'utf8')
+        const action = await readFile(join(projectRoot, 'agent/custom/action/general.py'), 'utf8')
+        const reco = await readFile(join(projectRoot, 'agent/custom/reco/general.py'), 'utf8')
+        expect(pyproject).toContain('name = "maa-agent-test"\nversion = "0.1.0"')
+        expect(pyproject).toContain('extraPaths = ["agent"]')
+        expect(main).toContain('from agent_runtime import run_agent')
+        expect(main).toContain('sys.exit(main())')
+        expect(agentRuntime).toContain('custom.register_all()')
+        expect(agentRuntime).toContain('AgentServer.start_up(socket_id)')
+        expect(action).toContain('@AgentServer.custom_action("DisableNode")')
+        expect(action).toContain('@AgentServer.custom_action("SubTask")')
+        expect(reco).toContain('@AgentServer.custom_recognition("ExampleRecognition")')
+
+        expect(await readJson(join(projectRoot, 'interface.json'))).toMatchObject({
+            name: 'maa-agent-test',
+            agent: [
+                {
+                    identifier: 'maa-agent-test.agent'
+                }
+            ]
+        })
+        expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
+            scripts: {
+                'format:py': 'uv run --frozen ruff format .',
+                'lint:py': 'uv run --frozen ruff check .',
+                'typecheck:py': 'uv run --frozen pyright',
+                'check:py': 'pnpm lint:py && pnpm typecheck:py'
+            }
+        })
+        expect(await readJson(join(projectRoot, '.vscode/extensions.json'))).toMatchObject({
+            recommendations: expect.arrayContaining([
+                'charliermarsh.ruff',
+                'ms-python.python',
+                'ms-python.vscode-pylance'
+            ])
+        })
+        expect(await readJson(join(projectRoot, '.vscode/settings.json'))).toMatchObject({
+            'python.defaultInterpreterPath': '${workspaceFolder}/.venv/bin/python',
+            '[python]': {
+                'editor.defaultFormatter': 'charliermarsh.ruff'
+            }
+        })
+        const releaseWorkflow = await readFile(join(projectRoot, '.github/workflows/release.yml'), 'utf8')
+        expect(releaseWorkflow).toContain('actions/setup-python@v6')
+        expect(releaseWorkflow).toContain('pnpm check:py')
+        const buildReleaseScript = await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')
+        expect(buildReleaseScript).toContain("copyPath('agent', join('dist/package', 'python', 'agent'))")
     })
 
     it('creates MIT license text when selected', async () => {

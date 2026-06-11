@@ -79,6 +79,8 @@ export type ProjectTemplateInput = {
     version: string
     controller: ControllerKind
     license: LicenseKind
+    includeAgent: boolean
+    pythonDevCommand?: string[] | undefined
     resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
 }
 
@@ -90,10 +92,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         managed('.node-version', '24\n'),
         managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
         once('.prettierignore', template('base/.prettierignore')),
-        once('.vscode/extensions.json', vscodeExtensions()),
-        once('.vscode/settings.json', vscodeSettings()),
+        once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
+        once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
         managed('.vscode/tasks.json', vscodeTasks()),
-        managed('.github/workflows/check.yml', checkWorkflow()),
+        managed('.github/workflows/check.yml', checkWorkflow(input.includeAgent)),
         releaseWorkflowFile(input),
         ...schemaSyncFiles(),
         managed('tools/check-project.mjs', checkProjectScript()),
@@ -119,7 +121,36 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         once('maatools.config.mts', maatoolsConfig(resourcePaths(input.resources ?? defaultResources())))
     ]
 
+    if (input.includeAgent) {
+        files.push(...agentFiles(input))
+    }
+
     return files
+}
+
+export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version'>): ManagedFileInput[] {
+    return [
+        managed('.python-version', '3.13\n'),
+        managed('pyproject.toml', agentPyproject(input)),
+        managed('uv.lock', generatedUvLockPlaceholder()),
+        managed('requirements.txt', agentRequirements()),
+        managed('agent/__init__.py', agentTemplate('__init__.py')),
+        managed('agent/agent_runtime.py', agentTemplate('agent_runtime.py')),
+        managed('agent/bootstrap.py', agentBootstrapPy()),
+        managed('agent/main.py', agentMainPy()),
+        managed('agent/custom/__init__.py', agentTemplate('custom/__init__.py')),
+        managed('agent/custom/action/__init__.py', agentTemplate('custom/action/__init__.py')),
+        managed('agent/custom/action/general.py', agentTemplate('custom/action/general.py')),
+        managed('agent/custom/reco/__init__.py', agentTemplate('custom/reco/__init__.py')),
+        managed('agent/custom/reco/general.py', agentTemplate('custom/reco/general.py')),
+        managed('agent/custom/sink/__init__.py', agentTemplate('custom/sink/__init__.py')),
+        managed('agent/utils/__init__.py', agentTemplate('utils/__init__.py')),
+        managed('agent/utils/logger.py', agentTemplate('utils/logger.py')),
+        managed('agent/utils/maa_types.py', agentTemplate('utils/maa_types.py')),
+        managed('agent/utils/params.py', agentTemplate('utils/params.py')),
+        managed('agent/utils/pienv.py', agentTemplate('utils/pienv.py')),
+        managed('agent/utils/runtime_paths.py', agentTemplate('utils/runtime_paths.py'))
+    ]
 }
 
 export function configFile(config: MaaProjectConfig): ManagedFileInput {
@@ -130,8 +161,10 @@ export function maatoolsConfigFile(resources: string[]): ManagedFileInput {
     return once('maatools.config.mts', maatoolsConfig(resources))
 }
 
-export function releaseWorkflowFile(input: Pick<ProjectTemplateInput, 'slug'>): ManagedFileInput {
-    return managed('.github/workflows/release.yml', releaseWorkflow(input.slug))
+export function releaseWorkflowFile(
+    input: Pick<ProjectTemplateInput, 'slug' | 'includeAgent'>
+): ManagedFileInput {
+    return managed('.github/workflows/release.yml', releaseWorkflow(input.slug, input.includeAgent))
 }
 
 export function schemaSyncFiles(): ManagedFileInput[] {
@@ -155,6 +188,11 @@ export function emptyPng(): Buffer {
 
 function interfaceJson(input: ProjectTemplateInput): string {
     const controller = interfaceController(input.controller)
+    const agentBlock = input.includeAgent
+        ? `,\n    "agent": ${jsonFragment([
+              interfaceAgent(input.slug, input.pythonDevCommand)
+          ])}`
+        : ''
 
     return template('base/interface.json.tmpl', {
         slug: jsonStringContent(input.slug),
@@ -163,7 +201,7 @@ function interfaceJson(input: ProjectTemplateInput): string {
         description: jsonStringContent(`${input.displayName} MaaFW project`),
         controller: jsonFragment(controller),
         resources: jsonFragment(interfaceResourceItems(input.resources ?? defaultResources())),
-        agentBlock: ''
+        agentBlock
     })
 }
 
@@ -193,6 +231,18 @@ function defaultResources(): Array<Pick<ResourcePackConfig, 'slug' | 'label' | '
 
 function resourcePaths(resources: Pick<ResourcePackConfig, 'path'>[]): string[] {
     return resources.map((resource) => `./${resource.path}`)
+}
+
+export function interfaceAgent(
+    slug: string,
+    command: string[] | undefined
+): { child_exec: string; child_args?: string[]; identifier: string } {
+    const [childExec = 'python', ...childArgs] = command ?? ['python', 'agent/bootstrap.py']
+    return {
+        child_exec: childExec,
+        ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
+        identifier: `${slug}.agent`
+    }
 }
 
 function tutorialTaskJson(): string {
@@ -253,6 +303,12 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
         'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
     }
+    if (input.includeAgent) {
+        scripts['format:py'] = 'uv run --frozen ruff format .'
+        scripts['lint:py'] = 'uv run --frozen ruff check .'
+        scripts['typecheck:py'] = 'uv run --frozen pyright'
+        scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
+    }
     return stableJson({
         name: input.slug,
         version: input.version,
@@ -290,7 +346,21 @@ export default defineConfig({
 `
 }
 
-function checkWorkflow(): string {
+function pythonWorkflowSetup(includeAgent: boolean): string {
+    return includeAgent
+        ? `      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.1.0
+`
+        : ''
+}
+
+function pythonWorkflowCheck(includeAgent: boolean): string {
+    return includeAgent ? `      - run: pnpm check:py\n` : ''
+}
+
+function checkWorkflow(includeAgent: boolean): string {
     return `name: Check
 
 on:
@@ -305,6 +375,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+${pythonWorkflowSetup(includeAgent)}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -313,10 +384,11 @@ jobs:
       - run: node tools/check-project.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+${pythonWorkflowCheck(includeAgent)}
 `
 }
 
-function releaseWorkflow(slug: string): string {
+function releaseWorkflow(slug: string, includeAgent: boolean): string {
     return `name: Release
 
 on:
@@ -337,6 +409,7 @@ ${releaseTargetMatrixYaml()}
     runs-on: \${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+${pythonWorkflowSetup(includeAgent)}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -345,6 +418,7 @@ ${releaseTargetMatrixYaml()}
       - run: node tools/check-project.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+${pythonWorkflowCheck(includeAgent)}
       - run: pnpm release:dry-run
         if: github.event_name == 'workflow_dispatch'
       - run: pnpm sync:runtime
@@ -389,18 +463,21 @@ ${releaseTargetMatrixYaml()}
 `
 }
 
-function vscodeExtensions(): string {
+function vscodeExtensions(includeAgent: boolean): string {
     const recommendations = [
         'nekosu.maa-support',
         'esbenp.prettier-vscode',
         'DavidAnson.vscode-markdownlint'
     ]
+    if (includeAgent) {
+        recommendations.push('charliermarsh.ruff', 'ms-python.python', 'ms-python.vscode-pylance')
+    }
     return stableJson({
         recommendations
     })
 }
 
-function vscodeSettings(): string {
+function vscodeSettings(includeAgent: boolean): string {
     const settings: Record<string, unknown> = {
         'editor.formatOnSave': true,
         'files.eol': '\n',
@@ -432,6 +509,12 @@ function vscodeSettings(): string {
                 url: './tools/schema/pipeline.schema.json'
             }
         ]
+    }
+    if (includeAgent) {
+        settings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv/bin/python'
+        settings['[python]'] = {
+            'editor.defaultFormatter': 'charliermarsh.ruff'
+        }
     }
     return stableJson(settings)
 }
@@ -502,7 +585,7 @@ for (const [name, version] of Object.entries(expectedDevDependencies())) {
     }
 }
 
-for (const [name, command] of Object.entries(expectedPackageScripts())) {
+for (const [name, command] of Object.entries(expectedPackageScripts(project))) {
     if (packageJson.scripts?.[name] !== command) {
         const message =
             name === 'check:maa'
@@ -569,8 +652,26 @@ if (
     throw new Error('pnpm-lock.yaml is missing; run pnpm install')
 }
 
+if (existsSync('pyproject.toml')) {
+    const pyproject = parseTomlProjectMetadata(readFileSync('pyproject.toml', 'utf8'))
+    if (pyproject.name !== project.project?.slug) {
+        throw new Error('pyproject.toml project.name must match maa-project.json project.slug')
+    }
+    if (pyproject.version !== project.project?.version) {
+        throw new Error('pyproject.toml project.version must match maa-project.json project.version')
+    }
+}
+
 if (JSON.stringify(interfaceJson.controller ?? []) !== JSON.stringify(interfaceController(projectControllerKind(project)))) {
     throw new Error('interface.json controller must match maa-project.json controller.kind')
+}
+
+if (interfaceJson.agent !== undefined && !Array.isArray(interfaceJson.agent)) {
+    throw new Error('interface.json agent must be an array')
+}
+
+if (JSON.stringify(interfaceJson.agent) !== JSON.stringify(interfaceAgent(project))) {
+    throw new Error('interface.json agent must match maa-project.json python config')
 }
 
 const resources = interfaceResources(interfaceJson.resource)
@@ -646,6 +747,18 @@ function interfaceController(kind) {
     return kind === 'None' ? [] : [{ name: kind.toLowerCase(), type: kind === 'ADB' ? 'Adb' : kind }]
 }
 
+function interfaceAgent(project) {
+    if (!project.python) return undefined
+    const [childExec = 'python', ...childArgs] = project.python.devCommand ?? ['python', 'agent/bootstrap.py']
+    return [
+        {
+            child_exec: childExec,
+            ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
+            identifier: project.project?.slug + '.agent'
+        }
+    ]
+}
+
 function interfaceResourceItems(resources) {
     return resources.map((pack) => ({
         name: pack.slug,
@@ -718,8 +831,8 @@ function expectedDevDependencies() {
     }
 }
 
-function expectedPackageScripts() {
-    return {
+function expectedPackageScripts(project) {
+    const scripts = {
         format: 'prettier --write .',
         'format:check': 'prettier --check .',
         lint: 'node tools/check-project.mjs',
@@ -730,6 +843,13 @@ function expectedPackageScripts() {
         'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
     }
+    if (project.python) {
+        scripts['format:py'] = 'uv run --frozen ruff format .'
+        scripts['lint:py'] = 'uv run --frozen ruff check .'
+        scripts['typecheck:py'] = 'uv run --frozen pyright'
+        scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
+    }
+    return scripts
 }
 
 function managedFileHash(path, content) {
@@ -762,6 +882,33 @@ function walkJsonFiles(paths) {
         }
     }
     return files
+}
+
+function parseTomlProjectMetadata(content) {
+    const section = tomlProjectSection(content)
+    return {
+        name: parseTomlStringField(section, 'name'),
+        version: parseTomlStringField(section, 'version')
+    }
+}
+
+function tomlProjectSection(content) {
+    const section = []
+    let inside = false
+    for (const line of content.split(/\\r?\\n/)) {
+        if (/^\\s*\\[project\\]\\s*$/.test(line)) {
+            inside = true
+            continue
+        }
+        if (inside && /^\\s*\\[[^\\]]+\\]\\s*$/.test(line)) break
+        if (inside) section.push(line)
+    }
+    return section.join('\\n')
+}
+
+function parseTomlStringField(section, key) {
+    const match = section.match(new RegExp('^\\\\s*' + key + '\\\\s*=\\\\s*"([^"]*)"\\\\s*$', 'm'))
+    return match?.[1]
 }
 
 function parseMaatoolsResourceArray(content) {
@@ -817,6 +964,17 @@ if (interfaceJson.task !== undefined) {
     }
 }
 
+if (interfaceJson.agent !== undefined) {
+    assertArrayOfRecords(interfaceJson.agent, 'interface.json agent')
+    for (const [index, agent] of interfaceJson.agent.entries()) {
+        assertNonEmptyString(agent.child_exec, 'interface.json agent[' + index + '].child_exec')
+        if (agent.child_args !== undefined) {
+            assertArrayOfStrings(agent.child_args, 'interface.json agent[' + index + '].child_args')
+        }
+        assertNonEmptyString(agent.identifier, 'interface.json agent[' + index + '].identifier')
+    }
+}
+
 assertRecord(interfaceSchema, 'tools/schema/interface.schema.json')
 assertEqual(interfaceSchema.title, 'MaaFramework Project Interface V2', 'tools/schema/interface.schema.json title must be MaaFramework Project Interface V2')
 assertRecord(interfaceSchema.properties, 'tools/schema/interface.schema.json properties')
@@ -829,7 +987,7 @@ assertRecord(project.project, 'maa-project.json project')
 assertSlug(project.project.slug, 'maa-project.json project.slug')
 assertNonEmptyString(project.project.displayName, 'maa-project.json project.displayName')
 assertVersion(project.project.version, 'maa-project.json project.version', false)
-assertEnum(project.project.initialTemplate, ['pipeline'], 'maa-project.json project.initialTemplate')
+assertEnum(project.project.initialTemplate, ['pipeline', 'agent'], 'maa-project.json project.initialTemplate')
 assertRecord(project.features, 'maa-project.json features')
 for (const feature of ['ci', 'release', 'vscode', 'quality']) {
     assertFeature(project.features[feature], 'maa-project.json features.' + feature)
@@ -1061,13 +1219,23 @@ function interfaceResourcePaths(value) {
 function mfaaReleasePackagePaths(interfaceJson) {
     // Current generated release layout is the MFAAvalonia profile.
     // Other runners should add their own package profile instead of sharing these paths.
-    void interfaceJson
-    return ['tasks', 'resource', 'runtimes', 'libs/MaaAgentBinary', 'plugins']
+    const paths = ['tasks', 'resource', 'runtimes', 'libs/MaaAgentBinary', 'plugins']
+    if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
+        paths.push('python')
+    }
+    return paths
 }
 
 function prepareReleaseInterface(interfaceJson, version) {
     const releaseInterface = { ...interfaceJson, version }
     delete releaseInterface.$schema
+    if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
+        releaseInterface.agent = interfaceJson.agent.map((agent) =>
+            isRecord(agent)
+                ? { ...agent, child_exec: releaseAgentChildExec(), child_args: releaseAgentChildArgs() }
+                : agent
+        )
+    }
     return releaseInterface
 }
 
@@ -1078,7 +1246,11 @@ function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
     renameMfaaEntrypoint('dist/package', runtimePlatform)
     writeJson('dist/package/interface.json', interfaceJson)
     for (const path of packagePaths) {
+        if (path === 'python' && !existsSync(path)) continue
         copyPath(path, join('dist/package', path))
+    }
+    if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0 && existsSync('agent')) {
+        copyPath('agent', join('dist/package', 'python', 'agent'))
     }
 }
 
@@ -1218,6 +1390,20 @@ function normalizeRuntimeArch(value) {
     return ''
 }
 
+function releaseAgentChildExec() {
+    const runnerOs = String(process.env.RUNNER_OS ?? '').toLowerCase()
+    if (runnerOs.startsWith('windows')) return 'python/python.exe'
+    if (runnerOs.startsWith('macos')) return 'python/bin/python3'
+    if (runnerOs.startsWith('linux')) return 'python3'
+    if (process.platform === 'win32') return 'python/python.exe'
+    if (process.platform === 'darwin') return 'python/bin/python3'
+    return 'python3'
+}
+
+function releaseAgentChildArgs() {
+    return ['python/agent/bootstrap.py']
+}
+
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -1328,14 +1514,14 @@ function packageName(dir) {
 }
 
 function generatedReadme(input: ProjectTemplateInput): string {
-    return template('base/README.md', {
+    return template(input.includeAgent ? 'agent/README.md' : 'base/README.md', {
         displayName: input.displayName,
         version: input.version
     })
 }
 
 function generatedEnglishReadme(input: ProjectTemplateInput): string {
-    return template('base/README.en.md', {
+    return template(input.includeAgent ? 'agent/README.en.md' : 'base/README.en.md', {
         displayName: input.displayName,
         version: input.version
     })
@@ -1354,6 +1540,64 @@ function licenseText(input: Pick<ProjectTemplateInput, 'license' | 'displayName'
 
 function packageLicense(license: LicenseKind): string {
     return license === 'None' ? 'UNLICENSED' : license
+}
+
+function agentPyproject(input: Pick<ProjectTemplateInput, 'slug' | 'version'>): string {
+    return `[project]
+name = "${input.slug}"
+version = "${input.version}"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "maafw>=0.0.0"
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.400",
+    "ruff>=0.11.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+include = ["agent"]
+extraPaths = ["agent"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+`
+}
+
+function generatedUvLockPlaceholder(): string {
+    return `version = 1
+revision = 1
+requires-python = ">=3.11, <3.14"
+`
+}
+
+function agentMainPy(): string {
+    return template('agent/agent/main.py')
+}
+
+function agentTemplate(path: string): string {
+    return template(`agent/agent/${path}`)
+}
+
+function agentRequirements(): string {
+    return `maafw>=0.0.0
+`
+}
+
+function agentBootstrapPy(): string {
+    return template('agent/agent/bootstrap.py')
 }
 
 function template(path: string, values: Record<string, string> = {}): string {

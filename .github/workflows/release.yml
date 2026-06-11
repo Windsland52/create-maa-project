@@ -159,7 +159,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: release-manifest
-          path: dist/release
-      - run: node scripts/prepare-pypi-release.mjs dist/release/create-maa-project-manifest.json
+          path: .release
+      - run: node scripts/prepare-pypi-release.mjs .release/create-maa-project-manifest.json
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1

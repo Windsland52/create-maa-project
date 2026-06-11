@@ -5,6 +5,10 @@
     "bin": {
         "create-maa-project": "./dist/index.js"
     },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Windsland52/create-maa-project"
+    },
     "files": [
         "dist/index.js",
         "templates",

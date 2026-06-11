@@ -301,6 +301,9 @@ describe('scaffold', () => {
             'tools/schema/custom.action.schema.json': { managed: false },
             'tools/schema/custom.recognition.schema.json': { managed: false }
         })
+        expect(await readJson(join(root, 'Maa Test', '.vscode/extensions.json'))).toMatchObject({
+            recommendations: expect.arrayContaining(['windsland52.maa-log-analyzer'])
+        })
         const editorconfig = await readFile(join(root, 'Maa Test', '.editorconfig'), 'utf8')
         expect(editorconfig).toContain('[*.{yml,yaml,json,jsonc}]')
         const gitattributes = await readFile(join(root, 'Maa Test', '.gitattributes'), 'utf8')
@@ -737,6 +740,7 @@ describe('scaffold', () => {
         })
         expect(await readJson(join(root, 'maa-agent-test', '.vscode/extensions.json'))).toMatchObject({
             recommendations: expect.arrayContaining([
+                'windsland52.maa-log-analyzer',
                 'charliermarsh.ruff',
                 'ms-python.python',
                 'ms-python.vscode-pylance'

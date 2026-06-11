@@ -356,6 +356,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     const vscodeExtensions = await readJsonObject(root, '.vscode/extensions.json')
     const recommendations = arrayOfStrings(vscodeExtensions.recommendations)
     vscodeExtensions.recommendations = appendUnique(recommendations, [
+        'windsland52.maa-log-analyzer',
         'charliermarsh.ruff',
         'ms-python.python',
         'ms-python.vscode-pylance'

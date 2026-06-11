@@ -1,0 +1,355 @@
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { dirname, join } from 'node:path'
+
+const dryRun = process.argv.includes('--dry-run')
+const projectSlug = {{projectSlug}}
+mkdirSync('dist', { recursive: true })
+
+const lock = readJson('maa-project.lock.json')
+for (const item of lock.pending ?? []) {
+  console.error(`[ERR] Pending ${item.kind}: ${item.command}`)
+}
+
+if ((lock.pending ?? []).length > 0) {
+  throw new Error('release cannot run while project has pending actions')
+}
+
+const interfaceJson = readJson('interface.json')
+if (interfaceJson.name !== projectSlug) {
+  throw new Error('interface.json name must match release artifact slug')
+}
+
+const sourceVersion = String(interfaceJson.version ?? '')
+if (!isReleaseVersion(sourceVersion)) {
+  throw new Error('interface.json version must be a release tag such as v0.1.0')
+}
+
+const releaseTag = detectReleaseTag()
+if (!dryRun && !releaseTag) {
+  throw new Error('release build requires a SemVer Git tag such as v0.1.0')
+}
+
+const version = releaseTag ?? sourceVersion
+if (!isReleaseVersion(version)) {
+  throw new Error('release tag must be a SemVer tag such as v0.1.0')
+}
+
+const packageInterfaceJson = prepareReleaseInterface(interfaceJson, version)
+const packagePaths = mfaaReleasePackagePaths(interfaceJson)
+const runtimePlatform = detectRuntimePlatform()
+
+for (const path of [
+  ...strings(interfaceJson.resource),
+  ...strings(interfaceJson.import)
+]) {
+  if (path.includes('\\')) {
+    throw new Error(`release paths must use forward slashes: ${path}`)
+  }
+  const relativePath = path.startsWith('./') ? path.slice(2) : path
+  if (!existsSync(relativePath)) {
+    throw new Error(`release referenced path does not exist: ${path}`)
+  }
+}
+
+if (!dryRun) {
+  const guiPath = mfaaGuiPath(runtimePlatform)
+  if (!existsSync(guiPath)) {
+    throw new Error(`release package path is missing: ${guiPath}`)
+  }
+  for (const path of packagePaths) {
+    if (!existsSync(path)) {
+      throw new Error(`release package path is missing: ${path}`)
+    }
+  }
+  prepareReleasePackage(packagePaths, packageInterfaceJson, runtimePlatform)
+  smokeReleasePackage('dist/package', packagePaths, runtimePlatform)
+}
+
+const artifacts = [
+{{releaseTargetArtifactTuples}}
+].map(
+  ([
+    os,
+    arch,
+    ext
+  ]) => `${projectSlug}-${os}-${arch}-${version}-MFAA.${ext}`
+)
+
+for (const artifact of artifacts) {
+  if (
+    !new RegExp(
+      '^' +
+        escapeRegExp(projectSlug) +
+        '-(win|linux|macos)-(x86_64|aarch64)-v.+-MFAA\\.(zip|tar\\.gz)$'
+    ).test(artifact)
+  ) {
+    throw new Error(`invalid artifact name: ${artifact}`)
+  }
+  console.log(`[OK] artifact name: ${artifact}`)
+}
+
+if (!existsSync('runtimes')) {
+  console.warn(
+    '[WARN] Runtime assets are not present yet; run pnpm sync:runtime before a real release.'
+  )
+}
+
+console.log(
+  dryRun
+    ? `[OK] release dry-run smoke check completed for ${projectSlug}`
+    : `[OK] release build placeholder completed for ${projectSlug}`
+)
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+function writeJson(path, value) {
+  writeFileSync(path, JSON.stringify(value, null, 4) + '\n', 'utf8')
+}
+
+function strings(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []
+}
+
+function interfaceResourcePaths(value) {
+  return Array.isArray(value)
+    ? value.flatMap((item) => (isRecord(item) ? strings(item.path) : []))
+    : []
+}
+
+function mfaaReleasePackagePaths(interfaceJson) {
+  // Current generated release layout is the MFAAvalonia profile.
+  // Other runners should add their own package profile instead of sharing these paths.
+  const paths = [
+    'tasks',
+    'resource',
+    'runtimes',
+    'libs/MaaAgentBinary',
+    'plugins'
+  ]
+  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
+    paths.push('python')
+  }
+  return paths
+}
+
+function prepareReleaseInterface(interfaceJson, version) {
+  const releaseInterface = { ...interfaceJson, version }
+  delete releaseInterface.$schema
+  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
+    releaseInterface.agent = interfaceJson.agent.map((agent) =>
+      isRecord(agent)
+        ? { ...agent, child_exec: releaseAgentChildExec(), child_args: releaseAgentChildArgs() }
+        : agent
+    )
+  }
+  return releaseInterface
+}
+
+function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
+  rmSync('dist/package', { recursive: true, force: true })
+  mkdirSync('dist/package', { recursive: true })
+  copyDirectoryContents(mfaaGuiPath(runtimePlatform), 'dist/package')
+  renameMfaaEntrypoint('dist/package', runtimePlatform)
+  writeJson('dist/package/interface.json', interfaceJson)
+  for (const path of packagePaths) {
+    copyPath(path, join('dist/package', path))
+  }
+  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0 && existsSync('agent')) {
+    copyPath('agent', join('dist/package', 'python', 'agent'))
+  }
+}
+
+function smokeReleasePackage(root, packagePaths, runtimePlatform) {
+  if (!existsSync(join(root, 'interface.json'))) {
+    throw new Error('release package smoke failed: interface.json is missing at package root')
+  }
+  const entrypoint = mfaaEntrypointName(runtimePlatform)
+  if (!existsSync(join(root, entrypoint))) {
+    throw new Error(`release package smoke failed: GUI entrypoint is missing: ${entrypoint}`)
+  }
+  if (existsSync(join(root, 'MFAAvalonia')) || existsSync(join(root, 'MFAAvalonia.exe'))) {
+    throw new Error('release package smoke failed: MFAAvalonia entrypoint must be renamed')
+  }
+  if (existsSync(join(root, projectSlug, 'interface.json'))) {
+    throw new Error(
+      'release package smoke failed: package must not contain a top-level wrapper directory'
+    )
+  }
+  for (const path of packagePaths) {
+    if (!existsSync(join(root, path))) {
+      throw new Error(`release package smoke failed: package path is missing: ${path}`)
+    }
+  }
+  for (const path of releaseDevPaths()) {
+    if (existsSync(join(root, path))) {
+      throw new Error(`release package smoke failed: package includes dev file: ${path}`)
+    }
+  }
+
+  const packagedInterface = readJson(join(root, 'interface.json'))
+  if (!isRecord(packagedInterface)) {
+    throw new Error('release package smoke failed: interface.json must be an object')
+  }
+  if (packagedInterface.$schema !== undefined) {
+    throw new Error('release package smoke failed: package interface.json must not include $schema')
+  }
+  if (!isReleaseVersion(String(packagedInterface.version ?? ''))) {
+    throw new Error(
+      'release package smoke failed: package interface.json version must be a release tag'
+    )
+  }
+  for (const path of [
+    ...interfaceResourcePaths(packagedInterface.resource),
+    ...strings(packagedInterface.import)
+  ]) {
+    if (path.includes('\\')) {
+      throw new Error(`release package smoke failed: package path uses backslashes: ${path}`)
+    }
+    const relativePath = path.startsWith('./') ? path.slice(2) : path
+    if (!existsSync(join(root, relativePath))) {
+      throw new Error(`release package smoke failed: referenced path is missing: ${path}`)
+    }
+  }
+}
+
+function releaseDevPaths() {
+  return [
+    '.github',
+    '.vscode',
+    '.create-maa-project',
+    'cache',
+    'debug',
+    'package.json',
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'maa-project.json',
+    'maa-project.lock.json',
+    'tools/schema'
+  ]
+}
+
+function copyPath(source, target) {
+  mkdirSync(dirname(target), { recursive: true })
+  cpSync(source, target, { recursive: true, force: true })
+}
+
+function copyDirectoryContents(source, target) {
+  mkdirSync(target, { recursive: true })
+  for (const entry of readdirSync(source)) {
+    copyPath(join(source, entry), join(target, entry))
+  }
+}
+
+function mfaaGuiPath(runtimePlatform) {
+  return join('.create-maa-project', 'runtime', 'mfaa', runtimePlatform)
+}
+
+function mfaaEntrypointName(runtimePlatform) {
+  return runtimePlatform.startsWith('win-') ? `${projectSlug}.exe` : projectSlug
+}
+
+function renameMfaaEntrypoint(root, runtimePlatform) {
+  const target = join(root, mfaaEntrypointName(runtimePlatform))
+  const candidates = runtimePlatform.startsWith('win-') ? [
+        'MFAAvalonia.exe',
+        'MFAAvalonia'
+      ] : [
+        'MFAAvalonia',
+        'MFAAvalonia.exe'
+      ]
+  for (const candidate of candidates) {
+    const source = join(root, candidate)
+    if (existsSync(source)) {
+      renameSync(source, target)
+      return
+    }
+  }
+}
+
+function detectRuntimePlatform() {
+  const explicit = normalizeRuntimePlatform(process.env.CREATE_MAA_PROJECT_RUNTIME_PLATFORM ?? '')
+  if (explicit) return explicit
+  const os =
+    process.platform === 'win32'
+      ? 'win'
+      : process.platform === 'darwin'
+        ? 'osx'
+        : process.platform === 'linux'
+          ? 'linux'
+          : ''
+  const arch = normalizeRuntimeArch(process.arch)
+  const platform = os && arch ? `${os}-${arch}` : ''
+  if (!platform) {
+    throw new Error('release runtime platform could not be detected')
+  }
+  return platform
+}
+
+function normalizeRuntimePlatform(value) {
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/^windows/, 'win')
+    .replace(/^win32/, 'win')
+    .replace(/^darwin/, 'osx')
+    .replace(/^macos/, 'osx')
+    .replace(/x86_64/g, 'x64')
+    .replace(/amd64/g, 'x64')
+    .replace(/aarch64/g, 'arm64')
+    .replace(/_/g, '-')
+  return /^(win|linux|osx)-(x64|arm64)$/.test(normalized) ? normalized : ''
+}
+
+function normalizeRuntimeArch(value) {
+  if (value === 'x64' || value === 'x86_64' || value === 'amd64') return 'x64'
+  if (value === 'arm64' || value === 'aarch64') return 'arm64'
+  return ''
+}
+
+function releaseAgentChildExec() {
+  const runnerOs = String(process.env.RUNNER_OS ?? '').toLowerCase()
+  if (runnerOs.startsWith('windows')) return 'python/python.exe'
+  if (runnerOs.startsWith('macos')) return 'python/bin/python3'
+  if (runnerOs.startsWith('linux')) return 'python3'
+  if (process.platform === 'win32') return 'python/python.exe'
+  if (process.platform === 'darwin') return 'python/bin/python3'
+  return 'python3'
+}
+
+function releaseAgentChildArgs() {
+  return [
+    'python/agent/bootstrap.py'
+  ]
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function detectReleaseTag() {
+  const refName = process.env.GITHUB_REF_NAME
+  if (typeof refName === 'string' && refName.startsWith('v')) return refName
+  const ref = process.env.GITHUB_REF
+  return typeof ref === 'string' && ref.startsWith('refs/tags/')
+    ? ref.slice('refs/tags/'.length)
+    : undefined
+}
+
+function isReleaseVersion(value) {
+  return /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(value)
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${|}()|[\]\\]/g, '\\$&')
+}

@@ -1,5 +1,11 @@
 node_modules/
 dist/
+.create-maa-project/
 .venv/
 .uv-cache/
+pnpm-lock.yaml
 resource/base/model/ocr/*.onnx
+tools/schema/interface.schema.json
+tools/schema/interface_config.schema.json
+tools/schema/interface_import.schema.json
+tools/schema/pipeline.schema.json

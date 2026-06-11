@@ -1,0 +1,40 @@
+{
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "editor.formatOnSave": true,
+    "files.associations": {
+        "*.json": "jsonc",
+        "*.jsonc": "jsonc"
+    },
+    "files.eol": "\n",
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "/interface.json"
+            ],
+            "url": "./tools/schema/interface.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/tasks/*.json"
+            ],
+            "url": "./tools/schema/interface_import.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/resource/*/default_pipeline.json",
+                "/resource/*/pipeline/*.json",
+                "/resource/*/pipeline/**/*.json"
+            ],
+            "url": "./tools/schema/pipeline.schema.json"
+        }
+    ],
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+}

@@ -560,12 +560,7 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
 function parseMaatoolsResourceArray(content: string): string[] | undefined {
     const match = content.match(/resource\s*:\s*(\[[^\]]*\])/)
     if (!match?.[1]) return undefined
-    try {
-        const parsed = JSON.parse(match[1]) as unknown
-        return arrayOfStrings(parsed)
-    } catch {
-        return undefined
-    }
+    return [...match[1].matchAll(/(['"])(.*?)\1/g)].flatMap((item) => (item[2] ? [item[2]] : []))
 }
 
 function parseTomlProjectMetadata(content: string): {

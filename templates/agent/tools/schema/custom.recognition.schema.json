@@ -52,7 +52,9 @@
                         "const": "ExampleRecognition"
                     }
                 },
-                "required": ["custom_recognition"]
+                "required": [
+                    "custom_recognition"
+                ]
             },
             "then": {
                 "properties": {

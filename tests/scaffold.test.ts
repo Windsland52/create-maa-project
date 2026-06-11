@@ -182,7 +182,8 @@ describe('scaffold', () => {
         expect(license).toContain('Version 3, 19 November 2007')
         expect(license).not.toContain('Replace this placeholder')
         expect(syncRuntime).toContain("create-maa-project@latest")
-        expect(syncRuntime).toContain("'--update', 'maafw', '--update', 'runtime:mfa'")
+        expect(syncRuntime).toContain("'maafw'")
+        expect(syncRuntime).toContain("'runtime:mfa'")
         expect(emptyImage.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
         expect(defaultPipeline).toContain('"rate_limit": 1000')
         expect(defaultPipeline).toContain('"recognition": "OCR"')
@@ -794,9 +795,10 @@ describe('scaffold', () => {
                 { name: 'pack-b', path: ['./resource/pack-b'] }
             ]
         })
-        expect(await readFile(join(root, 'maa-resource-test', 'maatools.config.mts'), 'utf8')).toContain(
-            'resource: ["./resource/base","./resource/pack-a","./resource/pack-b"]'
-        )
+        const maatoolsConfig = await readFile(join(root, 'maa-resource-test', 'maatools.config.mts'), 'utf8')
+        expect(maatoolsConfig).toContain("'./resource/base'")
+        expect(maatoolsConfig).toContain("'./resource/pack-a'")
+        expect(maatoolsConfig).toContain("'./resource/pack-b'")
         expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/empty.png'))).toBe(true)
         expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/.gitkeep'))).toBe(false)
     })
@@ -824,9 +826,9 @@ describe('scaffold', () => {
                 { name: 'pack-a', label: 'Pack A', path: ['./resource/pack-a'] }
             ]
         })
-        expect(await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')).toContain(
-            'resource: ["./resource/base","./resource/pack-a"]'
-        )
+        const maatoolsConfig = await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')
+        expect(maatoolsConfig).toContain("'./resource/base'")
+        expect(maatoolsConfig).toContain("'./resource/pack-a'")
         expect(result.written).toEqual(
             expect.arrayContaining([
                 'resource/pack-a/pipeline/.gitkeep',
@@ -2810,7 +2812,9 @@ function expectReleaseWorkflowTargets(releaseWorkflow: string): void {
 
 function expectReleaseScriptTargets(releaseScript: string): void {
     for (const target of EXPECTED_RELEASE_TARGETS) {
-        expect(releaseScript).toContain(`['${target.artifactOs}', '${target.arch}', '${target.ext}']`)
+        expect(releaseScript).toContain(`'${target.artifactOs}'`)
+        expect(releaseScript).toContain(`'${target.arch}'`)
+        expect(releaseScript).toContain(`'${target.ext}'`)
         expect(releaseScript).toContain('-MFAA.')
     }
 }

@@ -10,7 +10,9 @@
                     "description": "Pipeline node name to disable."
                 }
             },
-            "required": ["node_name"],
+            "required": [
+                "node_name"
+            ],
             "additionalProperties": false
         },
         "NodeOverrideParam": {
@@ -40,7 +42,9 @@
                     "description": "Whether the action should fail when any node cannot be cleared."
                 }
             },
-            "required": ["nodes"],
+            "required": [
+                "nodes"
+            ],
             "additionalProperties": false
         },
         "SubTaskParam": {
@@ -66,7 +70,9 @@
                     "description": "Whether this action should fail when any sub task fails."
                 }
             },
-            "required": ["sub"],
+            "required": [
+                "sub"
+            ],
             "additionalProperties": false
         }
     },
@@ -88,7 +94,9 @@
                         "const": "DisableNode"
                     }
                 },
-                "required": ["custom_action"]
+                "required": [
+                    "custom_action"
+                ]
             },
             "then": {
                 "properties": {
@@ -96,7 +104,9 @@
                         "$ref": "#/$defs/DisableNodeParam"
                     }
                 },
-                "required": ["custom_action_param"]
+                "required": [
+                    "custom_action_param"
+                ]
             }
         },
         {
@@ -106,7 +116,9 @@
                         "const": "NodeOverride"
                     }
                 },
-                "required": ["custom_action"]
+                "required": [
+                    "custom_action"
+                ]
             },
             "then": {
                 "properties": {
@@ -114,7 +126,9 @@
                         "$ref": "#/$defs/NodeOverrideParam"
                     }
                 },
-                "required": ["custom_action_param"]
+                "required": [
+                    "custom_action_param"
+                ]
             }
         },
         {
@@ -124,7 +138,9 @@
                         "const": "ResetCount"
                     }
                 },
-                "required": ["custom_action"]
+                "required": [
+                    "custom_action"
+                ]
             },
             "then": {
                 "properties": {
@@ -132,7 +148,9 @@
                         "$ref": "#/$defs/ResetCountParam"
                     }
                 },
-                "required": ["custom_action_param"]
+                "required": [
+                    "custom_action_param"
+                ]
             }
         },
         {
@@ -142,7 +160,9 @@
                         "const": "SubTask"
                     }
                 },
-                "required": ["custom_action"]
+                "required": [
+                    "custom_action"
+                ]
             },
             "then": {
                 "properties": {
@@ -150,7 +170,9 @@
                         "$ref": "#/$defs/SubTaskParam"
                     }
                 },
-                "required": ["custom_action_param"]
+                "required": [
+                    "custom_action_param"
+                ]
             }
         }
     ]

@@ -1,0 +1,18 @@
+{
+    "devDependencies": {
+        "@nekosu/maa-tools": "1.0.24",
+        "@nekosu/prettier-plugin-maafw-sort": "1.0.5",
+        "prettier": "3.8.4",
+        "prettier-plugin-multiline-arrays": "4.1.9"
+    },
+    "engines": {
+        "node": ">=24"
+    },
+    "license": "{{license}}",
+    "name": "{{name}}",
+    "packageManager": "pnpm@11.5.1",
+    "private": true,
+    "scripts": {{scripts}},
+    "type": "module",
+    "version": "{{version}}"
+}

@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+{{releaseTargetMatrix}}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        if: hashFiles('pyproject.toml') != ''
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.1.0
+        if: hashFiles('pyproject.toml') != ''
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: node tools/check-project.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check:py
+        if: hashFiles('pyproject.toml') != ''
+      - run: pnpm release:dry-run
+        if: github.event_name == 'workflow_dispatch'
+      - run: pnpm sync:runtime
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
+      - run: node tools/build-release.mjs
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
+      - name: Package
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        run: |
+          mkdir -p dist
+          archive="{{slug}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"
+          (
+            cd dist/package
+            if [[ "${{ matrix.ext }}" == "zip" ]]; then
+              7z a "../$archive" .
+            else
+              tar -czf "../$archive" .
+              tar -tzvf "../$archive" > "../$archive.manifest"
+              if ! awk '$1 ~ /^-/ && $0 ~ /(^|\/)({{slug}}|MFAAvalonia|MaaPiCli|MaaAgentServer|maa-cli)$/ && $1 !~ /^-..x/ { print; bad=1 } END { exit bad }' "../$archive.manifest"; then
+                echo "[ERR] Unix archive is missing executable permission metadata"
+                exit 1
+              fi
+              echo "[OK] Unix archive executable metadata smoke passed"
+            fi
+          )
+          rm -rf dist/package
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          name: ${{ matrix.artifact_os }}-${{ matrix.arch }}
+          path: dist/*
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          generate_release_notes: true
+          files: dist/*

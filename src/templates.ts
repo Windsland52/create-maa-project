@@ -201,8 +201,8 @@ export function releaseWorkflowFile(
 
 export function schemaSyncFiles(): ManagedFileInput[] {
     return [
-        managed('.github/workflows/schema-sync.yml', template('base/.github/workflows/schema-sync.yml')),
-        managed('tools/sync-schema.mjs', template('base/tools/sync-schema.mjs'))
+        managed('.github/workflows/schema-sync.yml', template('addons/schema-sync/.github/workflows/schema-sync.yml')),
+        managed('tools/sync-schema.mjs', template('addons/schema-sync/tools/sync-schema.mjs'))
     ]
 }
 

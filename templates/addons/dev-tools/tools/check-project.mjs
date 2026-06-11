@@ -78,6 +78,9 @@ const requiredWorkflows = projectHasGithubAutomation(project) ? [
 if (project.addons?.schemaSync) {
   requiredWorkflows.push('.github/workflows/schema-sync.yml')
 }
+if (project.addons?.optimizeImages) {
+  requiredWorkflows.push('.github/workflows/optimize-images.yml')
+}
 for (const workflow of requiredWorkflows) {
   if (!existsSync(workflow)) {
     throw new Error(`${workflow} is missing`)
@@ -421,6 +424,9 @@ function expectedPackageScripts(project) {
   }
   if (project.addons?.schemaSync) {
     scripts['sync:schema'] = 'node tools/sync-schema.mjs'
+  }
+  if (project.addons?.optimizeImages) {
+    scripts['optimize:images'] = 'node tools/optimize-images.mjs'
   }
   if (project.python) {
     scripts['format:py'] = 'uv run --frozen ruff format .'

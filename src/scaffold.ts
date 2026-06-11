@@ -16,6 +16,7 @@ import {
     interfaceAgent,
     interfaceResourceItems,
     maatoolsConfigFile,
+    optimizeImagesFiles,
     projectCustomSchemaFiles,
     releaseWorkflowFile,
     schemaSyncFiles
@@ -140,6 +141,7 @@ export async function createProject(
             includeAgent,
             includeGitCliff: resolvedAddons.includes('git-cliff'),
             includeAutoFormat: resolvedAddons.includes('auto-format'),
+            includeOptimizeImages: resolvedAddons.includes('optimize-images'),
             includeSchemaSync: resolvedAddons.includes('schema-sync'),
             pythonDevCommand,
             resources: config.resources
@@ -299,12 +301,14 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     packageJson.scripts = {
         ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
         'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:runtime': 'node tools/sync-runtime.mjs'
+        'sync:runtime': 'node tools/sync-runtime.mjs',
+        ...(config.addons.optimizeImages ? { 'optimize:images': 'node tools/optimize-images.mjs' } : {})
     }
     const files = [
         ...githubFiles(templateInputFromConfig(config)),
         ...(config.addons.gitCliff ? gitCliffFiles() : []),
         ...(config.addons.autoFormat ? autoFormatFiles() : []),
+        ...(config.addons.optimizeImages ? optimizeImagesFiles() : []),
         {
             path: 'package.json',
             content: stableJson(packageJson),
@@ -523,6 +527,36 @@ export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult
     return writeAddonFiles(root, config, lock, [...autoFormatFiles(), configFile(config)], options)
 }
 
+export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    config.addons.optimizeImages = { enabled: true }
+
+    const packageJson = await readJsonObject(root, 'package.json')
+    packageJson.scripts = {
+        ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
+        'optimize:images': 'node tools/optimize-images.mjs'
+    }
+
+    return writeAddonFiles(
+        root,
+        config,
+        lock,
+        [
+            ...optimizeImagesFiles(),
+            {
+                path: 'package.json',
+                content: stableJson(packageJson),
+                managed: false
+            },
+            configFile(config)
+        ],
+        options,
+        { overwriteUnmanaged: true }
+    )
+}
+
 export async function addDependabot(options: CliOptions): Promise<ScaffoldResult> {
     const root = process.cwd()
     const config = await readProjectConfig(root)
@@ -696,6 +730,7 @@ function initialAddons(addons: string[]): Record<string, unknown> {
     if (addons.includes('github')) state.github = { enabled: true }
     if (addons.includes('git-cliff')) state.gitCliff = { enabled: true }
     if (addons.includes('auto-format')) state.autoFormat = { enabled: true }
+    if (addons.includes('optimize-images')) state.optimizeImages = { enabled: true }
     if (addons.includes('dependabot')) state.dependabot = { enabled: true }
     if (addons.includes('community')) state.community = { enabled: true }
     if (addons.includes('schema-sync')) state.schemaSync = { enabled: true }
@@ -765,6 +800,7 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
         includeAgent: config.python !== undefined,
         includeGitCliff: Boolean(config.addons.gitCliff),
         includeAutoFormat: Boolean(config.addons.autoFormat),
+        includeOptimizeImages: Boolean(config.addons.optimizeImages),
         includeSchemaSync: Boolean(config.addons.schemaSync),
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources

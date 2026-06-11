@@ -1,10 +1,10 @@
-const CREATE_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'community', 'dependabot', 'schema-sync'])
-const INCREMENTAL_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'community', 'dependabot', 'schema-sync'])
+const CREATE_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'optimize-images', 'community', 'dependabot', 'schema-sync'])
+const INCREMENTAL_ADDONS = new Set(['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'optimize-images', 'community', 'dependabot', 'schema-sync'])
 const DEFAULT_INCLUDED_ADDONS = new Set<string>()
-const PLANNED_ADDONS = new Set(['optimize-images'])
+const PLANNED_ADDONS = new Set<string>()
 const V1_RESERVED_ADDONS = new Set(['i18n', 'mirrorchyan', 'branding'])
 
-const SUPPORTED_INCREMENTAL_LIST = 'dev-tools, github, agent, resource-pack, git-cliff, auto-format, community, dependabot, schema-sync'
+const SUPPORTED_INCREMENTAL_LIST = 'dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync'
 const DEFAULT_INCLUDED_LIST = 'none'
 
 export function assertSupportedCreateAddons(addons: string[]): void {
@@ -26,13 +26,13 @@ export function resolveAddonDependencies(addons: string[], input: { includeAgent
     const requested = addons
     const resolved = new Set(requested)
     if (input.includeAgent || resolved.has('agent')) resolved.add('dev-tools')
-    if (resolved.has('github') || resolved.has('git-cliff') || resolved.has('auto-format') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
+    if (resolved.has('github') || resolved.has('git-cliff') || resolved.has('auto-format') || resolved.has('optimize-images') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
         resolved.add('dev-tools')
     }
-    if (resolved.has('git-cliff') || resolved.has('auto-format') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
+    if (resolved.has('git-cliff') || resolved.has('auto-format') || resolved.has('optimize-images') || resolved.has('schema-sync') || resolved.has('community') || resolved.has('dependabot')) {
         resolved.add('github')
     }
-    const order = ['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'community', 'dependabot', 'schema-sync']
+    const order = ['dev-tools', 'github', 'agent', 'resource-pack', 'git-cliff', 'auto-format', 'optimize-images', 'community', 'dependabot', 'schema-sync']
     return [...order.filter((addon) => resolved.has(addon)), ...requested.filter((addon) => !order.includes(addon))]
 }
 

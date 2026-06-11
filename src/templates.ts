@@ -84,6 +84,7 @@ export type ProjectTemplateInput = {
     includeAgent: boolean
     includeGitCliff: boolean
     includeAutoFormat: boolean
+    includeOptimizeImages: boolean
     includeSchemaSync: boolean
     pythonDevCommand?: string[] | undefined
     resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
@@ -124,6 +125,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
 
     if (input.includeAutoFormat) {
         files.push(...autoFormatFiles())
+    }
+
+    if (input.includeOptimizeImages) {
+        files.push(...optimizeImagesFiles())
     }
 
     if (input.includeSchemaSync) {
@@ -201,6 +206,13 @@ export function gitCliffFiles(): ManagedFileInput[] {
 
 export function autoFormatFiles(): ManagedFileInput[] {
     return [managed('.github/workflows/format.yml', autoFormatWorkflow())]
+}
+
+export function optimizeImagesFiles(): ManagedFileInput[] {
+    return [
+        managed('.github/workflows/optimize-images.yml', optimizeImagesWorkflow()),
+        managed('tools/optimize-images.mjs', optimizeImagesScript())
+    ]
 }
 
 export function dependabotFile(): ManagedFileInput {
@@ -369,7 +381,7 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
 }
 
 function packageScripts(
-    input: Pick<ProjectTemplateInput, 'includeGithub' | 'includeSchemaSync' | 'includeAgent'>
+    input: Pick<ProjectTemplateInput, 'includeGithub' | 'includeSchemaSync' | 'includeAgent' | 'includeOptimizeImages'>
 ): Record<string, string> {
     const scripts: Record<string, string> = {
         format: 'prettier --write .',
@@ -385,6 +397,9 @@ function packageScripts(
     }
     if (input.includeSchemaSync) {
         scripts['sync:schema'] = 'node tools/sync-schema.mjs'
+    }
+    if (input.includeOptimizeImages) {
+        scripts['optimize:images'] = 'node tools/optimize-images.mjs'
     }
     if (input.includeAgent) {
         scripts['format:py'] = 'uv run --frozen ruff format .'
@@ -531,6 +546,14 @@ function gitCliffConfig(): string {
 
 function autoFormatWorkflow(): string {
     return template('addons/auto-format/.github/workflows/format.yml')
+}
+
+function optimizeImagesWorkflow(): string {
+    return template('addons/optimize-images/.github/workflows/optimize-images.yml')
+}
+
+function optimizeImagesScript(): string {
+    return template('addons/optimize-images/tools/optimize-images.mjs')
 }
 
 function trimTrailingWhitespace(content: string): string {

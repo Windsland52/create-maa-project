@@ -129,6 +129,7 @@ async function customRepositoryFeatures(rl: ReturnType<typeof createInterface>):
             { value: 'github', label: '  github' },
             { value: 'git-cliff', label: '    git-cliff' },
             { value: 'auto-format', label: '    auto-format' },
+            { value: 'optimize-images', label: '    optimize-images' },
             { value: 'schema-sync', label: '    schema-sync' },
             { value: 'community', label: '    community' }
         ],

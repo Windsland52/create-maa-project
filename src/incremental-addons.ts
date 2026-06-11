@@ -13,6 +13,7 @@ import {
     addDevTools,
     addGitCliff,
     addGithub,
+    addOptimizeImages,
     addResourcePack,
     addSchemaSync
 } from './scaffold.js'
@@ -43,6 +44,8 @@ export async function applyIncrementalAddons(
             lastResult = await addGitCliff(options)
         } else if (addon === 'auto-format') {
             lastResult = await addAutoFormat(options)
+        } else if (addon === 'optimize-images') {
+            lastResult = await addOptimizeImages(options)
         } else if (addon === 'community') {
             lastResult = await addCommunity(options)
         } else if (addon === 'dependabot') {

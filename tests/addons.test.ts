@@ -9,6 +9,7 @@ describe('applyIncrementalAddons', () => {
         expect(resolveAddonDependencies(['community'])).toEqual(['dev-tools', 'github', 'community'])
         expect(resolveAddonDependencies(['git-cliff'])).toEqual(['dev-tools', 'github', 'git-cliff'])
         expect(resolveAddonDependencies(['auto-format'])).toEqual(['dev-tools', 'github', 'auto-format'])
+        expect(resolveAddonDependencies(['optimize-images'])).toEqual(['dev-tools', 'github', 'optimize-images'])
         expect(resolveAddonDependencies(['agent'])).toEqual(['dev-tools', 'agent'])
     })
 
@@ -21,15 +22,15 @@ describe('applyIncrementalAddons', () => {
         ).rejects.toThrow('Unsupported add-on: changelog')
     })
 
-    it('rejects planned add-ons until handlers are registered', async () => {
-        await expect(applyIncrementalAddons(options(['optimize-images']))).rejects.toThrow(
-            '--add optimize-images is planned but is not implemented in this version.'
+    it('rejects reserved add-ons until handlers are registered', async () => {
+        await expect(applyIncrementalAddons(options(['mirrorchyan']))).rejects.toThrow(
+            '--add mirrorchyan is reserved for v1.x and is not implemented in this version.'
         )
     })
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, community, dependabot, schema-sync'
+            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync'
         )
     })
 })

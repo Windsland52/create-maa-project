@@ -1082,6 +1082,84 @@ describe('scaffold', () => {
         )
     })
 
+    it('supports optimize-images during project creation', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(defaultOptions({ name: 'maa-optimize-images-create', add: ['optimize-images'] }))
+
+        expect(result.written).toEqual(
+            expect.arrayContaining([
+                '.github/workflows/check.yml',
+                '.github/workflows/release.yml',
+                '.github/workflows/optimize-images.yml',
+                'tools/optimize-images.mjs',
+                'package.json'
+            ])
+        )
+        expect(await readJson(join(root, 'maa-optimize-images-create', 'maa-project.json'))).toMatchObject({
+            addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
+                optimizeImages: { enabled: true }
+            }
+        })
+        expect(await readJson(join(root, 'maa-optimize-images-create', 'package.json'))).toMatchObject({
+            scripts: {
+                'optimize:images': 'node tools/optimize-images.mjs'
+            }
+        })
+        const optimizeWorkflow = await readFile(
+            join(root, 'maa-optimize-images-create', '.github/workflows/optimize-images.yml'),
+            'utf8'
+        )
+        expect(optimizeWorkflow).toContain('baptiste0928/cargo-install@v3')
+        expect(optimizeWorkflow).toContain("github.actor != 'github-actions[bot]'")
+        expect(optimizeWorkflow).toContain('[skip changelog]')
+        expect(optimizeWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"')
+        expect(optimizeWorkflow).not.toContain('actions-js/push')
+        expect(await readFile(join(root, 'maa-optimize-images-create', 'tools/optimize-images.mjs'), 'utf8')).toContain(
+            "runOxipng(['-o', 'max', '--fast', '-Z', '-s', file])"
+        )
+    })
+
+    it('adds optimize-images files to an existing project', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+        await createProject(minimalOptions({ name: 'maa-optimize-images-addon' }))
+        const projectRoot = join(root, 'maa-optimize-images-addon')
+        process.chdir(projectRoot)
+
+        const result = await applyIncrementalAddons(defaultOptions({ add: ['optimize-images'] }))
+
+        expect(result?.written).toEqual(
+            expect.arrayContaining([
+                '.github/workflows/optimize-images.yml',
+                'tools/optimize-images.mjs',
+                'package.json'
+            ])
+        )
+        expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
+            addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
+                optimizeImages: { enabled: true }
+            }
+        })
+        expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
+            scripts: {
+                'optimize:images': 'node tools/optimize-images.mjs'
+            }
+        })
+        await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
+        await expect(pathExists(join(projectRoot, '.github/workflows/optimize-images.yml'))).resolves.toBe(true)
+        expect(await readFile(join(projectRoot, '.github/workflows/optimize-images.yml'), 'utf8')).toContain(
+            'node tools/optimize-images.mjs'
+        )
+    })
+
     it('records schema-sync add-on state during project creation', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)

@@ -227,6 +227,7 @@ async function checkNodeToolingFiles(
 
     const workflows = hasGithubAutomation(config) ? ['.github/workflows/check.yml', '.github/workflows/release.yml'] : []
     if (config.addons.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
+    if (config.addons.optimizeImages) workflows.push('.github/workflows/optimize-images.yml')
     for (const workflow of workflows) {
         const workflowPath = join(root, workflow)
         if (!(await exists(workflowPath))) {
@@ -547,6 +548,9 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
     }
     if (config.addons.schemaSync) {
         scripts['sync:schema'] = 'node tools/sync-schema.mjs'
+    }
+    if (config.addons.optimizeImages) {
+        scripts['optimize:images'] = 'node tools/optimize-images.mjs'
     }
     if (config.python) {
         scripts['format:py'] = 'uv run --frozen ruff format .'

@@ -582,6 +582,7 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
         controller,
         license: config.license.spdx,
         includeAgent: config.python !== undefined,
+        includeSchemaSync: config.addons.schemaSync !== undefined,
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources
     }).filter((file) => file.managed && file.path !== 'maa-project.json')

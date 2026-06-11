@@ -19,7 +19,7 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
     lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
     ok = (await checkInterfaceMetadata(root, config, lines)) && ok
     ok = (await checkPackageMetadata(root, config, lines)) && ok
-    ok = (await checkNodeToolingFiles(root, lines)) && ok
+    ok = (await checkNodeToolingFiles(root, config, lines)) && ok
     ok = (await checkVscodeSettings(root, lines)) && ok
     ok = (await checkNodeLockfile(root, lock, lines)) && ok
     ok = (await checkPyprojectMetadata(root, config, lines)) && ok
@@ -209,7 +209,11 @@ async function checkNodeLockfile(
     return false
 }
 
-async function checkNodeToolingFiles(root: string, lines: string[]): Promise<boolean> {
+async function checkNodeToolingFiles(
+    root: string,
+    config: MaaProjectConfig,
+    lines: string[]
+): Promise<boolean> {
     let ok = true
     const nodeVersionPath = join(root, '.node-version')
     if (!(await exists(nodeVersionPath))) {
@@ -222,7 +226,9 @@ async function checkNodeToolingFiles(root: string, lines: string[]): Promise<boo
         ok = false
     }
 
-    for (const workflow of ['.github/workflows/check.yml', '.github/workflows/release.yml', '.github/workflows/schema-sync.yml']) {
+    const workflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
+    if (config.addons.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
+    for (const workflow of workflows) {
         const workflowPath = join(root, workflow)
         if (!(await exists(workflowPath))) {
             lines.push(`[ERR] ${workflow} is missing.`)
@@ -536,8 +542,10 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
         'check:maa': 'pnpm exec maa-tools check',
         check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
         'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
+    }
+    if (config.addons.schemaSync) {
+        scripts['sync:schema'] = 'node tools/sync-schema.mjs'
     }
     if (config.python) {
         scripts['format:py'] = 'uv run --frozen ruff format .'

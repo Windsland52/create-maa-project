@@ -32,6 +32,7 @@ import {
     writeGeneratedFiles,
     writeProjectState
 } from './project.js'
+import { assertSupportedCreateAddons } from './addons.js'
 import {
     resolveOcrManifestFromEnvironment,
     type AssetDownloader,
@@ -63,6 +64,7 @@ export async function createProject(
     } = {}
 ): Promise<ScaffoldResult> {
     assertSupportedTemplateOptions(options)
+    assertSupportedCreateAddons(options.add)
     const targetRoot = resolve(process.cwd(), options.name ?? '.')
     const detectGitTree = environment.detectGitTree ?? isInsideGitTree
     const targetInsideGitTree = await detectGitTree(targetRoot)
@@ -110,6 +112,7 @@ export async function createProject(
             controller: options.controller ?? 'ADB',
             license: options.license ?? 'AGPL-3.0-or-later',
             includeAgent,
+            includeSchemaSync: options.add.includes('schema-sync'),
             pythonDevCommand,
             resources: config.resources
         }),
@@ -212,7 +215,6 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
     const config = await readProjectConfig(root)
     const lock = await readProjectLock(root)
 
-    config.addons ??= {}
     config.addons.schemaSync = { enabled: true }
 
     const packageJson = await readJsonObject(root, 'package.json')
@@ -270,9 +272,6 @@ function assertSupportedTemplateOptions(options: CliOptions): void {
     if (options.template !== 'pipeline' && options.template !== 'agent') {
         throw new Error('--template must be pipeline or agent.')
     }
-    if (options.add.length > 0) {
-        throw new Error('--add is not supported in the pure pipeline scaffold.')
-    }
 }
 
 function createConfig(input: {
@@ -297,7 +296,7 @@ function createConfig(input: {
             vscode: { enabled: true },
             quality: { enabled: true }
         },
-        addons: {},
+        addons: input.options.add.includes('schema-sync') ? { schemaSync: { enabled: true } } : {},
         controller: {
             kind: input.options.controller ?? 'ADB'
         },

@@ -58,10 +58,11 @@ describe('pure pipeline scaffold', () => {
                 'tools/schema/interface.schema.json',
                 'tools/sync-runtime.mjs',
                 '.github/workflows/check.yml',
-                '.github/workflows/release.yml',
-                '.github/workflows/schema-sync.yml'
+                '.github/workflows/release.yml'
             ])
         )
+        expect(result.written).not.toContain('.github/workflows/schema-sync.yml')
+        expect(result.written).not.toContain('tools/sync-schema.mjs')
         expect(result.pending).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ kind: 'node-deps' }),
@@ -93,6 +94,7 @@ describe('pure pipeline scaffold', () => {
             }
         })
         expect(packageJson.scripts).not.toHaveProperty('check:py')
+        expect(packageJson.scripts).not.toHaveProperty('sync:schema')
 
         const customActionSchema = await readJson(join(projectRoot, 'tools/schema/custom.action.schema.json'))
         const customRecognitionSchema = await readJson(
@@ -518,37 +520,44 @@ describe('pure pipeline scaffold', () => {
         ])
     })
 
+    it('adds schema sync files during project creation', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(defaultOptions({ name: 'maa-schema-create', add: ['schema-sync'] }))
+        const projectRoot = join(root, 'maa-schema-create')
+
+        expect(result.config.addons).toMatchObject({
+            schemaSync: { enabled: true }
+        })
+        expect(result.written).toEqual(
+            expect.arrayContaining(['.github/workflows/schema-sync.yml', 'tools/sync-schema.mjs'])
+        )
+        expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
+            scripts: { 'sync:schema': 'node tools/sync-schema.mjs' }
+        })
+        expect(await diffManagedFiles(projectRoot)).toEqual(['No managed file changes.'])
+    })
+
     it('adds schema sync files to an existing project', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
-        await createProject(defaultOptions({ name: 'maa-schema-sync' }))
-        const projectRoot = join(root, 'maa-schema-sync')
+        await createProject(defaultOptions({ name: 'maa-schema-addon' }))
+        const projectRoot = join(root, 'maa-schema-addon')
         process.chdir(projectRoot)
 
         await rm(join(projectRoot, '.github/workflows/schema-sync.yml'), { force: true })
         await rm(join(projectRoot, 'tools/sync-schema.mjs'), { force: true })
-        const packagePath = join(projectRoot, 'package.json')
-        const packageJson = (await readJson(packagePath)) as { scripts?: Record<string, string> }
-        delete packageJson.scripts?.['sync:schema']
-        await writeFile(packagePath, `${JSON.stringify(packageJson, null, 4)}\n`, 'utf8')
 
         const result = await applyIncrementalAddons(defaultOptions({ add: ['schema-sync'] }))
 
         expect(result?.written).toEqual(
-            expect.arrayContaining([
-                '.github/workflows/schema-sync.yml',
-                'tools/sync-schema.mjs',
-                'package.json',
-                'maa-project.json'
-            ])
+            expect.arrayContaining(['.github/workflows/schema-sync.yml', 'tools/sync-schema.mjs'])
         )
         expect(result?.config.addons).toMatchObject({
             schemaSync: { enabled: true }
         })
-        expect(await readFile(join(projectRoot, '.github/workflows/schema-sync.yml'), 'utf8')).toContain(
-            'Schema Sync'
-        )
-        expect(await readJson(packagePath)).toMatchObject({
+        expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
             scripts: { 'sync:schema': 'node tools/sync-schema.mjs' }
         })
         expect(await diffManagedFiles(projectRoot)).toEqual(['No managed file changes.'])

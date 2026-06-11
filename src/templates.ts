@@ -80,6 +80,7 @@ export type ProjectTemplateInput = {
     controller: ControllerKind
     license: LicenseKind
     includeAgent: boolean
+    includeSchemaSync: boolean
     pythonDevCommand?: string[] | undefined
     resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
 }
@@ -97,7 +98,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         managed('.vscode/tasks.json', vscodeTasks()),
         managed('.github/workflows/check.yml', checkWorkflow(input.includeAgent)),
         releaseWorkflowFile(input),
-        ...schemaSyncFiles(),
+        ...(input.includeSchemaSync ? schemaSyncFiles() : []),
         managed('tools/check-project.mjs', checkProjectScript()),
         managed('tools/validate-schema.mjs', validateSchemaScript()),
         managed('tools/build-release.mjs', buildReleaseScript(input.slug)),
@@ -305,7 +306,6 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
         'check:maa': 'pnpm exec maa-tools check',
         check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
         'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
     }
     if (input.includeAgent) {
@@ -313,6 +313,9 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
         scripts['lint:py'] = 'uv run --frozen ruff check .'
         scripts['typecheck:py'] = 'uv run --frozen pyright'
         scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
+    }
+    if (input.includeSchemaSync) {
+        scripts['sync:schema'] = 'node tools/sync-schema.mjs'
     }
     return stableJson({
         name: input.slug,
@@ -608,7 +611,9 @@ if (readFileSync('.node-version', 'utf8').trim() !== '24') {
     throw new Error('.node-version must pin Node 24')
 }
 
-for (const workflow of ['.github/workflows/check.yml', '.github/workflows/release.yml', '.github/workflows/schema-sync.yml']) {
+const workflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
+if (project.addons?.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
+for (const workflow of workflows) {
     if (!existsSync(workflow)) {
         throw new Error(\`\${workflow} is missing\`)
     }
@@ -845,8 +850,10 @@ function expectedPackageScripts(project) {
         'check:maa': 'pnpm exec maa-tools check',
         check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
         'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:schema': 'node tools/sync-schema.mjs',
         'sync:runtime': 'node tools/sync-runtime.mjs'
+    }
+    if (project.addons?.schemaSync) {
+        scripts['sync:schema'] = 'node tools/sync-schema.mjs'
     }
     if (project.python) {
         scripts['format:py'] = 'uv run --frozen ruff format .'

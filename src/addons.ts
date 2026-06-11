@@ -1,4 +1,5 @@
 const DEFAULT_INCLUDED_ADDONS = new Set(['ci', 'vscode', 'quality'])
+const CREATE_ADDONS = new Set(['schema-sync'])
 const PLANNED_ADDONS = new Set([
     'agent',
     'resource-pack',
@@ -18,11 +19,22 @@ export function isDefaultIncludedAddon(addon: string): boolean {
     return DEFAULT_INCLUDED_ADDONS.has(addon)
 }
 
+export function assertSupportedCreateAddons(addons: string[]): void {
+    for (const addon of addons) {
+        if (CREATE_ADDONS.has(addon)) continue
+        throw new Error(addonUnavailableMessage(addon))
+    }
+}
+
 export function defaultIncludedAddonMessage(addon: string): string {
     return `${addon} is already included in the default template.`
 }
 
 export function incrementalAddonUnavailableMessage(addon: string): string {
+    return addonUnavailableMessage(addon)
+}
+
+function addonUnavailableMessage(addon: string): string {
     if (PLANNED_ADDONS.has(addon)) {
         return `--add ${addon} is planned but is not implemented in this version.`
     }

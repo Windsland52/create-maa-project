@@ -93,6 +93,11 @@ describe('pure pipeline scaffold', () => {
         })
         expect(packageJson.scripts).not.toHaveProperty('check:py')
 
+        const license = await readFile(join(projectRoot, 'LICENSE'), 'utf8')
+        expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
+        expect(license).toContain('Version 3, 19 November 2007')
+        expect(license).not.toContain('Replace this placeholder')
+
         const emptyImage = await readFile(join(projectRoot, 'resource/base/image/empty.png'))
         expect(emptyImage.subarray(0, 8)).toEqual(
             Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -151,6 +156,21 @@ describe('pure pipeline scaffold', () => {
         const doctorOutput = (await runDoctor(projectRoot)).lines.join('\n')
         expect(doctorOutput).toContain('create-maa-project --update node-deps')
         expect(doctorOutput).toContain('create-maa-project --update ocr-models')
+    })
+
+    it('creates MIT license text when selected', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        await createProject(defaultOptions({ name: 'maa-mit-test', license: 'MIT' }))
+
+        const license = await readFile(join(root, 'maa-mit-test', 'LICENSE'), 'utf8')
+        expect(license).toContain('MIT License')
+        expect(license).toContain(`Copyright (c) ${new Date().getFullYear()} maa-mit-test contributors`)
+        expect(license).not.toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
+        expect(await readJson(join(root, 'maa-mit-test', 'package.json'))).toMatchObject({
+            license: 'MIT'
+        })
     })
 
     it('downloads OCR model assets during creation and clears OCR pending', async () => {

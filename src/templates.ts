@@ -77,8 +77,10 @@ export type ProjectTemplateInput = {
     slug: string
     displayName: string
     version: string
-    controller: ControllerKind
+    controllers: ControllerKind[]
     license: LicenseKind
+    includeDevTools: boolean
+    includeGithub: boolean
     includeAgent: boolean
     includeSchemaSync: boolean
     pythonDevCommand?: string[] | undefined
@@ -90,20 +92,6 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         managed('.editorconfig', template('base/.editorconfig')),
         once('.gitignore', template('base/gitignore.tmpl')),
         managed('.gitattributes', template('base/.gitattributes')),
-        managed('.node-version', '24\n'),
-        managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
-        once('.prettierignore', template('base/.prettierignore')),
-        once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
-        once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
-        managed('.vscode/tasks.json', vscodeTasks()),
-        managed('.github/workflows/check.yml', checkWorkflow()),
-        releaseWorkflowFile(input),
-        ...(input.includeSchemaSync ? schemaSyncFiles() : []),
-        managed('tools/check-project.mjs', checkProjectScript()),
-        managed('tools/validate-schema.mjs', validateSchemaScript()),
-        managed('tools/build-release.mjs', buildReleaseScript(input.slug)),
-        managed('tools/sync-runtime.mjs', syncRuntimeScript()),
-        ...schemaFiles(input.includeAgent),
         once('interface.json', interfaceJson(input)),
         once('tasks/tutorial.json', tutorialTaskJson()),
         once('resource/base/default_pipeline.json', defaultPipelineJson()),
@@ -117,16 +105,51 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
         once('README.md', generatedReadme(input)),
         once('README.en.md', generatedEnglishReadme(input)),
         once('LICENSE', licenseText(input)),
-        once('package.json', generatedPackageJson(input)),
-        once('pnpm-workspace.yaml', pnpmWorkspaceYaml()),
         once('maatools.config.mts', maatoolsConfig(resourcePaths(input.resources ?? defaultResources())))
     ]
+
+    if (input.includeDevTools) {
+        files.push(...devToolFiles(input))
+    }
+
+    if (input.includeGithub) {
+        files.push(...githubFiles(input))
+    }
+
+    if (input.includeSchemaSync) {
+        files.push(...schemaSyncFiles())
+    }
 
     if (input.includeAgent) {
         files.push(...agentFiles(input))
     }
 
     return files
+}
+
+export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
+    return [
+        managed('.node-version', '24\n'),
+        managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
+        once('.prettierignore', template('base/.prettierignore')),
+        once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
+        once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
+        managed('.vscode/tasks.json', vscodeTasks(input.includeGithub)),
+        managed('tools/check-project.mjs', checkProjectScript()),
+        managed('tools/validate-schema.mjs', validateSchemaScript()),
+        ...schemaFiles(input.includeAgent),
+        once('package.json', generatedPackageJson(input)),
+        once('pnpm-workspace.yaml', pnpmWorkspaceYaml())
+    ]
+}
+
+export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
+    return [
+        managed('.github/workflows/check.yml', checkWorkflow()),
+        releaseWorkflowFile(input),
+        managed('tools/build-release.mjs', buildReleaseScript(input.slug)),
+        managed('tools/sync-runtime.mjs', syncRuntimeScript())
+    ]
 }
 
 export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version'>): ManagedFileInput[] {
@@ -204,7 +227,7 @@ export function emptyPng(): Buffer {
 }
 
 function interfaceJson(input: ProjectTemplateInput): string {
-    const controller = interfaceController(input.controller)
+    const controller = interfaceController(input.controllers)
     const agentBlock = input.includeAgent
         ? `,\n    "agent": ${jsonFragment([
               interfaceAgent(input.slug, input.pythonDevCommand)
@@ -222,14 +245,35 @@ function interfaceJson(input: ProjectTemplateInput): string {
     })
 }
 
-export function interfaceController(kind: ControllerKind): Array<{ name: string; type: string }> {
-    if (kind === 'None') return []
-    return [
-        {
-            name: kind.toLowerCase(),
-            type: kind === 'ADB' ? 'Adb' : kind
+export function interfaceController(
+    kinds: ControllerKind[]
+): Array<{ name: string; label: string; type: string; display_short_side: number }> {
+    return kinds.map((kind) => {
+        const metadata = controllerMetadata(kind)
+        return {
+            name: metadata.name,
+            label: metadata.label,
+            type: kind,
+            display_short_side: 720
         }
-    ]
+    })
+}
+
+function controllerMetadata(kind: ControllerKind): { name: string; label: string } {
+    switch (kind) {
+        case 'Adb':
+            return { name: 'Android', label: 'Android / Emulator' }
+        case 'Win32':
+            return { name: 'Windows', label: 'Windows app' }
+        case 'MacOS':
+            return { name: 'macOS', label: 'macOS app' }
+        case 'PlayCover':
+            return { name: 'PlayCover', label: 'PlayCover iOS app' }
+        case 'Gamepad':
+            return { name: 'Gamepad', label: 'Gamepad (Windows)' }
+        case 'WlRoots':
+            return { name: 'WlRoots', label: 'wlroots app (Linux)' }
+    }
 }
 
 export function interfaceResourceItems(
@@ -320,9 +364,11 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
         lint: 'node tools/check-project.mjs',
         'check:schema': 'node tools/validate-schema.mjs',
         'check:maa': 'pnpm exec maa-tools check',
-        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
-        'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:runtime': 'node tools/sync-runtime.mjs'
+        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint'
+    }
+    if (input.includeGithub) {
+        scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
+        scripts['sync:runtime'] = 'node tools/sync-runtime.mjs'
     }
     if (input.includeSchemaSync) {
         scripts['sync:schema'] = 'node tools/sync-schema.mjs'
@@ -541,20 +587,25 @@ function vscodeSettings(includeAgent: boolean): string {
     return stableJson(settings)
 }
 
-function vscodeTasks(): string {
-    return stableJson({
-        version: '2.0.0',
-        tasks: [
-            { label: 'check', type: 'shell', command: 'pnpm check', problemMatcher: [] },
-            { label: 'lint', type: 'shell', command: 'pnpm lint', problemMatcher: [] },
-            { label: 'format', type: 'shell', command: 'pnpm format', problemMatcher: [] },
+function vscodeTasks(includeGithub: boolean): string {
+    const tasks: Array<Record<string, unknown>> = [
+        { label: 'check', type: 'shell', command: 'pnpm check', problemMatcher: [] },
+        { label: 'lint', type: 'shell', command: 'pnpm lint', problemMatcher: [] },
+        { label: 'format', type: 'shell', command: 'pnpm format', problemMatcher: [] }
+    ]
+    if (includeGithub) {
+        tasks.push(
             {
                 label: 'release dry-run',
                 type: 'shell',
                 command: 'pnpm release:dry-run',
                 problemMatcher: []
             }
-        ]
+        )
+    }
+    return stableJson({
+        version: '2.0.0',
+        tasks
     })
 }
 
@@ -625,7 +676,7 @@ if (readFileSync('.node-version', 'utf8').trim() !== '24') {
     throw new Error('.node-version must pin Node 24')
 }
 
-const requiredWorkflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
+const requiredWorkflows = projectHasGithubAutomation(project) ? ['.github/workflows/check.yml', '.github/workflows/release.yml'] : []
 if (project.addons?.schemaSync) {
     requiredWorkflows.push('.github/workflows/schema-sync.yml')
 }
@@ -638,35 +689,37 @@ for (const workflow of requiredWorkflows) {
     }
 }
 
-if (!existsSync('.vscode/settings.json')) {
-    throw new Error('.vscode/settings.json is missing')
-}
+if (project.features?.vscode?.enabled) {
+    if (!existsSync('.vscode/settings.json')) {
+        throw new Error('.vscode/settings.json is missing')
+    }
 
-const vscodeSettings = JSON.parse(readFileSync('.vscode/settings.json', 'utf8'))
-if (vscodeSettings['editor.formatOnSave'] !== true) {
-    throw new Error('.vscode/settings.json editor.formatOnSave must be true')
-}
+    const vscodeSettings = JSON.parse(readFileSync('.vscode/settings.json', 'utf8'))
+    if (vscodeSettings['editor.formatOnSave'] !== true) {
+        throw new Error('.vscode/settings.json editor.formatOnSave must be true')
+    }
 
-if (vscodeSettings['files.eol'] !== '\\n') {
-    throw new Error('.vscode/settings.json files.eol must be LF')
-}
+    if (vscodeSettings['files.eol'] !== '\\n') {
+        throw new Error('.vscode/settings.json files.eol must be LF')
+    }
 
-if (!hasJsoncFileAssociations(vscodeSettings['files.associations'])) {
-    throw new Error('.vscode/settings.json files.associations must map *.json and *.jsonc to jsonc')
-}
+    if (!hasJsoncFileAssociations(vscodeSettings['files.associations'])) {
+        throw new Error('.vscode/settings.json files.associations must map *.json and *.jsonc to jsonc')
+    }
 
-for (const language of ['[json]', '[jsonc]']) {
-    if (editorDefaultFormatter(vscodeSettings[language]) !== 'esbenp.prettier-vscode') {
+    for (const language of ['[json]', '[jsonc]']) {
+        if (editorDefaultFormatter(vscodeSettings[language]) !== 'esbenp.prettier-vscode') {
+            throw new Error(
+                \`.vscode/settings.json \${language} editor.defaultFormatter must be esbenp.prettier-vscode\`
+            )
+        }
+    }
+
+    if (!hasInterfaceJsonSchema(vscodeSettings['json.schemas'])) {
         throw new Error(
-            \`.vscode/settings.json \${language} editor.defaultFormatter must be esbenp.prettier-vscode\`
+            '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json'
         )
     }
-}
-
-if (!hasInterfaceJsonSchema(vscodeSettings['json.schemas'])) {
-    throw new Error(
-        '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json'
-    )
 }
 
 if (
@@ -688,8 +741,8 @@ if (existsSync('pyproject.toml')) {
     }
 }
 
-if (JSON.stringify(interfaceJson.controller ?? []) !== JSON.stringify(interfaceController(projectControllerKind(project)))) {
-    throw new Error('interface.json controller must match maa-project.json controller.kind')
+if (JSON.stringify(interfaceJson.controller ?? []) !== JSON.stringify(interfaceController(projectControllerKinds(project)))) {
+    throw new Error('interface.json controller must match maa-project.json controller.kinds')
 }
 
 if (interfaceJson.agent !== undefined && !Array.isArray(interfaceJson.agent)) {
@@ -764,13 +817,77 @@ function sha256(content) {
     return createHash('sha256').update(content).digest('hex')
 }
 
-function projectControllerKind(project) {
-    const kind = project.controller?.kind
-    return kind === 'ADB' || kind === 'Win32' || kind === 'None' ? kind : 'ADB'
+function projectControllerKinds(project) {
+    const rawKinds = Array.isArray(project.controller?.kinds)
+        ? project.controller.kinds
+        : project.controller?.kind === 'None'
+          ? []
+          : [project.controller?.kind]
+    const kinds = unique(rawKinds.map((kind) => normalizeControllerKind(kind)).filter(Boolean))
+    return kinds.length > 0 ? kinds : ['Adb']
 }
 
-function interfaceController(kind) {
-    return kind === 'None' ? [] : [{ name: kind.toLowerCase(), type: kind === 'ADB' ? 'Adb' : kind }]
+function normalizeControllerKind(kind) {
+    if (typeof kind !== 'string') return undefined
+    switch (kind.toLowerCase()) {
+        case 'adb':
+        case 'android':
+            return 'Adb'
+        case 'win32':
+        case 'windows':
+            return 'Win32'
+        case 'macos':
+        case 'mac':
+            return 'MacOS'
+        case 'playcover':
+            return 'PlayCover'
+        case 'gamepad':
+            return 'Gamepad'
+        case 'wlroots':
+        case 'wl-roots':
+            return 'WlRoots'
+        default:
+            return undefined
+    }
+}
+
+function interfaceController(kinds) {
+    return kinds.map((kind) => {
+        const metadata = controllerMetadata(kind)
+        return {
+            name: metadata.name,
+            label: metadata.label,
+            type: kind,
+            display_short_side: 720
+        }
+    })
+}
+
+function projectHasGithubAutomation(project) {
+    return Boolean(project.addons?.github) || project.features?.ci?.enabled || project.features?.release?.enabled
+}
+
+function controllerMetadata(kind) {
+    switch (kind) {
+        case 'Adb':
+            return { name: 'Android', label: 'Android / Emulator' }
+        case 'Win32':
+            return { name: 'Windows', label: 'Windows app' }
+        case 'MacOS':
+            return { name: 'macOS', label: 'macOS app' }
+        case 'PlayCover':
+            return { name: 'PlayCover', label: 'PlayCover iOS app' }
+        case 'Gamepad':
+            return { name: 'Gamepad', label: 'Gamepad (Windows)' }
+        case 'WlRoots':
+            return { name: 'WlRoots', label: 'wlroots app (Linux)' }
+        default:
+            return { name: String(kind), label: String(kind) }
+    }
+}
+
+function unique(values) {
+    return [...new Set(values)]
 }
 
 function interfaceAgent(project) {
@@ -864,9 +981,11 @@ function expectedPackageScripts(project) {
         lint: 'node tools/check-project.mjs',
         'check:schema': 'node tools/validate-schema.mjs',
         'check:maa': 'pnpm exec maa-tools check',
-        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
-        'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:runtime': 'node tools/sync-runtime.mjs'
+        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint'
+    }
+    if (projectHasGithubAutomation(project)) {
+        scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
+        scripts['sync:runtime'] = 'node tools/sync-runtime.mjs'
     }
     if (project.addons?.schemaSync) {
         scripts['sync:schema'] = 'node tools/sync-schema.mjs'
@@ -976,7 +1095,8 @@ assertArrayOfStrings(interfaceJson.import, 'interface.json import')
 
 for (const [index, controller] of interfaceJson.controller.entries()) {
     assertNonEmptyString(controller.name, 'interface.json controller[' + index + '].name')
-    assertEnum(controller.type, ['Adb', 'Win32'], 'interface.json controller[' + index + '].type')
+    assertNonEmptyString(controller.label, 'interface.json controller[' + index + '].label')
+    assertEnum(controller.type, ['Adb', 'Win32', 'MacOS', 'PlayCover', 'Gamepad', 'WlRoots'], 'interface.json controller[' + index + '].type')
 }
 
 for (const [index, resource] of interfaceJson.resource.entries()) {
@@ -1021,7 +1141,10 @@ for (const feature of ['ci', 'release', 'vscode', 'quality']) {
     assertFeature(project.features[feature], 'maa-project.json features.' + feature)
 }
 assertRecord(project.controller, 'maa-project.json controller')
-assertEnum(project.controller.kind, ['ADB', 'Win32', 'None'], 'maa-project.json controller.kind')
+assertArrayOfStrings(project.controller.kinds, 'maa-project.json controller.kinds')
+for (const [index, kind] of project.controller.kinds.entries()) {
+    assertEnum(kind, ['Adb', 'Win32', 'MacOS', 'PlayCover', 'Gamepad', 'WlRoots'], 'maa-project.json controller.kinds[' + index + ']')
+}
 assertArrayOfRecords(project.resources, 'maa-project.json resources')
 for (const [index, resource] of project.resources.entries()) {
     assertSlug(resource.slug, 'maa-project.json resources[' + index + '].slug')

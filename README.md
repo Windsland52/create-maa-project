@@ -10,8 +10,12 @@ Current implementation covers the local scaffold core:
 
 - interactive create flow without LLM
 - default `resource/base` project shape
+- create presets for All (Recommended), Minimal, and Custom repository features
+- multiple MaaFW PI V2 control targets such as `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, and `WlRoots`
 - optional Python Agent template
-- `--add resource-pack <slug> --label <display>`
+- `--add dev-tools` and `--add github` for repository tooling and GitHub workflows
+- `--add agent` for adding the Python Agent files to an existing project
+- `--add resource-pack <folder> --label <display>`
 - `--add changelog`, `--add community`, `--add dependabot`, and `--add schema-sync`
 - planned and reserved add-on reporting for options such as `git-cliff` and `mirrorchyan`
 - committed `maa-project.json` and `maa-project.lock.json`
@@ -27,8 +31,8 @@ Current implementation covers the local scaffold core:
 - default asset downloads retry transient network failures; set `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` to override the default
 - OCR downloads can be seeded for local/offline verification with `CREATE_MAA_PROJECT_OCR_ZIP_PATH`
 - OCR model updates use a verified manifest from `CREATE_MAA_PROJECT_OCR_MANIFEST_URL` when configured, with the existing OCR zip as fallback
-- optional schema baseline sync through `--add schema-sync`, including `pnpm sync:schema` and a generated daily schema-sync PR workflow
-- CLI project creation attempts OCR model download and `pnpm install` by default, keeping actionable pending items if either fails
+- optional schema baseline sync through `--add schema-sync`, including `pnpm sync:schema` and a generated daily schema-sync workflow
+- CLI project creation attempts OCR model download by default and runs `pnpm install` when dev tools are selected, keeping actionable pending items if either fails
 - conservative `--update template` with `--update template --diff` preview and `--force` overwrite
 - generated project lint and release dry-run smoke checks, including pending-action, pnpm lockfile, VS Code settings, and interface schema guards
 - release staging through generated `tools/build-release.mjs`, with MFAAvalonia GUI files laid down first, MaaFramework runtime overlaid after it, package-only `interface.json` rewriting, tag-based version injection, Agent `child_exec` normalization, dev-file exclusion, package smoke checks, and Unix tar executable metadata smoke in the release workflow

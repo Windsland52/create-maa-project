@@ -2,13 +2,16 @@ import {
     defaultIncludedAddonMessage,
     incrementalAddonUnavailableMessage,
     isDefaultIncludedAddon,
-    isIncrementalAddon
+    isIncrementalAddon,
+    resolveAddonDependencies
 } from './addons.js'
 import {
     addAgent,
     addChangelog,
     addCommunity,
     addDependabot,
+    addDevTools,
+    addGithub,
     addResourcePack,
     addSchemaSync
 } from './scaffold.js'
@@ -19,7 +22,7 @@ export async function applyIncrementalAddons(
     writeLine: (line: string) => void = console.log
 ): Promise<ScaffoldResult | undefined> {
     let lastResult: ScaffoldResult | undefined
-    for (const addon of options.add) {
+    for (const addon of resolveAddonDependencies(options.add)) {
         if (!isIncrementalAddon(addon)) {
             if (isDefaultIncludedAddon(addon)) {
                 writeLine(defaultIncludedAddonMessage(addon))
@@ -27,7 +30,11 @@ export async function applyIncrementalAddons(
             }
             throw new Error(incrementalAddonUnavailableMessage(addon))
         }
-        if (addon === 'agent') {
+        if (addon === 'dev-tools') {
+            lastResult = await addDevTools(options)
+        } else if (addon === 'github') {
+            lastResult = await addGithub(options)
+        } else if (addon === 'agent') {
             lastResult = await addAgent(options)
         } else if (addon === 'resource-pack') {
             lastResult = await addResourcePack(options)

@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { resolveAddonDependencies } from '../src/addons.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
 
 describe('applyIncrementalAddons', () => {
-    it('reports default included add-ons without writing project files', async () => {
-        const lines: string[] = []
+    it('resolves add-on dependencies in template order', () => {
+        expect(resolveAddonDependencies(['schema-sync'])).toEqual(['dev-tools', 'github', 'schema-sync'])
+        expect(resolveAddonDependencies(['community'])).toEqual(['dev-tools', 'github', 'community'])
+        expect(resolveAddonDependencies(['agent'])).toEqual(['dev-tools', 'agent'])
+    })
 
+    it('rejects old default feature names as unsupported add-ons', async () => {
         await expect(
-            applyIncrementalAddons(options(['ci']), (line) => lines.push(line))
-        ).resolves.toBeUndefined()
-
-        expect(lines).toEqual(['ci is already included in the default template.'])
+            applyIncrementalAddons(options(['ci']))
+        ).rejects.toThrow('Unsupported add-on: ci')
     })
 
     it('rejects planned add-ons until handlers are registered', async () => {
@@ -21,7 +24,7 @@ describe('applyIncrementalAddons', () => {
 
     it('rejects unknown add-ons with the current support summary', async () => {
         await expect(applyIncrementalAddons(options(['unknown-addon']))).rejects.toThrow(
-            'Supported incremental add-ons: agent, resource-pack, changelog, community, dependabot, schema-sync'
+            'Supported incremental add-ons: dev-tools, github, agent, resource-pack, changelog, community, dependabot, schema-sync'
         )
     })
 })

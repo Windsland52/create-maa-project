@@ -1,4 +1,9 @@
 import type { CliOptions, ControllerKind, LicenseKind, NetworkMode, TemplateName } from './types.js'
+import {
+    controllerUnavailableMessage,
+    normalizeControllerKind,
+    uniqueControllerKinds
+} from './controllers.js'
 
 export function parseArgs(argv: string[]): CliOptions {
     const options: CliOptions = {
@@ -132,7 +137,10 @@ export function parseArgs(argv: string[]): CliOptions {
                 options.license = readValue(argv, ++index, arg) as LicenseKind
                 break
             case '--controller':
-                options.controller = readValue(argv, ++index, arg) as ControllerKind
+                options.controllers = uniqueControllerKinds([
+                    ...(options.controllers ?? []),
+                    ...parseControllerOption(readValue(argv, ++index, arg))
+                ])
                 break
             case '--accept-changes':
                 options.acceptChangesRequested = true
@@ -168,9 +176,17 @@ export function parseArgs(argv: string[]): CliOptions {
     if (options.license) {
         validateEnum(options.license, ['AGPL-3.0-or-later', 'MIT', 'None'], '--license')
     }
-    if (options.controller) validateEnum(options.controller, ['ADB', 'Win32', 'None'], '--controller')
-
     return options
+}
+
+function parseControllerOption(value: string): ControllerKind[] {
+    const kinds: ControllerKind[] = []
+    for (const item of value.split(',')) {
+        const kind = normalizeControllerKind(item)
+        if (!kind) throw new Error(controllerUnavailableMessage(item.trim() || value))
+        kinds.push(kind)
+    }
+    return kinds
 }
 
 function readValue(argv: string[], index: number, option: string): string {

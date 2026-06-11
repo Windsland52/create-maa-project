@@ -63,7 +63,7 @@ export function normalizeSlug(input: string): string {
 export function assertValidSlug(slug: string): void {
     if (!/^[a-z0-9](?:[a-z0-9-]{0,212}[a-z0-9])?$/.test(slug)) {
         throw new Error(
-            `Invalid project slug "${slug}". Use lowercase ASCII letters, numbers, and hyphens.`
+            `Invalid project ID "${slug}". Use lowercase ASCII letters, numbers, and hyphens.`
         )
     }
 }

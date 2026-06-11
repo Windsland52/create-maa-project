@@ -1,5 +1,5 @@
 export type TemplateName = 'pipeline' | 'agent'
-export type ControllerKind = 'ADB' | 'Win32' | 'None'
+export type ControllerKind = 'Adb' | 'Win32' | 'MacOS' | 'PlayCover' | 'Gamepad' | 'WlRoots'
 export type LicenseKind = 'AGPL-3.0-or-later' | 'MIT' | 'None'
 export type NetworkMode = 'auto' | 'official'
 export type MaaProjectConfig = {
@@ -19,7 +19,7 @@ export type MaaProjectConfig = {
     }
     addons: Record<string, unknown>
     controller: {
-        kind: ControllerKind
+        kinds: ControllerKind[]
     }
     resources: ResourcePackConfig[]
     maafw: {
@@ -115,7 +115,7 @@ export type CliOptions = {
     displayName?: string
     version?: string
     license?: LicenseKind
-    controller?: ControllerKind
+    controllers?: ControllerKind[]
     acceptChanges: string[]
     acceptChangesRequested: boolean
     resourcePackSlug?: string

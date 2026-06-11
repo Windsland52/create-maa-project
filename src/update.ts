@@ -28,8 +28,10 @@ import {
     type ProductAssetManifestResolver
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
-import type { CliOptions, ControllerKind, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
+import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
 import { exists, readText } from './utils.js'
+import { projectControllerKinds } from './controllers.js'
+import { hasDevTools, hasGithubAutomation } from './features.js'
 
 const CLI_VERSION = '0.1.0'
 
@@ -574,22 +576,18 @@ async function planManagedTemplateFiles(
 }
 
 function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
-    const controller = projectControllerKind(config)
     return baseProjectFiles({
         slug: config.project.slug,
         displayName: config.project.displayName,
         version: config.project.version,
-        controller,
+        controllers: projectControllerKinds(config),
         license: config.license.spdx,
+        includeDevTools: hasDevTools(config),
+        includeGithub: hasGithubAutomation(config),
         includeAgent: config.python !== undefined,
         includeSchemaSync: Boolean(config.addons.schemaSync),
         pythonDevCommand: config.python?.devCommand,
         resources: config.resources
     }).filter((file) => file.managed && file.path !== 'maa-project.json')
         .filter((file) => !file.path.startsWith('resource/base/model/ocr/'))
-}
-
-function projectControllerKind(config: MaaProjectConfig): ControllerKind {
-    const raw = (config as MaaProjectConfig & { controller?: { kind?: unknown } }).controller?.kind
-    return raw === 'ADB' || raw === 'Win32' || raw === 'None' ? raw : 'ADB'
 }

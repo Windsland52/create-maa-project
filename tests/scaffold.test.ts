@@ -93,7 +93,53 @@ afterEach(() => {
 })
 
 describe('scaffold', () => {
-    it('creates default project under resource/base', async () => {
+    it('creates minimal project without repository add-ons', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(minimalOptions({ name: 'maa-minimal' }))
+        const projectRoot = join(root, 'maa-minimal')
+
+        expect(result.config.features).toMatchObject({
+            ci: { enabled: false },
+            release: { enabled: false },
+            vscode: { enabled: false },
+            quality: { enabled: false }
+        })
+        expect(result.config.runtime.mfa.enabled).toBe(false)
+        expect(result.config.addons).toEqual({})
+        expect(result.written).toEqual(
+            expect.arrayContaining([
+                'interface.json',
+                'tasks/tutorial.json',
+                'resource/base/default_pipeline.json',
+                'resource/base/pipeline/tutorial.json',
+                'maatools.config.mts',
+                'maa-project.json'
+            ])
+        )
+        expect(result.written).not.toContain('package.json')
+        expect(result.written).not.toContain('.vscode/settings.json')
+        expect(result.written).not.toContain('.github/workflows/check.yml')
+        expect(result.written).not.toContain('tools/check-project.mjs')
+        expect(result.written).not.toContain('tools/schema/interface.schema.json')
+        expect(await pathExists(join(projectRoot, 'package.json'))).toBe(false)
+        expect(await pathExists(join(projectRoot, '.vscode/settings.json'))).toBe(false)
+        expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(false)
+        expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(false)
+        expect(await pathExists(join(projectRoot, 'tools/schema/interface.schema.json'))).toBe(false)
+        expect(result.pending).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    kind: 'ocr-model',
+                    command: 'create-maa-project --update ocr-models'
+                })
+            ])
+        )
+        expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
+    })
+
+    it('creates repository tooling project under resource/base', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
 
@@ -147,7 +193,7 @@ describe('scaffold', () => {
         expect(await readJson(join(root, 'Maa Test', 'interface.json'))).toMatchObject({
             name: 'maa-test',
             label: 'Maa Test',
-            controller: [{ name: 'adb', type: 'Adb' }],
+            controller: [{ name: 'Android', label: 'Android / Emulator', type: 'Adb' }],
             resource: [{ name: 'base', path: ['./resource/base'] }],
             import: ['./tasks/tutorial.json']
         })
@@ -180,7 +226,7 @@ describe('scaffold', () => {
             ])
         })
         expect(await readJson(join(root, 'Maa Test', 'maa-project.json'))).toMatchObject({
-            controller: { kind: 'ADB' },
+            controller: { kinds: ['Adb'] },
             resources: [{ path: 'resource/base' }]
         })
         const packageJson = (await readJson(join(root, 'Maa Test', 'package.json'))) as {
@@ -740,7 +786,7 @@ describe('scaffold', () => {
             'resource/pack-a',
             'resource/pack-b'
         ])
-        expect(result.config.resources.map((pack) => pack.label)).toEqual(['Base', 'pack-a', 'Pack B'])
+        expect(result.config.resources.map((pack) => pack.label)).toEqual(['Base', 'Pack A', 'Pack B'])
         expect(await readJson(join(root, 'maa-resource-test', 'interface.json'))).toMatchObject({
             resource: [
                 { name: 'base', path: ['./resource/base'] },
@@ -753,6 +799,40 @@ describe('scaffold', () => {
         )
         expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/empty.png'))).toBe(true)
         expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/.gitkeep'))).toBe(false)
+    })
+
+    it('adds a resource pack during project creation', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+        process.chdir(root)
+
+        const result = await createProject(
+            defaultOptions({
+                name: 'maa-resource-create',
+                add: ['resource-pack'],
+                resourcePackSlug: 'pack-a',
+                label: 'Pack A'
+            })
+        )
+
+        expect(result.config.resources.map((pack) => pack.path)).toEqual([
+            'resource/base',
+            'resource/pack-a'
+        ])
+        expect(await readJson(join(root, 'maa-resource-create', 'interface.json'))).toMatchObject({
+            resource: [
+                { name: 'base', path: ['./resource/base'] },
+                { name: 'pack-a', label: 'Pack A', path: ['./resource/pack-a'] }
+            ]
+        })
+        expect(await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')).toContain(
+            'resource: ["./resource/base","./resource/pack-a"]'
+        )
+        expect(result.written).toEqual(
+            expect.arrayContaining([
+                'resource/pack-a/pipeline/.gitkeep',
+                'resource/pack-a/image/empty.png'
+            ])
+        )
     })
 
     it('rejects blank resource pack labels', async () => {
@@ -901,21 +981,18 @@ describe('scaffold', () => {
     })
 
     it('uses shared add-on semantics from the incremental entrypoint', async () => {
-        const lines: string[] = []
-
         await expect(
-            applyIncrementalAddons(defaultOptions({ add: ['ci'] }), (line) => lines.push(line))
-        ).resolves.toBeUndefined()
-        expect(lines).toEqual(['ci is already included in the default template.'])
+            applyIncrementalAddons(defaultOptions({ add: ['ci'] }))
+        ).rejects.toThrow('Unsupported add-on: ci')
         await expect(
-            applyIncrementalAddons(defaultOptions({ add: ['schema-sync'] }), (line) => lines.push(line))
+            applyIncrementalAddons(defaultOptions({ add: ['schema-sync'] }))
         ).rejects.toThrow('No maa-project.json found')
     })
 
     it('adds schema-sync files to an existing project', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
-        await createProject(defaultOptions({ name: 'maa-schema-sync-addon' }))
+        await createProject(minimalOptions({ name: 'maa-schema-sync-addon' }))
         const projectRoot = join(root, 'maa-schema-sync-addon')
         process.chdir(projectRoot)
 
@@ -926,9 +1003,14 @@ describe('scaffold', () => {
         )
         expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
             addons: {
+                devTools: { enabled: true },
+                github: { enabled: true },
                 schemaSync: { enabled: true }
             }
         })
+        expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(true)
+        expect(await pathExists(join(projectRoot, '.github/workflows/release.yml'))).toBe(true)
+        expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(true)
         expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
             scripts: {
                 'sync:schema': 'node tools/sync-schema.mjs'
@@ -1056,7 +1138,7 @@ describe('scaffold', () => {
     it('syncs controller metadata from project state to interface json', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
-        await createProject(defaultOptions({ name: 'maa-controller-test', controller: 'Win32' }))
+        await createProject(defaultOptions({ name: 'maa-controller-test', controllers: ['Win32'] }))
         const projectRoot = join(root, 'maa-controller-test')
         const interfacePath = join(projectRoot, 'interface.json')
         const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
@@ -1072,17 +1154,17 @@ describe('scaffold', () => {
         report = await runDoctor(projectRoot)
 
         expect(await readJson(interfacePath)).toMatchObject({
-            controller: [{ name: 'win32', type: 'Win32' }]
+            controller: [{ name: 'Windows', label: 'Windows app', type: 'Win32' }]
         })
         expect(report.lines.join('\n')).toContain('Interface metadata matches project config')
     })
 
-    it('rejects Chinese-only non-interactive project slug', async () => {
+    it('rejects Chinese-only non-interactive project ID', async () => {
         const root = await mkdtemp(join(tmpdir(), 'cmp-'))
         process.chdir(root)
 
         await expect(createProject(defaultOptions({ name: '测试项目' }))).rejects.toThrow(
-            'Project slug cannot be inferred'
+            'Project ID cannot be inferred'
         )
     })
 
@@ -2761,7 +2843,7 @@ function mfaaEntrypointForTest(slug: string, runtimePlatform: string): string {
 function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     return {
         template: 'pipeline',
-        add: [],
+        add: ['dev-tools', 'github'],
         update: [],
         doctor: false,
         diff: false,
@@ -2783,6 +2865,10 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
         explicitTemplate: false,
         ...overrides
     }
+}
+
+function minimalOptions(overrides: Partial<CliOptions> = {}): CliOptions {
+    return defaultOptions({ add: [], ...overrides })
 }
 
 function createTarGzArchive(

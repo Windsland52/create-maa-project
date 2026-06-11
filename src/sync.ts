@@ -1,7 +1,9 @@
 import { join } from 'node:path'
 import { CONFIG_FILE, readProjectConfig, readProjectLock, withProjectWriteLock, writeGeneratedFiles, writeProjectState } from './project.js'
 import { interfaceAgent, interfaceController, interfaceResourceItems, maatoolsConfigFile } from './templates.js'
-import type { CliOptions, ControllerKind, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
+import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
+import { projectControllerKinds } from './controllers.js'
+import { hasDevTools } from './features.js'
 import { addV, exists, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
 
 const CLI_VERSION = '0.1.0'
@@ -15,7 +17,10 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     normalizeConfig(config)
 
     const interfaceJson = JSON.parse(await readText(join(root, 'interface.json'))) as Record<string, unknown>
-    const packageJson = JSON.parse(await readText(join(root, 'package.json'))) as Record<string, unknown>
+    const packagePath = join(root, 'package.json')
+    const packageJson = (await exists(packagePath))
+        ? JSON.parse(await readText(packagePath)) as Record<string, unknown>
+        : undefined
     const files: ManagedFileInput[] = []
 
     switch (sync) {
@@ -34,14 +39,14 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
             assertSemver(version)
             config.project.version = version
             interfaceJson.version = addV(version)
-            packageJson.version = version
+            if (packageJson) packageJson.version = version
             break
         }
         case 'license': {
             const license = options.license
             if (!license) throw new Error('--sync license requires --license <spdx>')
             config.license.spdx = license
-            packageJson.license = license === 'None' ? 'UNLICENSED' : license
+            if (packageJson) packageJson.license = license === 'None' ? 'UNLICENSED' : license
             break
         }
         case 'network': {
@@ -61,15 +66,17 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     }
 
     applyInterfaceMetadata(interfaceJson, config)
-    applyPackageMetadata(packageJson, config)
+    if (packageJson) applyPackageMetadata(packageJson, config)
     const pyproject = await syncedPyproject(root, config)
 
     files.push(
         { path: 'interface.json', content: prettyJson(interfaceJson), managed: false },
         maatoolsConfigFile(config.resources.map((pack) => `./${pack.path}`)),
-        { path: 'package.json', content: stableJson(packageJson), managed: false },
         { path: CONFIG_FILE, content: stableJson(config), managed: false }
     )
+    if (packageJson && hasDevTools(config)) {
+        files.splice(2, 0, { path: 'package.json', content: stableJson(packageJson), managed: false })
+    }
     if (pyproject) files.push(pyproject)
 
     return withProjectWriteLock(
@@ -167,7 +174,7 @@ function applyInterfaceMetadata(
     interfaceJson.name = config.project.slug
     interfaceJson.label = config.project.displayName
     interfaceJson.version = addV(config.project.version)
-    interfaceJson.controller = interfaceController(config.controller.kind)
+    interfaceJson.controller = interfaceController(projectControllerKinds(config))
     interfaceJson.resource = interfaceResourceItems(config.resources)
     if (config.project.github) {
         interfaceJson.github = config.project.github
@@ -220,9 +227,9 @@ function syncTomlProjectField(content: string, key: 'name' | 'version', value: s
 
 function normalizeConfig(config: MaaProjectConfig): void {
     const configWithOptionalController = config as MaaProjectConfig & {
-        controller?: { kind?: ControllerKind }
+        controller?: { kinds?: unknown; kind?: unknown }
     }
-    if (!configWithOptionalController.controller?.kind) {
-        configWithOptionalController.controller = { kind: 'ADB' }
+    if (!Array.isArray(configWithOptionalController.controller?.kinds)) {
+        configWithOptionalController.controller = { kinds: projectControllerKinds(config) }
     }
 }

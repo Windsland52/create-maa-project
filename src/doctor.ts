@@ -2,7 +2,9 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { managedFileHash, readProjectConfig, readProjectLock } from './project.js'
 import { interfaceAgent, interfaceController, interfaceResourceItems } from './templates.js'
-import type { ControllerKind, MaaProjectConfig, MaaProjectLock } from './types.js'
+import type { MaaProjectConfig, MaaProjectLock } from './types.js'
+import { projectControllerKinds } from './controllers.js'
+import { hasDevTools, hasGithubAutomation } from './features.js'
 import { addV, exists, readText } from './utils.js'
 
 export type DoctorReport = {
@@ -18,10 +20,12 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
 
     lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
     ok = (await checkInterfaceMetadata(root, config, lines)) && ok
-    ok = (await checkPackageMetadata(root, config, lines)) && ok
-    ok = (await checkNodeToolingFiles(root, config, lines)) && ok
-    ok = (await checkVscodeSettings(root, lines)) && ok
-    ok = (await checkNodeLockfile(root, lock, lines)) && ok
+    if (hasDevTools(config)) {
+        ok = (await checkPackageMetadata(root, config, lines)) && ok
+        ok = (await checkNodeToolingFiles(root, config, lines)) && ok
+        if (config.features.vscode.enabled) ok = (await checkVscodeSettings(root, lines)) && ok
+        ok = (await checkNodeLockfile(root, lock, lines)) && ok
+    }
     ok = (await checkPyprojectMetadata(root, config, lines)) && ok
     ok = (await checkResourceOrder(root, config, lines)) && ok
     ok = (await checkReferencedPaths(root, lines)) && ok
@@ -95,19 +99,14 @@ async function checkInterfaceMetadata(
     }
     if (
         JSON.stringify(interfaceJson.controller ?? []) !==
-        JSON.stringify(interfaceController(projectControllerKind(config)))
+        JSON.stringify(interfaceController(projectControllerKinds(config)))
     ) {
-        lines.push('[ERR] interface.json controller differs from maa-project.json controller.kind.')
+        lines.push('[ERR] interface.json controller differs from maa-project.json controller.kinds.')
         lines.push('      To fix: create-maa-project --sync metadata')
         ok = false
     }
     if (ok) lines.push('[OK] Interface metadata matches project config.')
     return ok
-}
-
-function projectControllerKind(config: MaaProjectConfig): ControllerKind {
-    const raw = (config as MaaProjectConfig & { controller?: { kind?: unknown } }).controller?.kind
-    return raw === 'ADB' || raw === 'Win32' || raw === 'None' ? raw : 'ADB'
 }
 
 function expectedInterfaceAgent(config: MaaProjectConfig): ReturnType<typeof interfaceAgent>[] | undefined {
@@ -226,7 +225,7 @@ async function checkNodeToolingFiles(
         ok = false
     }
 
-    const workflows = ['.github/workflows/check.yml', '.github/workflows/release.yml']
+    const workflows = hasGithubAutomation(config) ? ['.github/workflows/check.yml', '.github/workflows/release.yml'] : []
     if (config.addons.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
     for (const workflow of workflows) {
         const workflowPath = join(root, workflow)
@@ -540,9 +539,11 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
         lint: 'node tools/check-project.mjs',
         'check:schema': 'node tools/validate-schema.mjs',
         'check:maa': 'pnpm exec maa-tools check',
-        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
-        'release:dry-run': 'node tools/build-release.mjs --dry-run',
-        'sync:runtime': 'node tools/sync-runtime.mjs'
+        check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint'
+    }
+    if (hasGithubAutomation(config)) {
+        scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
+        scripts['sync:runtime'] = 'node tools/sync-runtime.mjs'
     }
     if (config.addons.schemaSync) {
         scripts['sync:schema'] = 'node tools/sync-schema.mjs'

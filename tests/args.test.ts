@@ -21,14 +21,20 @@ describe('parseArgs', () => {
         expect(options.template).toBe('agent')
         expect(options.slug).toBe('arknights-helper')
         expect(options.skipDownload).toBe(true)
-        expect(options.controller).toBe('Win32')
+        expect(options.controllers).toEqual(['Win32'])
+    })
+
+    it('parses multiple control targets', () => {
+        const options = parseArgs(['--controller', 'ADB,Win32', '--controller', 'macos'])
+
+        expect(options.controllers).toEqual(['Adb', 'Win32', 'MacOS'])
     })
 
     it('rejects unknown options', () => {
         expect(() => parseArgs(['--bad'])).toThrow('Unknown option')
     })
 
-    it('parses resource pack slug after --add resource-pack', () => {
+    it('parses resource pack folder after --add resource-pack', () => {
         const options = parseArgs(['--add', 'resource-pack', 'extra', '--label', '额外资源'])
 
         expect(options.add).toEqual(['resource-pack'])

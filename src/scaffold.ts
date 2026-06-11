@@ -9,7 +9,9 @@ import {
     configFile,
     communityFiles,
     dependabotFile,
+    devToolFiles,
     emptyPng,
+    githubFiles,
     interfaceAgent,
     interfaceResourceItems,
     maatoolsConfigFile,
@@ -47,13 +49,15 @@ import {
     writeGeneratedFiles,
     writeProjectState
 } from './project.js'
-import { assertSupportedCreateAddons } from './addons.js'
+import { assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
 import {
     resolveOcrManifestFromEnvironment,
     type AssetDownloader,
     type AssetManifestResolver,
     type DownloadProgressReporter
 } from './assets.js'
+import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
+import { hasDevTools, hasGithubAutomation } from './features.js'
 import { updateOcrModels } from './update.js'
 
 const CLI_VERSION = '0.1.0'
@@ -86,7 +90,7 @@ export async function createProject(
     const slug = options.slug ? normalizeSlug(options.slug) : normalizeSlug(defaultName)
     if (!slug) {
         throw new Error(
-            `Project slug cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`
+            `Project ID cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`
         )
     }
     assertValidSlug(slug)
@@ -102,6 +106,9 @@ export async function createProject(
     await mkdir(targetRoot, { recursive: true })
 
     const includeAgent = options.template === 'agent' || options.add.includes('agent')
+    const resolvedAddons = resolveAddonDependencies(options.add, { includeAgent })
+    const includeDevTools = resolvedAddons.includes('dev-tools')
+    const includeGithub = resolvedAddons.includes('github')
     const pythonDevCommand = includeAgent ? await detectPythonDevCommand() : undefined
     const config = createConfig({
         slug,
@@ -109,12 +116,14 @@ export async function createProject(
         version,
         includeAgent,
         pythonDevCommand,
-        options
+        options,
+        resolvedAddons
     })
     const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
     const pending = defaultPending({
         includeAgent,
         options,
+        includeDevTools,
         pythonDevCommand,
         includeOcrPending: !shouldDownloadOcrModels
     })
@@ -123,14 +132,16 @@ export async function createProject(
             slug,
             displayName,
             version,
-            controller: options.controller ?? 'ADB',
+            controllers: options.controllers ?? DEFAULT_CONTROLLER_KINDS,
             license: options.license ?? 'AGPL-3.0-or-later',
+            includeDevTools,
+            includeGithub,
             includeAgent,
-            includeSchemaSync: options.add.includes('schema-sync'),
+            includeSchemaSync: resolvedAddons.includes('schema-sync'),
             pythonDevCommand,
             resources: config.resources
         }),
-        ...addonFilesForCreate(options.add, { displayName, version }),
+        ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, version }),
         configFile(config)
     ]
     const lock = emptyLock(CLI_VERSION)
@@ -225,6 +236,80 @@ function createOcrUpdateOptions(environment: {
     return options
 }
 
+export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    if (hasDevTools(config)) {
+        return {
+            root,
+            config,
+            lock,
+            written: [],
+            skipped: [],
+            pending: lock.pending
+        }
+    }
+
+    config.features.vscode = { enabled: true }
+    config.features.quality = { enabled: true }
+    config.addons.devTools = { enabled: true }
+    const files = [
+        ...devToolFiles(templateInputFromConfig(config)),
+        configFile(config)
+    ]
+    return writeAddonFiles(root, config, lock, files, options, {
+        overwriteUnmanaged: true,
+        pending: [
+            {
+                kind: 'node-deps',
+                reason: 'Node dependencies need to be installed for dev tools.',
+                command: 'create-maa-project --update node-deps'
+            }
+        ]
+    })
+}
+
+export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
+    const root = process.cwd()
+    const config = await readProjectConfig(root)
+    const lock = await readProjectLock(root)
+    if (!hasDevTools(config)) {
+        throw new Error('--add github requires --add dev-tools first.')
+    }
+    if (hasGithubAutomation(config)) {
+        return {
+            root,
+            config,
+            lock,
+            written: [],
+            skipped: [],
+            pending: lock.pending
+        }
+    }
+
+    config.features.ci = { enabled: true }
+    config.features.release = { enabled: true }
+    config.runtime.mfa.enabled = true
+    config.addons.github = { enabled: true }
+    const packageJson = await readJsonObject(root, 'package.json')
+    packageJson.scripts = {
+        ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
+        'release:dry-run': 'node tools/build-release.mjs --dry-run',
+        'sync:runtime': 'node tools/sync-runtime.mjs'
+    }
+    const files = [
+        ...githubFiles(templateInputFromConfig(config)),
+        {
+            path: 'package.json',
+            content: stableJson(packageJson),
+            managed: false
+        },
+        configFile(config)
+    ]
+    return writeAddonFiles(root, config, lock, files, options, { overwriteUnmanaged: true })
+}
+
 export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     const root = process.cwd()
     const config = await readProjectConfig(root)
@@ -297,12 +382,14 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
             content: stableJson(vscodeSettings),
             managed: false
         },
-        releaseWorkflowFile({
-            slug: config.project.slug,
-            includeAgent: true
-        }),
         configFile(config)
     ]
+    if (hasGithubAutomation(config)) {
+        files.push(releaseWorkflowFile({
+            slug: config.project.slug,
+            includeAgent: true
+        }))
+    }
     return withProjectWriteLock(
         root,
         process.argv.join(' '),
@@ -342,7 +429,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
         throw new Error(`Resource pack already exists: ${slug}`)
     }
     const label = requiredNonBlank(
-        options.label ?? options.displayName ?? slug,
+        options.label ?? displayNameFromSlug(slug),
         'Resource pack label cannot be blank.'
     )
     config.resources.push({
@@ -486,7 +573,10 @@ function createConfig(input: {
     includeAgent: boolean
     pythonDevCommand?: string[] | undefined
     options: CliOptions
+    resolvedAddons: string[]
 }): MaaProjectConfig {
+    const includeDevTools = input.resolvedAddons.includes('dev-tools')
+    const includeGithub = input.resolvedAddons.includes('github')
     const config: MaaProjectConfig = {
         schemaVersion: 1,
         project: {
@@ -496,30 +586,23 @@ function createConfig(input: {
             initialTemplate: input.includeAgent ? 'agent' : 'pipeline'
         },
         features: {
-            ci: { enabled: true },
-            release: { enabled: true },
-            vscode: { enabled: true },
-            quality: { enabled: true }
+            ci: { enabled: includeGithub },
+            release: { enabled: includeGithub },
+            vscode: { enabled: includeDevTools },
+            quality: { enabled: includeDevTools }
         },
-        addons: initialAddons(input.options.add),
+        addons: initialAddons(input.resolvedAddons),
         controller: {
-            kind: input.options.controller ?? 'ADB'
+            kinds: input.options.controllers ?? DEFAULT_CONTROLLER_KINDS
         },
-        resources: [
-            {
-                slug: 'base',
-                label: 'Base',
-                path: 'resource/base',
-                enabled: true
-            }
-        ],
+        resources: initialResources(input.options),
         maafw: {
             channel: 'latest'
         },
         runtime: {
             mfa: {
                 channel: 'latest',
-                enabled: true
+                enabled: includeGithub
             }
         },
         network: {
@@ -545,7 +628,7 @@ async function writeAddonFiles(
     lock: Awaited<ReturnType<typeof readProjectLock>>,
     files: ManagedFileInput[],
     options: CliOptions,
-    writeOptions: { overwriteUnmanaged?: boolean } = {}
+    writeOptions: { overwriteUnmanaged?: boolean; pending?: PendingItem[] } = {}
 ): Promise<ScaffoldResult> {
     return withProjectWriteLock(
         root,
@@ -558,6 +641,9 @@ async function writeAddonFiles(
             })
             Object.assign(lock.managedFiles, result.lockEntries)
             recordCreatedFiles(lock, files, result.written)
+            if (writeOptions.pending) {
+                lock.pending = mergePending(lock.pending, writeOptions.pending)
+            }
             lock.template.lastUpdatedBy = 'create-maa-project'
             lock.template.templateVersion = CLI_VERSION
             await writeProjectState(root, config, lock)
@@ -592,6 +678,8 @@ function recordCreatedFiles(
 
 function initialAddons(addons: string[]): Record<string, unknown> {
     const state: Record<string, unknown> = {}
+    if (addons.includes('dev-tools')) state.devTools = { enabled: true }
+    if (addons.includes('github')) state.github = { enabled: true }
     if (addons.includes('changelog')) state.changelog = { enabled: true }
     if (addons.includes('dependabot')) state.dependabot = { enabled: true }
     if (addons.includes('community')) state.community = { enabled: true }
@@ -599,15 +687,72 @@ function initialAddons(addons: string[]): Record<string, unknown> {
     return state
 }
 
+function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
+    const resources: MaaProjectConfig['resources'] = [
+        {
+            slug: 'base',
+            label: 'Base',
+            path: 'resource/base',
+            enabled: true
+        }
+    ]
+    if (!options.add.includes('resource-pack')) return resources
+    const slug = normalizeSlug(options.resourcePackSlug ?? '')
+    if (!slug) throw new Error('Resource pack folder cannot be blank.')
+    assertValidSlug(slug)
+    resources.push({
+        slug,
+        label: requiredNonBlank(
+            options.label ?? displayNameFromSlug(slug),
+            'Resource pack display name cannot be blank.'
+        ),
+        path: `resource/${slug}`,
+        enabled: true
+    })
+    return resources
+}
+
 function addonFilesForCreate(
-    addons: string[],
+    options: CliOptions,
+    resources: MaaProjectConfig['resources'],
     input: { displayName: string; version: string }
 ): ManagedFileInput[] {
     const files: ManagedFileInput[] = []
+    for (const pack of resources.slice(1)) {
+        files.push(
+            {
+                path: `${pack.path}/pipeline/.gitkeep`,
+                content: '',
+                managed: false
+            },
+            {
+                path: `${pack.path}/image/empty.png`,
+                content: emptyPng(),
+                managed: false
+            }
+        )
+    }
+    const addons = options.add
     if (addons.includes('changelog')) files.push(changelogFile(input))
     if (addons.includes('dependabot')) files.push(dependabotFile())
     if (addons.includes('community')) files.push(...communityFiles(input))
     return files
+}
+
+function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof devToolFiles>[0] {
+    return {
+        slug: config.project.slug,
+        displayName: config.project.displayName,
+        version: config.project.version,
+        controllers: projectControllerKinds(config),
+        license: config.license.spdx,
+        includeDevTools: hasDevTools(config),
+        includeGithub: hasGithubAutomation(config),
+        includeAgent: config.python !== undefined,
+        includeSchemaSync: Boolean(config.addons.schemaSync),
+        pythonDevCommand: config.python?.devCommand,
+        resources: config.resources
+    }
 }
 
 export async function assertCanCreateTarget(
@@ -758,17 +903,19 @@ function errorMessage(error: unknown): string {
 
 function defaultPending(input: {
     includeAgent: boolean
+    includeDevTools: boolean
     options: CliOptions
     pythonDevCommand?: string[] | undefined
     includeOcrPending?: boolean
 }): PendingItem[] {
-    const pending: PendingItem[] = [
-        {
+    const pending: PendingItem[] = []
+    if (input.includeDevTools) {
+        pending.push({
             kind: 'node-deps',
             reason: 'Generated project dependencies are pinned in package.json but not installed by the scaffold.',
             command: 'create-maa-project --update node-deps'
-        }
-    ]
+        })
+    }
     if (input.includeOcrPending !== false && input.options.skipDownload) {
         pending.push({
             kind: 'ocr-model',
@@ -858,6 +1005,14 @@ function requiredNonBlank(value: string, message: string): string {
     const normalized = value.trim()
     if (!normalized) throw new Error(message)
     return normalized
+}
+
+function displayNameFromSlug(slug: string): string {
+    return slug
+        .split('-')
+        .filter(Boolean)
+        .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+        .join(' ')
 }
 
 async function readInterfaceJson(root: string): Promise<Record<string, unknown>> {

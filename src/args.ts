@@ -4,6 +4,7 @@ import {
   normalizeControllerKind,
   uniqueControllerKinds
 } from './controllers.js'
+import { parseCliLanguage } from './lang.js'
 
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
@@ -21,6 +22,7 @@ export function parseArgs(argv: string[]): CliOptions {
     skipDownload: false,
     verbose: false,
     noColor: false,
+    lang: 'auto',
     assist: false,
     dryRun: false,
     acceptChanges: [],
@@ -100,6 +102,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--no-color':
         options.noColor = true
+        break
+      case '--lang':
+        options.lang = parseCliLanguage(readValue(argv, ++index, arg), arg)
         break
       case '--git':
         options.initializeGit = true

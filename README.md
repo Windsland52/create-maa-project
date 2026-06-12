@@ -204,6 +204,7 @@ Useful execution flags:
 --allow-pending-commit
 --skip-download
 --log-file <path>
+--lang auto|en|zh-CN
 --no-color
 ```
 
@@ -222,6 +223,9 @@ Asset and dependency operations are explicit and recoverable:
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest.
 - `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` syncs all desktop MaaFramework and
   MFAAvalonia runtime platforms.
+- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` controls interactive prompt language.
+  `auto` only enables Chinese prompts for Chinese interactive terminals; machine-readable
+  output stays English.
 
 ## Agent Projects
 

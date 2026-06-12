@@ -2,6 +2,7 @@ export type TemplateName = 'pipeline' | 'agent'
 export type ControllerKind = 'Adb' | 'Win32' | 'MacOS' | 'PlayCover' | 'Gamepad' | 'WlRoots'
 export type LicenseKind = 'AGPL-3.0-or-later' | 'MIT' | 'None'
 export type NetworkMode = 'auto' | 'official'
+export type CliLanguage = 'auto' | 'en' | 'zh-CN'
 export type MaaProjectConfig = {
   schemaVersion: 1
   project: {
@@ -111,6 +112,7 @@ export type CliOptions = {
   skipDownload: boolean
   verbose: boolean
   noColor: boolean
+  lang?: CliLanguage
   assist: boolean
   initializeGit?: boolean
   network?: NetworkMode

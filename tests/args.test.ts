@@ -94,6 +94,27 @@ describe('parseArgs', () => {
     expect(options.mcp).toBe(true)
   })
 
+  it('parses interactive prompt language', () => {
+    expect(
+      parseArgs([
+        '--lang',
+        'zh'
+      ]).lang
+    ).toBe('zh-CN')
+    expect(
+      parseArgs([
+        '--lang',
+        'en'
+      ]).lang
+    ).toBe('en')
+    expect(() =>
+      parseArgs([
+        '--lang',
+        'fr'
+      ])
+    ).toThrow('--lang must be one of: auto, en, zh-CN')
+  })
+
   it('parses explicit git initialization choices', () => {
     expect(
       parseArgs([

@@ -195,6 +195,7 @@ create-maa-project --clean-cache
 --allow-pending-commit
 --skip-download
 --log-file <path>
+--lang auto|en|zh-CN
 --no-color
 ```
 
@@ -213,6 +214,8 @@ create-maa-project --clean-cache
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。
 - `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` 同步全部桌面 MaaFramework 和 MFAAvalonia
   runtime 平台。
+- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` 控制交互式提示语言。`auto` 只会在中文交互终端
+  启用中英提示；机器可读输出仍保持英文。
 
 ## Agent 项目
 

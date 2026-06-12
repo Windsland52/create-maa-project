@@ -743,6 +743,7 @@ describe('scaffold', () => {
     expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
     const pyproject = await readFile(join(root, 'maa-agent-test', 'pyproject.toml'), 'utf8')
     expect(pyproject).toContain('name = "maa-agent-test"\nversion = "0.1.0"')
+    expect(pyproject).toContain('[tool.hatch.build.targets.wheel]\npackages = ["agent"]')
     expect(pyproject).toContain('[tool.ruff]')
     expect(pyproject).toContain('[tool.pyright]')
     expect(pyproject).toContain('extraPaths = ["agent"]')
@@ -1959,7 +1960,9 @@ version = "ignored"
     expect(report.ok).toBe(false)
     expect(output).toContain('pyproject.toml project.name differs')
     expect(output).toContain('pyproject.toml project.version differs')
+    expect(output).toContain('pyproject.toml hatch wheel packages must include agent')
     expect(output).toContain('create-maa-project --sync metadata')
+    expect(output).toContain('create-maa-project --update template')
   })
 
   it('doctor reports path and resource config drift', async () => {
@@ -2336,6 +2339,25 @@ version = "0.1.0"
         { cwd: projectRoot }
       )
     ).rejects.toThrow('pyproject.toml project.name must match')
+
+    await writeFile(
+      join(projectRoot, 'pyproject.toml'),
+      `[project]
+name = "maa-pyproject-lint"
+version = "0.1.0"
+`,
+      'utf8'
+    )
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs'
+        ],
+        { cwd: projectRoot }
+      )
+    ).rejects.toThrow('pyproject.toml hatch wheel packages must include agent')
   })
 
   it('generated schema validation script checks local project JSON shape', async () => {

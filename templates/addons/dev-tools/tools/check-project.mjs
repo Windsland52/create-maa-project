@@ -136,12 +136,16 @@ if (
 }
 
 if (existsSync('pyproject.toml')) {
-  const pyproject = parseTomlProjectMetadata(readFileSync('pyproject.toml', 'utf8'))
+  const pyprojectContent = readFileSync('pyproject.toml', 'utf8')
+  const pyproject = parseTomlProjectMetadata(pyprojectContent)
   if (pyproject.name !== project.project?.slug) {
     throw new Error('pyproject.toml project.name must match maa-project.json project.slug')
   }
   if (pyproject.version !== project.project?.version) {
     throw new Error('pyproject.toml project.version must match maa-project.json project.version')
+  }
+  if (!tomlHasAgentWheelPackage(pyprojectContent)) {
+    throw new Error('pyproject.toml hatch wheel packages must include agent')
   }
 }
 
@@ -510,6 +514,30 @@ function tomlProjectSection(content) {
     if (inside) section.push(line)
   }
   return section.join('\n')
+}
+
+function tomlHasAgentWheelPackage(content) {
+  const section = tomlSection(content, 'tool.hatch.build.targets.wheel')
+  return /^\s*packages\s*=\s*\[\s*"agent"\s*\]\s*$/.test(section)
+}
+
+function tomlSection(content, name) {
+  const section = []
+  let inside = false
+  const pattern = new RegExp('^\\s*\\[' + escapeRegExp(name) + '\\]\\s*$')
+  for (const line of content.split(/\r?\n/)) {
+    if (pattern.test(line)) {
+      inside = true
+      continue
+    }
+    if (inside && /^\s*\[[^\]]+\]\s*$/.test(line)) break
+    if (inside) section.push(line)
+  }
+  return section.join('\n')
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function parseTomlStringField(section, key) {

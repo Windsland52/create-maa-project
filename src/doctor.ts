@@ -322,7 +322,8 @@ async function checkPyprojectMetadata(
   const pyprojectPath = join(root, 'pyproject.toml')
   if (!(await exists(pyprojectPath))) return true
 
-  const metadata = parseTomlProjectMetadata(await readText(pyprojectPath))
+  const content = await readText(pyprojectPath)
+  const metadata = parseTomlProjectMetadata(content)
   let ok = true
   if (metadata.name !== config.project.slug) {
     lines.push('[ERR] pyproject.toml project.name differs from maa-project.json project.slug.')
@@ -334,6 +335,11 @@ async function checkPyprojectMetadata(
       '[ERR] pyproject.toml project.version differs from maa-project.json project.version.'
     )
     lines.push('      To fix: create-maa-project --sync metadata')
+    ok = false
+  }
+  if (!tomlHasAgentWheelPackage(content)) {
+    lines.push('[ERR] pyproject.toml hatch wheel packages must include agent.')
+    lines.push('      To fix: create-maa-project --update template')
     ok = false
   }
   if (ok) lines.push('[OK] Python project metadata matches project config.')
@@ -634,6 +640,30 @@ function tomlProjectSection(content: string): string {
     if (inside) section.push(line)
   }
   return section.join('\n')
+}
+
+function tomlHasAgentWheelPackage(content: string): boolean {
+  const section = tomlSection(content, 'tool.hatch.build.targets.wheel')
+  return /^\s*packages\s*=\s*\[\s*"agent"\s*\]\s*$/m.test(section)
+}
+
+function tomlSection(content: string, name: string): string {
+  const section: string[] = []
+  let inside = false
+  const pattern = new RegExp(`^\\s*\\[${escapeRegExp(name)}\\]\\s*$`)
+  for (const line of content.split(/\r?\n/)) {
+    if (pattern.test(line)) {
+      inside = true
+      continue
+    }
+    if (inside && /^\s*\[[^\]]+\]\s*$/.test(line)) break
+    if (inside) section.push(line)
+  }
+  return section.join('\n')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function parseTomlStringField(section: string, key: 'name' | 'version'): string | undefined {

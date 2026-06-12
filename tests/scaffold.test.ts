@@ -4222,6 +4222,7 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     acceptChangesRequested: false,
     cleanCache: false,
     report: false,
+    mcp: false,
     explicitTemplate: false,
     ...overrides
   }

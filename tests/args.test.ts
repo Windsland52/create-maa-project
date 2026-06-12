@@ -86,6 +86,14 @@ describe('parseArgs', () => {
     expect(options.report).toBe(true)
   })
 
+  it('parses MCP server mode', () => {
+    const options = parseArgs([
+      '--mcp'
+    ])
+
+    expect(options.mcp).toBe(true)
+  })
+
   it('parses explicit git initialization choices', () => {
     expect(
       parseArgs([

@@ -7,9 +7,8 @@ projects. It creates deterministic Pipeline or Python Agent projects, records pr
 intent in committed state files, and provides update, sync, diff, doctor, and JSON report
 interfaces for humans and tool wrappers.
 
-The CLI is intentionally independent from LLMs or MCP servers. MaaMCP or other tools can
-wrap it through the stable `--report` protocol, but all writes still go through the CLI's
-backup, lock, hash, and validation paths.
+The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
+the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consistent.
 
 ## Installation
 
@@ -324,19 +323,49 @@ Example failure report:
 }
 ```
 
-## MCP Boundary
+## MCP Server
 
-The recommended MCP integration is a thin wrapper around this CLI:
+Run the MCP server over stdio with:
 
-- MCP calls `create-maa-project --report` with explicit arguments.
-- MCP parses only stdout JSON.
-- MCP does not expose arbitrary shell access.
-- MCP keeps writes in the CLI engine, so backups, locks, managed baselines, and pending
-  actions remain consistent.
+```bash
+create-maa-project --mcp
+```
 
-Useful MCP tools can map to `create`, `doctor`, `diff`, `sync`, and `update` today.
-`add resource-pack` and `accept-changes` should wait for report coverage before being
-exposed through the same wrapper contract.
+Configure the server `cwd` as the MaaFW project root for `doctor`, `diff`, `sync`,
+`update`, `add`, `accept_changes`, `restore`, and `clean_cache`. For `create_project`,
+set `cwd` to the parent directory where the new project should be created.
+
+Example MCP server configuration:
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "create-maa-project",
+      "args": [
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+Available tools:
+
+- `create_project`: `name`, optional `template`, `slug`, `displayName`, `controller`,
+  `license`, `network`, `add`, `skipDownload`, and `git`.
+- `doctor`, `diff`, and `clean_cache`: no parameters.
+- `sync`: `target` plus optional `value`. `display-name`, `version`, `license`, and
+  `github-url` require `value`; `metadata` and `network` can omit it.
+- `update`: `targets` and optional `diff`.
+- `add`: `addon`, optional `resourcePackSlug`, and optional `label`.
+- `accept_changes`: optional `paths`.
+- `restore`: `backupId`.
+
+Tool calls return one text content item containing a compact `CliJsonReport`. MCP
+`isError` is set to `true` when `report.ok` is `false`. The MCP server does not write
+tool results to stdout directly and does not exit after tool-call errors.
 
 ## Releasing This CLI
 

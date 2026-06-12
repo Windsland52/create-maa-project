@@ -1,5 +1,4 @@
 import { execFile, type ExecFileException } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -34,10 +33,8 @@ type CliResult = {
   exitCode: number
 }
 
-const require = createRequire(import.meta.url)
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const tsxCli = require.resolve('tsx/cli')
-const cliEntry = join(repoRoot, 'src/index.ts')
+const cliEntry = join(repoRoot, 'dist/index.js')
 const tempRoots: string[] = []
 const CLI_TEST_TIMEOUT_MS = 20000
 
@@ -60,7 +57,7 @@ describe('CLI JSON reports', () => {
         ],
         root
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(0)
       expect(report).toMatchObject({
@@ -102,7 +99,7 @@ describe('CLI JSON reports', () => {
         ],
         projectRoot
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(0)
       expect(report).toMatchObject({
@@ -133,7 +130,7 @@ describe('CLI JSON reports', () => {
         ],
         projectRoot
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(0)
       expect(report).toMatchObject({
@@ -170,7 +167,7 @@ describe('CLI JSON reports', () => {
         ],
         projectRoot
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(0)
       expect(report).toMatchObject({
@@ -208,7 +205,7 @@ describe('CLI JSON reports', () => {
         ],
         projectRoot
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(1)
       expect(report).toMatchObject({
@@ -248,7 +245,7 @@ describe('CLI JSON reports', () => {
         ],
         projectRoot
       )
-      const report = parseStdoutReport(result.stdout)
+      const report = parseStdoutReport(result.stdout, result.stderr)
 
       expect(result.exitCode).toBe(1)
       expect(report).toMatchObject({
@@ -275,8 +272,8 @@ async function createReportProject(name: string): Promise<string> {
     ],
     root
   )
-  expect(result.exitCode).toBe(0)
-  parseStdoutReport(result.stdout)
+  expect(result.exitCode, result.stderr).toBe(0)
+  parseStdoutReport(result.stdout, result.stderr)
   return join(root, name)
 }
 
@@ -291,17 +288,13 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
     execFile(
       process.execPath,
       [
-        tsxCli,
         cliEntry,
         ...args
       ],
       {
         cwd,
         timeout: 15000,
-        env: {
-          ...process.env,
-          CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS: '1'
-        }
+        env: testChildEnv()
       },
       (error, stdout, stderr) => {
         const execError = error as ExecFileException | null
@@ -320,12 +313,19 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
   })
 }
 
-function parseStdoutReport(stdout: string): JsonReport {
-  expect(stdout).not.toBe('')
-  expect(stdout).not.toContain('Log:')
-  expect(stdout).not.toContain('Error:')
-  expect(stdout).not.toContain('Downloading OCR')
-  expect(stdout).not.toContain('Written files:')
+function testChildEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS: '1'
+  }
+}
+
+function parseStdoutReport(stdout: string, stderr: string): JsonReport {
+  expect(stdout, stderr).not.toBe('')
+  expect(stdout, stderr).not.toContain('Log:')
+  expect(stdout, stderr).not.toContain('Error:')
+  expect(stdout, stderr).not.toContain('Downloading OCR')
+  expect(stdout, stderr).not.toContain('Written files:')
   let parsed: unknown
   expect(() => {
     parsed = JSON.parse(stdout)

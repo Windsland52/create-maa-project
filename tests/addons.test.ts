@@ -124,6 +124,7 @@ function options(add: string[]): CliOptions {
     acceptChangesRequested: false,
     cleanCache: false,
     report: false,
+    mcp: false,
     explicitTemplate: false
   }
 }

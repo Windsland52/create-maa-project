@@ -6,8 +6,8 @@
 Pipeline 或 Python Agent 项目，把项目意图记录在已提交的状态文件中，并提供 update、sync、
 diff、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。
 
-CLI 本身不依赖 LLM 或 MCP server。MaaMCP 或其它工具可以通过稳定的 `--report` 协议封装它，但
-所有落盘仍然走 CLI 自己的备份、锁、hash 和校验流程。
+CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、锁、
+hash、pending action 和 JSON report 都能保持一致。
 
 ## 安装
 
@@ -308,19 +308,49 @@ type CliJsonReport = {
 }
 ```
 
-## MCP 边界
+## MCP Server
 
-推荐的 MCP 接入方式是薄封装这个 CLI：
+通过 stdio 启动 MCP server：
 
-- MCP 使用显式参数调用 `create-maa-project --report`。
-- MCP 只解析 stdout JSON。
-- MCP 不暴露任意 shell。
-- MCP 把写文件留在 CLI 引擎内完成，因此备份、锁、managed baseline 和 pending action 能保持一
-  致。
+```bash
+create-maa-project --mcp
+```
 
-当前可用的 MCP tools 可以映射到 `create`、`doctor`、`diff`、`sync` 和 `update`。
-`add resource-pack` 和 `accept-changes` 应等到补齐 report 覆盖后，再暴露到同一套 wrapper
-contract 中。
+调用 `doctor`、`diff`、`sync`、`update`、`add`、`accept_changes`、`restore` 和
+`clean_cache` 时，把 server 的 `cwd` 配成 MaaFW 项目根目录。调用 `create_project` 时，把
+`cwd` 配成新项目要创建到的父目录。
+
+MCP server 配置示例：
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "create-maa-project",
+      "args": [
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+可用 tools：
+
+- `create_project`：`name`，可选 `template`、`slug`、`displayName`、`controller`、
+  `license`、`network`、`add`、`skipDownload` 和 `git`。
+- `doctor`、`diff` 和 `clean_cache`：无参数。
+- `sync`：`target` 和可选 `value`。`display-name`、`version`、`license`、`github-url`
+  需要 `value`；`metadata` 和 `network` 可以省略。
+- `update`：`targets` 和可选 `diff`。
+- `add`：`addon`，可选 `resourcePackSlug` 和 `label`。
+- `accept_changes`：可选 `paths`。
+- `restore`：`backupId`。
+
+每次 tool call 返回一个 text content，其中内容是紧凑的 `CliJsonReport`。当 `report.ok` 为
+`false` 时，MCP `isError` 会设为 `true`。MCP server 不会把工具结果直接写到 stdout，也不会因
+单次 tool call 报错而退出。
 
 ## 发布本 CLI
 

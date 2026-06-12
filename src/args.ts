@@ -27,6 +27,7 @@ export function parseArgs(argv: string[]): CliOptions {
     acceptChangesRequested: false,
     cleanCache: false,
     report: false,
+    mcp: false,
     explicitTemplate: false
   }
 
@@ -66,6 +67,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--report':
         options.report = true
+        break
+      case '--mcp':
+        options.mcp = true
         break
       case '--diff':
         options.diff = true

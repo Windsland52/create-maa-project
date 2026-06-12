@@ -28,6 +28,7 @@
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
         "check:network": "tsx scripts/check-network-assets.ts",
+        "pretest": "pnpm build",
         "test": "vitest run && node scripts/test-python.mjs",
         "check": "pnpm format:check && pnpm typecheck && pnpm test"
     },
@@ -48,5 +49,8 @@
     "publishConfig": {
         "access": "public"
     },
-    "packageManager": "pnpm@11.5.1"
+    "packageManager": "pnpm@11.5.1",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0"
+    }
 }

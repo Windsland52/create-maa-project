@@ -129,6 +129,7 @@ export type CliOptions = {
   restore?: string
   cleanCache: boolean
   report: boolean
+  mcp: boolean
   logFile?: string
   explicitTemplate: boolean
 }

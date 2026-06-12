@@ -51,6 +51,11 @@ async function main(): Promise<void> {
 
   try {
     const options = parseArgs(argv)
+    if (options.mcp) {
+      const { startMcpServer } = await import('./mcp.js')
+      await startMcpServer()
+      return
+    }
     if (options.report) options.noInteractive = true
     command = reportCommandFromOptions(options)
     logFile = options.logFile

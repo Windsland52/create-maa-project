@@ -470,7 +470,7 @@ function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'includeGitC
     template('addons/github/.github/workflows/release.yml', {
       slug: input.slug,
       releaseTargetMatrix: releaseTargetMatrixYaml(),
-      gitCliffJob: input.includeGitCliff ? gitCliffWorkflowJob() : '',
+      gitCliffJob: input.includeGitCliff ? `  ${gitCliffWorkflowJob()}\n` : '',
       releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
       releaseNotesInput: input.includeGitCliff
         ? 'body: ${{ needs.git_cliff.outputs.release_body }}'

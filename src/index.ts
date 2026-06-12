@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process'
 import { parseArgs } from './args.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
-import { createLogger } from './log.js'
+import { createLogger, type Logger } from './log.js'
 import {
   resolveOcrManifestFromEnvironment,
   resolveProductAssetManifest,
@@ -13,21 +14,54 @@ import {
   acceptManagedChanges,
   cleanCache,
   diffManagedFiles,
+  listChangedManagedFiles,
+  readProjectLock,
   restoreBackup,
   withProjectWriteLock
 } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
+import {
+  assertReportSupportedOptions,
+  createDiffJsonReport,
+  createDoctorJsonReport,
+  createErrorJsonReport,
+  createReportExecutionId,
+  createScaffoldJsonReport,
+  inferReportCommandFromArgv,
+  reportCommandFromOptions,
+  reportRequested,
+  type CliReportCommand,
+  type ReportContext,
+  writeJsonReport
+} from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { ScaffoldResult } from './types.js'
 import { previewTemplateUpdate, recordUpdateRequests } from './update.js'
 
 async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2))
-  const logger = await createLogger(process.cwd(), options.logFile)
+  const argv = process.argv.slice(2)
+  const startTimeMs = Date.now()
+  const executionId = createReportExecutionId(new Date(startTimeMs))
+  const wantsReport = reportRequested(argv)
+  let command: CliReportCommand = inferReportCommandFromArgv(argv)
+  let logger: Logger | undefined
+  let logFile: string | undefined
   let clearActiveProgress = (): void => {}
 
   try {
+    const options = parseArgs(argv)
+    if (options.report) options.noInteractive = true
+    command = reportCommandFromOptions(options)
+    logFile = options.logFile
+    logger = await createLogger(
+      process.cwd(),
+      options.logFile,
+      options.report ? executionId : undefined
+    )
+    if (options.report) {
+      assertReportSupportedOptions(options)
+    }
     if (options.doctor || options.diff || options.acceptChangesRequested || options.logFile) {
       await logger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
     }
@@ -41,6 +75,108 @@ async function main(): Promise<void> {
         'Legacy migration is reserved for a future version and is not supported in v1.'
       )
     }
+
+    if (options.report) {
+      if (options.doctor) {
+        const root = process.cwd()
+        const doctor = await runDoctor(root)
+        const lock = await readProjectLock(root)
+        const report = createDoctorJsonReport({
+          context: createReportContext(command, startTimeMs, executionId, logger),
+          root,
+          doctor,
+          pending: lock.pending,
+          changedManagedFiles: await listChangedManagedFiles(root)
+        })
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      if (options.diff && options.update.length > 0) {
+        const lines = await previewTemplateUpdate(options)
+        const report = createDiffJsonReport({
+          context: createReportContext(command, startTimeMs, executionId, logger),
+          root: process.cwd(),
+          lines,
+          changedManagedFiles: []
+        })
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      if (options.diff) {
+        const root = process.cwd()
+        const lines = await diffManagedFiles(root)
+        const report = createDiffJsonReport({
+          context: createReportContext(command, startTimeMs, executionId, logger),
+          root,
+          lines,
+          changedManagedFiles: await listChangedManagedFiles(root)
+        })
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      if (options.sync) {
+        const result = await syncProject(options)
+        const report = createScaffoldJsonReport(
+          createReportContext(command, startTimeMs, executionId, logger),
+          result
+        )
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      if (options.update.length > 0) {
+        const progress = createReportProgressHandlers(updateProgressLabel(options.update))
+        clearActiveProgress = progress.clear
+        const result = await recordUpdateRequests(options, {
+          commandRunner: runReportChildCommand,
+          productManifestResolver: (request) => resolveProductAssetManifest(request),
+          ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
+          onProgress: progress.onProgress,
+          onDownloadProgress: progress.onDownloadProgress
+        })
+        progress.clear()
+        clearActiveProgress = (): void => {}
+        const report = createScaffoldJsonReport(
+          createReportContext(command, startTimeMs, executionId, logger),
+          result
+        )
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      const createOptions = await promptForCreateOptions(options)
+      const progress = createReportProgressHandlers('OCR models')
+      clearActiveProgress = progress.clear
+      const result = await createProject(createOptions, {
+        installNodeDeps: true,
+        downloadOcrModels: true,
+        commandRunner: runReportChildCommand,
+        ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
+        onProgress: progress.onProgress,
+        onDownloadProgress: progress.onDownloadProgress
+      })
+      progress.clear()
+      clearActiveProgress = (): void => {}
+      const projectLogger = await createLogger(result.root, options.logFile, executionId)
+      logger = projectLogger
+      await projectLogger.info(`created=${result.root}`)
+      const report = createScaffoldJsonReport(
+        createReportContext(command, startTimeMs, executionId, logger),
+        result
+      )
+      writeJsonReport(report)
+      process.exitCode = report.exitCode
+      return
+    }
+
     if (options.cleanCache) {
       const cleaned = await cleanCache(process.cwd())
       console.log(`Cleaned cache: ${cleaned}`)
@@ -142,15 +278,112 @@ async function main(): Promise<void> {
     console.log(`Log: ${projectLogger.path}`)
   } catch (error) {
     clearActiveProgress()
-    await logger.error(error)
-    if (error instanceof Error) {
-      console.error(`Error: ${error.message}`)
-    } else {
-      console.error(`Error: ${String(error)}`)
+    logger =
+      logger ??
+      (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
+    await safeLogError(logger, error)
+    if (wantsReport) {
+      const report = createErrorJsonReport({
+        context: createReportContext(command, startTimeMs, executionId, logger),
+        root: process.cwd(),
+        error
+      })
+      writeJsonReport(report)
+      process.exitCode = report.exitCode
+      return
     }
-    console.error(`Log: ${logger.path}`)
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
+    if (logger) console.error(`Log: ${logger.path}`)
     process.exitCode = 1
   }
+}
+
+function createReportContext(
+  command: CliReportCommand,
+  startTimeMs: number,
+  executionId: string,
+  logger: Logger | undefined
+): ReportContext {
+  return {
+    command,
+    startTimeMs,
+    executionId,
+    logPath: logger?.path ?? null
+  }
+}
+
+async function tryCreateLogger(
+  root: string,
+  logFile: string | undefined,
+  executionId: string | undefined
+): Promise<Logger | undefined> {
+  try {
+    return await createLogger(root, logFile, executionId)
+  } catch {
+    return undefined
+  }
+}
+
+async function safeLogError(logger: Logger | undefined, error: unknown): Promise<void> {
+  try {
+    await logger?.error(error)
+  } catch {
+    // Error reporting must not fail before the CLI can print its user-facing result.
+  }
+}
+
+function createReportProgressHandlers(label: string): {
+  onProgress: (message: string) => void
+  onDownloadProgress: DownloadProgressReporter
+  clear: () => void
+} {
+  const bar = createDownloadProgressBar(label, process.stderr)
+  return {
+    onProgress: (message) => {
+      bar.clear()
+      process.stderr.write(`${message}\n`)
+    },
+    onDownloadProgress: (progress) => bar.update(progress),
+    clear: () => bar.clear()
+  }
+}
+
+async function runReportChildCommand(root: string, command: string, args: string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: root,
+      shell: process.platform === 'win32',
+      stdio: [
+        'ignore',
+        'pipe',
+        'pipe'
+      ]
+    })
+    child.stdout?.on('data', (chunk: Buffer) => {
+      process.stderr.write(chunk)
+    })
+    child.stderr?.on('data', (chunk: Buffer) => {
+      process.stderr.write(chunk)
+    })
+    child.on('error', (error) => {
+      reject(new Error(`Failed to run ${formatCommand(command, args)}. ${error.message}`))
+    })
+    child.on('exit', (code, signal) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
+      reject(new Error(`Command failed: ${formatCommand(command, args)} (${suffix})`))
+    })
+  })
+}
+
+function formatCommand(command: string, args: string[]): string {
+  return [
+    command,
+    ...args
+  ].join(' ')
 }
 
 function createDownloadProgressHandlers(label: string): {

@@ -50,6 +50,95 @@ Schema syncing is explicit and PR-based rather than part of build. The PyPI
 wrapper source tree contains the trust-chain code; release wheels must embed the
 matching release manifest digest before they can download and cache a SEA binary.
 
+## JSON report mode
+
+Pass `--report` to make `create`, `sync`, `update`, `diff`, and `doctor` emit a
+single machine-readable JSON document on stdout. In report mode, `--report`
+forces non-interactive execution. Progress, `Log:`, and human `Error:` text are
+not written to stdout; wrappers may ignore stderr unless they want diagnostics.
+
+Exit code `0` means the command completed successfully. Exit code `1` means the
+command failed, or `doctor` found project problems. The JSON `exitCode` field
+matches the process exit code.
+
+```ts
+type CliJsonReport = {
+  schemaVersion: 1
+  tool: 'create-maa-project'
+  command: 'create' | 'sync' | 'update' | 'diff' | 'doctor'
+  ok: boolean
+  timestamp: string
+  durationMs: number
+  exitCode: 0 | 1
+  executionId: string
+  root: string
+  logPath: string | null
+  written: string[]
+  skipped: string[]
+  pending: Array<{ kind: string; reason: string; command: string }>
+  changedManagedFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>
+  changedUserFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>
+  suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
+  git?: { initialized: boolean; committed: boolean; reason?: string }
+  doctor?: { lines: string[] }
+  diff?: { lines: string[] }
+  error?: { message: string; code?: string }
+}
+```
+
+Example success report:
+
+```json
+{
+  "schemaVersion": 1,
+  "tool": "create-maa-project",
+  "command": "sync",
+  "ok": true,
+  "timestamp": "2026-06-12T10:30:00.000Z",
+  "durationMs": 42,
+  "exitCode": 0,
+  "executionId": "2026-06-12T10-30-00-000Z-00000000-0000-4000-8000-000000000000",
+  "root": "/path/to/project",
+  "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-30-00-000Z-00000000-0000-4000-8000-000000000000.log",
+  "written": [
+    "interface.json",
+    "maa-project.json",
+    "maa-project.lock.json"
+  ],
+  "skipped": [],
+  "pending": [],
+  "changedManagedFiles": [],
+  "changedUserFiles": [],
+  "suggestedCommands": []
+}
+```
+
+Example failure report:
+
+```json
+{
+  "schemaVersion": 1,
+  "tool": "create-maa-project",
+  "command": "sync",
+  "ok": false,
+  "timestamp": "2026-06-12T10:31:00.000Z",
+  "durationMs": 6,
+  "exitCode": 1,
+  "executionId": "2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000",
+  "root": "/path/to/project",
+  "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
+  "written": [],
+  "skipped": [],
+  "pending": [],
+  "changedManagedFiles": [],
+  "changedUserFiles": [],
+  "suggestedCommands": [],
+  "error": {
+    "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."
+  }
+}
+```
+
 ## Release
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the

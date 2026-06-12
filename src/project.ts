@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type {
+  ChangedFileReport,
   MaaProjectConfig,
   MaaProjectLock,
   ManagedFileInput,
@@ -153,6 +154,33 @@ export async function diffManagedFiles(root: string): Promise<string[]> {
   return lines.length > 0 ? lines : [
         'No managed file changes.'
       ]
+}
+
+export async function listChangedManagedFiles(root: string): Promise<ChangedFileReport[]> {
+  const lock = await readProjectLock(root)
+  const changed: ChangedFileReport[] = []
+  for (const [
+    path,
+    state
+  ] of Object.entries(lock.managedFiles).sort(
+    ([
+        left
+      ], [
+        right
+      ]) => left.localeCompare(right)
+  )) {
+    const currentPath = join(root, path)
+    if (!(await exists(currentPath))) {
+      changed.push({ path, status: 'deleted' })
+      continue
+    }
+    const currentContent = await readManagedFile(currentPath, path)
+    const currentHash = managedFileHash(path, currentContent)
+    if (currentHash !== state.hash) {
+      changed.push({ path, status: 'modified' })
+    }
+  }
+  return changed
 }
 
 export async function cleanCache(root: string): Promise<string> {

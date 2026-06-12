@@ -9,12 +9,16 @@ export type Logger = {
   error(error: unknown): Promise<void>
 }
 
-export async function createLogger(root: string, logFile?: string): Promise<Logger> {
+export async function createLogger(
+  root: string,
+  logFile?: string,
+  executionId?: string
+): Promise<Logger> {
   if (logFile) {
     return createLoggerAt(logFile)
   }
   const dir = join(root, LOCAL_STATE_DIR, 'logs')
-  const path = join(dir, `${nowIso().replace(/[:.]/g, '-')}.log`)
+  const path = join(dir, `${executionId ?? nowIso().replace(/[:.]/g, '-')}.log`)
   return createLoggerAt(path)
 }
 

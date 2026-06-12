@@ -73,6 +73,13 @@ export type PendingItem = {
   command: string
 }
 
+export type ChangedFileStatus = 'added' | 'modified' | 'deleted'
+
+export type ChangedFileReport = {
+  path: string
+  status: ChangedFileStatus
+}
+
 export type ManagedFileState = {
   hash: string
   templateHash?: string

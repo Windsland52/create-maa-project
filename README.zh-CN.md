@@ -339,12 +339,15 @@ MCP server 配置示例：
 可用 tools：
 
 - `create_project`：`name`，可选 `template`、`slug`、`displayName`、`controller`、
-  `license`、`network`、`add`、`skipDownload` 和 `git`。
+  `license`、`network`、`add`、`resourcePackSlug`、`resourcePackLabel`、`skipDownload`
+  和 `git`。MCP 模式是非交互的；client 应先向用户问清项目类型、插件等创建选项再调用。
+  如果 `add` 包含 `resource-pack`，必须传 `resourcePackSlug`。
 - `doctor`、`diff` 和 `clean_cache`：无参数。
 - `sync`：`target` 和可选 `value`。`display-name`、`version`、`license`、`github-url`
   需要 `value`；`metadata` 和 `network` 可以省略。
 - `update`：`targets` 和可选 `diff`。
-- `add`：`addon`，可选 `resourcePackSlug` 和 `label`。
+- `add`：`addon`，可选 `resourcePackSlug` 和 `label`。当 `addon` 是 `resource-pack`
+  时，必须传 `resourcePackSlug`。
 - `accept_changes`：可选 `paths`。
 - `restore`：`backupId`。
 

@@ -125,17 +125,30 @@ export async function startMcpServer(): Promise<void> {
 const MCP_TOOLS: Tool[] = [
   {
     name: 'create_project',
-    description: 'Scaffold a new MaaFW project',
+    description:
+      'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
     inputSchema: objectSchema(
       {
-        name: stringSchema('Project folder path or name.'),
-        template: enumSchema(TEMPLATE_NAMES, 'Project template.'),
+        name: stringSchema('Project folder path or name. Ask the user for this before calling.'),
+        template: enumSchema(
+          TEMPLATE_NAMES,
+          'Project template. Use "pipeline" for task/resource projects and "agent" when the user wants Python Agent custom logic.'
+        ),
         slug: stringSchema('ASCII kebab-case project id.'),
         displayName: stringSchema('Human-readable project display name.'),
         controller: stringSchema('Comma-separated controller targets.'),
         license: enumSchema(LICENSE_KINDS, 'Project license.'),
         network: enumSchema(NETWORK_MODES, 'Network asset source mode.'),
-        add: arraySchema(enumSchema(ADDONS, 'Add-on name.'), 'Create-time add-ons.'),
+        add: arraySchema(
+          enumSchema(ADDONS, 'Add-on name.'),
+          'Create-time add-ons. Common repository setup is ["dev-tools","github"]. If this includes "resource-pack", resourcePackSlug is required.'
+        ),
+        resourcePackSlug: stringSchema(
+          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when add includes "resource-pack".'
+        ),
+        resourcePackLabel: stringSchema(
+          'Optional display label for the resource pack. If omitted, it is derived from resourcePackSlug.'
+        ),
         skipDownload: booleanSchema('Skip runtime/OCR/dependency downloads.'),
         git: booleanSchema('Initialize a Git repository.')
       },
@@ -182,12 +195,17 @@ const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'add',
-    description: 'Apply an incremental add-on',
+    description:
+      'Apply an incremental add-on to the project in the server cwd. MCP mode is non-interactive. When addon is "resource-pack", ask the user for a resource pack folder name and pass resourcePackSlug.',
     inputSchema: objectSchema(
       {
         addon: enumSchema(ADDONS, 'Add-on to apply.'),
-        resourcePackSlug: stringSchema('Resource pack folder slug.'),
-        label: stringSchema('Resource pack display label.')
+        resourcePackSlug: stringSchema(
+          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon is "resource-pack".'
+        ),
+        label: stringSchema(
+          'Optional resource pack display label. If omitted, it is derived from resourcePackSlug.'
+        )
       },
       [
         'addon'
@@ -481,11 +499,27 @@ function createBaseReport(
 function createProjectOptions(args: JsonObject): CliOptions {
   const template = optionalEnum(args, 'template', TEMPLATE_NAMES) ?? 'pipeline'
   const controller = optionalString(args, 'controller')
+  const resourcePackSlug = optionalString(args, 'resourcePackSlug')
+  const resourcePackLabel = optionalString(args, 'resourcePackLabel')
+  const add = [
+    ...(optionalStringArray(args, 'add', ADDONS) ?? [])
+  ]
+  if (
+    (resourcePackSlug !== undefined || resourcePackLabel !== undefined) &&
+    !add.includes('resource-pack')
+  ) {
+    add.push('resource-pack')
+  }
+  if (add.includes('resource-pack') && !nonBlank(resourcePackSlug)) {
+    throw new Error(
+      'resourcePackSlug is required when add includes "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.'
+    )
+  }
   const overrides: Partial<CliOptions> = {
     name: requiredString(args, 'name'),
     template,
     explicitTemplate: optionalString(args, 'template') !== undefined,
-    add: optionalStringArray(args, 'add', ADDONS) ?? [],
+    add,
     skipDownload: optionalBoolean(args, 'skipDownload') ?? false
   }
   const slug = optionalString(args, 'slug')
@@ -495,6 +529,8 @@ function createProjectOptions(args: JsonObject): CliOptions {
   const initializeGit = optionalBoolean(args, 'git')
   if (slug !== undefined) overrides.slug = slug
   if (displayName !== undefined) overrides.displayName = displayName
+  if (resourcePackSlug !== undefined) overrides.resourcePackSlug = resourcePackSlug
+  if (resourcePackLabel !== undefined) overrides.label = resourcePackLabel
   if (controller) overrides.controllers = parseControllerOption(controller)
   if (license !== undefined) overrides.license = license
   if (network !== undefined) overrides.network = network
@@ -545,6 +581,11 @@ function addOptions(args: JsonObject): CliOptions {
   }
   const resourcePackSlug = optionalString(args, 'resourcePackSlug')
   const label = optionalString(args, 'label')
+  if (addon === 'resource-pack' && !nonBlank(resourcePackSlug)) {
+    throw new Error(
+      'resourcePackSlug is required when addon is "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.'
+    )
+  }
   if (resourcePackSlug !== undefined) overrides.resourcePackSlug = resourcePackSlug
   if (label !== undefined) overrides.label = label
   return baseOptions(overrides)
@@ -599,6 +640,10 @@ function optionalString(args: JsonObject, key: string): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string') throw new Error(`${key} must be a string.`)
   return value
+}
+
+function nonBlank(value: string | undefined): value is string {
+  return value !== undefined && value.trim().length > 0
 }
 
 function optionalBoolean(args: JsonObject, key: string): boolean | undefined {

@@ -120,6 +120,25 @@ describe('MCP server', () => {
           'schema-sync'
         ])
       })
+      expect(toolByName(tools, 'create_project').description).toContain(
+        'MCP mode is non-interactive'
+      )
+      expect(
+        toolByName(tools, 'create_project').inputSchema.properties?.resourcePackSlug
+      ).toMatchObject({
+        type: 'string',
+        description: expect.stringContaining('Required when add includes "resource-pack"')
+      })
+      expect(
+        toolByName(tools, 'create_project').inputSchema.properties?.resourcePackLabel
+      ).toMatchObject({
+        type: 'string'
+      })
+      expect(toolByName(tools, 'add').description).toContain('resourcePackSlug')
+      expect(toolByName(tools, 'add').inputSchema.properties?.resourcePackSlug).toMatchObject({
+        type: 'string',
+        description: expect.stringContaining('Required when addon is "resource-pack"')
+      })
     },
     MCP_TEST_TIMEOUT_MS
   )
@@ -203,6 +222,62 @@ describe('MCP server', () => {
         exitCode: 1
       })
       expect(report.error?.message).toContain('targets must contain at least one item')
+      expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS
+  )
+
+  it(
+    'rejects create_project resource-pack add-ons without a resourcePackSlug',
+    async () => {
+      const session = await startSession(await tempRoot())
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'create_project',
+        arguments: {
+          name: 'maa-mcp-resource-pack',
+          add: [
+            'resource-pack'
+          ],
+          skipDownload: true
+        }
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBe(true)
+      expect(report).toMatchObject({
+        command: 'create',
+        ok: false,
+        exitCode: 1
+      })
+      expect(report.error?.message).toContain('resourcePackSlug is required')
+      expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS
+  )
+
+  it(
+    'rejects incremental resource-pack add-ons without a resourcePackSlug',
+    async () => {
+      const session = await startSession(await tempRoot())
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'add',
+        arguments: {
+          addon: 'resource-pack'
+        }
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBe(true)
+      expect(report).toMatchObject({
+        command: 'update',
+        ok: false,
+        exitCode: 1
+      })
+      expect(report.error?.message).toContain('resourcePackSlug is required')
       expect(session.exitCode()).toBeNull()
     },
     MCP_TEST_TIMEOUT_MS

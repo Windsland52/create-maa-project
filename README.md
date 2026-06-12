@@ -354,12 +354,16 @@ Example MCP server configuration:
 Available tools:
 
 - `create_project`: `name`, optional `template`, `slug`, `displayName`, `controller`,
-  `license`, `network`, `add`, `skipDownload`, and `git`.
+  `license`, `network`, `add`, `resourcePackSlug`, `resourcePackLabel`, `skipDownload`,
+  and `git`. MCP mode is non-interactive; clients should ask the user for unresolved
+  creation choices before calling. If `add` includes `resource-pack`, `resourcePackSlug`
+  is required.
 - `doctor`, `diff`, and `clean_cache`: no parameters.
 - `sync`: `target` plus optional `value`. `display-name`, `version`, `license`, and
   `github-url` require `value`; `metadata` and `network` can omit it.
 - `update`: `targets` and optional `diff`.
 - `add`: `addon`, optional `resourcePackSlug`, and optional `label`.
+  `resourcePackSlug` is required when `addon` is `resource-pack`.
 - `accept_changes`: optional `paths`.
 - `restore`: `backupId`.
 

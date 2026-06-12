@@ -43,9 +43,9 @@ if (!isReleaseVersion(version)) {
   throw new Error('release tag must be a SemVer tag such as v0.1.0')
 }
 
-const packageInterfaceJson = prepareReleaseInterface(interfaceJson, version)
-const packagePaths = mfaaReleasePackagePaths(interfaceJson)
 const runtimePlatform = detectRuntimePlatform()
+const packageInterfaceJson = prepareReleaseInterface(interfaceJson, version, runtimePlatform)
+const packagePaths = mfaaReleasePackagePaths(interfaceJson, runtimePlatform)
 
 for (const path of [
   ...strings(interfaceJson.resource),
@@ -68,6 +68,14 @@ if (!dryRun) {
   for (const path of packagePaths) {
     if (!existsSync(path)) {
       throw new Error(`release package path is missing: ${path}`)
+    }
+  }
+  if (packageHasAgent(interfaceJson)) {
+    if (hasEmbeddedPythonRuntime(runtimePlatform)) {
+      const pythonPath = pythonRuntimePath(runtimePlatform)
+      if (!existsSync(pythonPath)) {
+        throw new Error(`release package path is missing: ${pythonPath}`)
+      }
     }
   }
   prepareReleasePackage(packagePaths, packageInterfaceJson, runtimePlatform)
@@ -127,7 +135,7 @@ function interfaceResourcePaths(value) {
     : []
 }
 
-function mfaaReleasePackagePaths(interfaceJson) {
+function mfaaReleasePackagePaths(interfaceJson, runtimePlatform) {
   // Current generated release layout is the MFAAvalonia profile.
   // Other runners should add their own package profile instead of sharing these paths.
   const paths = [
@@ -137,19 +145,30 @@ function mfaaReleasePackagePaths(interfaceJson) {
     'libs/MaaAgentBinary',
     'plugins'
   ]
-  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
-    paths.push('python')
+  if (packageHasAgent(interfaceJson)) {
+    paths.push('agent', 'requirements.txt')
+    if (runtimePlatform.startsWith('linux-')) {
+      paths.push(linuxPythonDepsPath(runtimePlatform))
+    }
   }
   return paths
 }
 
-function prepareReleaseInterface(interfaceJson, version) {
+function packageHasAgent(interfaceJson) {
+  return Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0
+}
+
+function prepareReleaseInterface(interfaceJson, version, runtimePlatform) {
   const releaseInterface = { ...interfaceJson, version }
   delete releaseInterface.$schema
-  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0) {
+  if (packageHasAgent(interfaceJson)) {
     releaseInterface.agent = interfaceJson.agent.map((agent) =>
       isRecord(agent)
-        ? { ...agent, child_exec: releaseAgentChildExec(), child_args: releaseAgentChildArgs() }
+        ? {
+            ...agent,
+            child_exec: releaseAgentChildExec(runtimePlatform),
+            child_args: releaseAgentChildArgs()
+          }
         : agent
     )
   }
@@ -163,10 +182,10 @@ function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
   renameMfaaEntrypoint('dist/package', runtimePlatform)
   writeJson('dist/package/interface.json', interfaceJson)
   for (const path of packagePaths) {
-    copyPath(path, join('dist/package', path))
+    copyPath(path, join('dist/package', releasePackagePath(path)))
   }
-  if (Array.isArray(interfaceJson.agent) && interfaceJson.agent.length > 0 && existsSync('agent')) {
-    copyPath('agent', join('dist/package', 'python', 'agent'))
+  if (packageHasAgent(interfaceJson) && hasEmbeddedPythonRuntime(runtimePlatform)) {
+    copyPath(pythonRuntimePath(runtimePlatform), join('dist/package', 'python'))
   }
 }
 
@@ -187,8 +206,9 @@ function smokeReleasePackage(root, packagePaths, runtimePlatform) {
     )
   }
   for (const path of packagePaths) {
-    if (!existsSync(join(root, path))) {
-      throw new Error(`release package smoke failed: package path is missing: ${path}`)
+    const packagePath = releasePackagePath(path)
+    if (!existsSync(join(root, packagePath))) {
+      throw new Error(`release package smoke failed: package path is missing: ${packagePath}`)
     }
   }
   for (const path of releaseDevPaths()) {
@@ -209,6 +229,20 @@ function smokeReleasePackage(root, packagePaths, runtimePlatform) {
       'release package smoke failed: package interface.json version must be a release tag'
     )
   }
+  if (packageHasAgent(packagedInterface)) {
+    const childExec = releaseAgentChildExec(runtimePlatform)
+    if (
+      hasEmbeddedPythonRuntime(runtimePlatform) &&
+      !existsSync(join(root, ...childExec.split('/')))
+    ) {
+      throw new Error(
+        `release package smoke failed: Agent Python entrypoint is missing: ${childExec}`
+      )
+    }
+    if (!existsSync(join(root, 'agent', 'bootstrap.py'))) {
+      throw new Error('release package smoke failed: Agent bootstrap is missing')
+    }
+  }
   for (const path of [
     ...interfaceResourcePaths(packagedInterface.resource),
     ...strings(packagedInterface.import)
@@ -228,6 +262,7 @@ function releaseDevPaths() {
     '.github',
     '.vscode',
     '.create-maa-project',
+    '.venv',
     'cache',
     'debug',
     'package.json',
@@ -251,8 +286,24 @@ function copyDirectoryContents(source, target) {
   }
 }
 
+function releasePackagePath(path) {
+  return path.startsWith('.create-maa-project/runtime/python-deps/') ? 'deps' : path
+}
+
 function mfaaGuiPath(runtimePlatform) {
   return join('.create-maa-project', 'runtime', 'mfaa', runtimePlatform)
+}
+
+function pythonRuntimePath(runtimePlatform) {
+  return join('.create-maa-project', 'runtime', 'python', runtimePlatform)
+}
+
+function linuxPythonDepsPath(runtimePlatform) {
+  return join('.create-maa-project', 'runtime', 'python-deps', runtimePlatform)
+}
+
+function hasEmbeddedPythonRuntime(runtimePlatform) {
+  return runtimePlatform.startsWith('win-') || runtimePlatform.startsWith('osx-')
 }
 
 function mfaaEntrypointName(runtimePlatform) {
@@ -317,19 +368,16 @@ function normalizeRuntimeArch(value) {
   return ''
 }
 
-function releaseAgentChildExec() {
-  const runnerOs = String(process.env.RUNNER_OS ?? '').toLowerCase()
-  if (runnerOs.startsWith('windows')) return 'python/python.exe'
-  if (runnerOs.startsWith('macos')) return 'python/bin/python3'
-  if (runnerOs.startsWith('linux')) return 'python3'
-  if (process.platform === 'win32') return 'python/python.exe'
-  if (process.platform === 'darwin') return 'python/bin/python3'
+function releaseAgentChildExec(runtimePlatform) {
+  if (runtimePlatform.startsWith('win-')) return 'python/python.exe'
+  if (runtimePlatform.startsWith('osx-')) return 'python/bin/python3'
   return 'python3'
 }
 
 function releaseAgentChildArgs() {
   return [
-    'python/agent/bootstrap.py'
+    '-u',
+    'agent/bootstrap.py'
   ]
 }
 

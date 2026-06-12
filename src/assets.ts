@@ -50,7 +50,7 @@ export type ProductAssetEntry = AssetEntry & {
 
 export type ProjectArchiveExtraction = {
   format: 'zip' | 'tar.gz'
-  product: 'MaaFramework' | 'MFAAvalonia'
+  product: 'MaaFramework' | 'MFAAvalonia' | 'Python'
   platform: string
 }
 
@@ -98,9 +98,16 @@ const PRODUCT_RELEASES: ProductReleaseConfig[] = [
     product: 'MFAAvalonia',
     owner: 'MaaXYZ',
     repo: 'MFAAvalonia'
+  },
+  {
+    product: 'Python',
+    owner: 'astral-sh',
+    repo: 'python-build-standalone'
   }
 ]
 const DEFAULT_DOWNLOAD_ATTEMPTS = 3
+export const PYTHON_EMBED_VERSION = '3.13.14'
+const PYTHON_STANDALONE_MINOR = '3.13'
 
 export async function resolveOcrManifestFromEnvironment(
   options: ProductAssetManifestResolveOptions = {}
@@ -301,6 +308,24 @@ export async function downloadProjectManifestAssets(
   return downloaded
 }
 
+export async function downloadUrl(
+  url: string,
+  options: AssetDownloaderOptions = {}
+): Promise<Buffer> {
+  return defaultDownload(url, options)
+}
+
+export function extractProjectArchiveAssets(
+  archive: Buffer,
+  asset: ProductAssetEntry
+): DownloadedAsset[] {
+  return extractProjectArchiveAsset(archive, validateProductAssetEntry(asset))
+}
+
+export function resolveRuntimePlatform(value?: string): string | undefined {
+  return resolveRequestedRuntimePlatform(value)
+}
+
 export async function writeDownloadedAssets(
   root: string,
   basePath: string,
@@ -451,9 +476,16 @@ function mapProjectArchiveEntry(
   extraction: ProjectArchiveExtraction,
   relativePath: string
 ): string[] {
-  const mapped = extraction.product === 'MFAAvalonia' ? [
-          `.create-maa-project/runtime/mfaa/${extraction.platform}/${relativePath}`
-        ] : mapMaaFrameworkArchiveEntry(extraction.platform, relativePath)
+  let mapped: string[]
+  if (extraction.product === 'MFAAvalonia') {
+    mapped = [
+      `.create-maa-project/runtime/mfaa/${extraction.platform}/${relativePath}`
+    ]
+  } else if (extraction.product === 'Python') {
+    mapped = mapPythonArchiveEntry(extraction.platform, relativePath)
+  } else {
+    mapped = mapMaaFrameworkArchiveEntry(extraction.platform, relativePath)
+  }
   for (const path of mapped) {
     if (!isSafeRelativePath(path)) {
       throw new Error(`Archive extraction produced an invalid path: ${path}`)
@@ -493,6 +525,16 @@ function mapMaaFrameworkArchiveEntry(platform: string, relativePath: string): st
     ]
   }
   return []
+}
+
+function mapPythonArchiveEntry(platform: string, relativePath: string): string[] {
+  const normalizedPath = relativePath.startsWith('python/')
+    ? relativePath.slice('python/'.length)
+    : relativePath
+  if (!normalizedPath) return []
+  return [
+    `.create-maa-project/runtime/python/${platform}/${normalizedPath}`
+  ]
 }
 
 function stripArchiveRoot(
@@ -551,11 +593,27 @@ async function defaultGithubReleaseJsonFetch(
     headers: Record<string, string>
   }
 ): Promise<unknown> {
-  const response = await fetch(url, { headers: options.headers })
-  if (!response.ok) {
-    throw new Error(`Failed to resolve GitHub release ${url}: HTTP ${response.status}`)
+  const attempts = configuredDownloadAttempts()
+  let lastError: unknown
+  let usedAttempts = 0
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    usedAttempts = attempt
+    try {
+      const response = await fetch(url, { headers: options.headers })
+      if (!response.ok) {
+        throw new DownloadHttpError(response.status)
+      }
+      return response.json() as Promise<unknown>
+    } catch (error) {
+      lastError = error
+      if (attempt >= attempts || !isRetryableDownloadError(error)) {
+        break
+      }
+      await sleep(downloadRetryDelayMs(attempt))
+    }
   }
-  return response.json() as Promise<unknown>
+  const suffix = usedAttempts > 1 ? ` after ${usedAttempts} attempts` : ''
+  throw new Error(`Failed to resolve GitHub release ${url}${suffix}: ${errorMessage(lastError)}`)
 }
 
 function githubRequestHeaders(): Record<string, string> {
@@ -623,7 +681,9 @@ function parseGithubReleaseAsset(
   const path =
     product === 'MFAAvalonia'
       ? `.create-maa-project/runtime/mfaa/${match.platform}/${value.name}`
-      : `plugins/${match.platform}/${value.name}`
+      : product === 'Python'
+        ? `.create-maa-project/runtime/python/${match.platform}/${value.name}`
+        : `plugins/${match.platform}/${value.name}`
   return validateProductAssetEntry({
     path,
     url: value.browser_download_url,
@@ -655,6 +715,14 @@ function matchProductReleaseAsset(
     const format = match[3] === 'zip' ? 'zip' : 'tar.gz'
     return os && arch ? { platform: `${os}-${arch}`, format } : undefined
   }
+  if (product === 'Python') {
+    const match = new RegExp(
+      `^cpython-(${escapeRegExp(PYTHON_STANDALONE_MINOR)}\\.\\d+)\\+${escapedTag}-([^-]+(?:-[^-]+)+)-install_only_stripped\\.tar\\.gz$`
+    ).exec(name)
+    if (!match) return undefined
+    const platform = pythonStandalonePlatform(match[2] as string)
+    return platform ? { platform, format: 'tar.gz' } : undefined
+  }
   const match = new RegExp(`^MAA-(win|linux|macos)-(x86_64|aarch64)-${escapedTag}\\.zip$`).exec(
     name
   )
@@ -677,7 +745,21 @@ function productReleaseConfig(product: string): ProductReleaseConfig | undefined
   if (normalized === 'mfaavalonia' || normalized === 'mfa') {
     return PRODUCT_RELEASES.find((config) => config.product === 'MFAAvalonia')
   }
+  if (normalized === 'python' || normalized === 'pythonruntime' || normalized === 'cpython') {
+    return PRODUCT_RELEASES.find((config) => config.product === 'Python')
+  }
   return undefined
+}
+
+function pythonStandalonePlatform(value: string): string | undefined {
+  switch (value) {
+    case 'x86_64-apple-darwin':
+      return 'osx-x64'
+    case 'aarch64-apple-darwin':
+      return 'osx-arm64'
+    default:
+      return undefined
+  }
 }
 
 function resolveRequestedRuntimePlatform(value: string | undefined): string | undefined {
@@ -691,6 +773,11 @@ function resolveRequestedRuntimePlatform(value: string | undefined): string | un
       throw new Error(`Unsupported runtime platform: ${explicit}`)
     }
     return normalized
+  }
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    throw new Error(
+      'Runtime platform must be explicit in GitHub Actions. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM from the workflow matrix, for example win-arm64.'
+    )
   }
   return currentRuntimePlatform()
 }
@@ -947,7 +1034,7 @@ function validateProductAssetEntry(entry: ProductAssetEntry): ProductAssetEntry 
   if (format !== 'zip' && format !== 'tar.gz') {
     throw new Error(`Invalid asset extraction format for ${entry.path}`)
   }
-  if (product !== 'MaaFramework' && product !== 'MFAAvalonia') {
+  if (product !== 'MaaFramework' && product !== 'MFAAvalonia' && product !== 'Python') {
     throw new Error(`Invalid asset extraction product for ${entry.path}`)
   }
   if (!platform || platform === 'all') {

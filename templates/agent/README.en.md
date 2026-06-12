@@ -15,6 +15,9 @@ The Agent entrypoint is `agent/main.py`. Python version and dependency checks li
 `agent/bootstrap.py`. Agent runtime lives in `agent/agent_runtime.py` and imports modules
 from `agent/custom/action`, `agent/custom/reco`, and `agent/custom/sink` to register custom
 logic. PI environment, parameter parsing, logging, and path helpers live in `agent/utils/`.
+The VS Code Maa Support extension starts AgentServer through
+`uv run python agent/bootstrap.py`. Debugging uses the `Maa Agent: Debug` configuration in
+`.vscode/launch.json`, mapped from `maatools.config.mts`.
 
 ## Release
 

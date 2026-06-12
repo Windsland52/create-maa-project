@@ -13,17 +13,22 @@ import {
 } from './project.js'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
+import { mkdir, readdir, rm } from 'node:fs/promises'
 import {
   downloadDefaultOcrZip,
+  downloadUrl,
+  extractProjectArchiveAssets,
   downloadManifestAssets,
   downloadProjectManifestAssets,
   resolveProductAssetManifest,
   resolveOcrManifestFromEnvironment,
+  resolveRuntimePlatform,
   writeDownloadedAssets,
   writeDownloadedProjectAssets,
   type AssetDownloader,
   type AssetManifestResolver,
   type DownloadProgressReporter,
+  PYTHON_EMBED_VERSION,
   type ProductAssetManifestRequest,
   type ProductAssetManifestResolver
 } from './assets.js'
@@ -35,7 +40,7 @@ import type {
   PendingItem,
   ScaffoldResult
 } from './types.js'
-import { exists, readText } from './utils.js'
+import { exists, readText, sha256 } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
 
@@ -73,16 +78,17 @@ const UPDATE_PENDING: Record<string, PendingItem> = {
     reason: 'Python dependencies need to be synchronized locally.',
     command: 'create-maa-project --update python-deps'
   },
+  'python-runtime': {
+    kind: 'python-runtime',
+    reason: 'Python release runtime and Agent release dependencies are pending.',
+    command: 'create-maa-project --update python-runtime'
+  },
   template: {
     kind: 'template',
     reason: 'Template update is pending.',
     command: 'create-maa-project --update template'
   }
 }
-
-const RESERVED_UPDATE_TARGETS = new Set([
-  'python-runtime'
-])
 
 export type UpdateCommandRunner = (root: string, command: string, args: string[]) => Promise<void>
 export type ProgressReporter = (message: string) => void
@@ -153,6 +159,27 @@ export async function recordUpdateRequests(
           ])) {
             written.add(path)
           }
+          continue
+        }
+        if (target === 'python-runtime') {
+          environment.onProgress?.('Synchronizing Python release runtime assets...')
+          const result = await updatePythonRuntime(root, {
+            ...createProjectAssetUpdateOptions(
+              {
+                product: 'Python',
+                channel: 'latest'
+              },
+              environment
+            ),
+            commandRunner
+          })
+          if (!result) {
+            pendingToAdd.push(remoteAssetPending(target))
+            continue
+          }
+          for (const path of result.written) written.add(path)
+          lock.pending = removePending(lock.pending, 'python-runtime')
+          environment.onProgress?.('Python release runtime synchronized.')
           continue
         }
         if (target === 'maafw') {
@@ -270,11 +297,6 @@ function validateUpdateTarget(target: string): string {
   if (target === 'all') {
     throw new Error('--update all is not supported. Update one target at a time.')
   }
-  if (RESERVED_UPDATE_TARGETS.has(target)) {
-    throw new Error(
-      `--update ${target} is reserved for future Agent release runtime support and is not implemented in this version.`
-    )
-  }
   if (!UPDATE_PENDING[target]) {
     throw new Error(`Unsupported update target: ${target}`)
   }
@@ -287,6 +309,12 @@ const RUNTIME_ASSET_PATH_PREFIXES = [
   'libs/',
   'plugins/'
 ]
+
+function embeddedPythonExecutable(platform: string): string {
+  return platform.startsWith('win-')
+    ? `.create-maa-project/runtime/python/${platform}/python.exe`
+    : `.create-maa-project/runtime/python/${platform}/bin/python3`
+}
 
 function toPendingUpdate(target: string): PendingItem {
   const pending = UPDATE_PENDING[target]
@@ -325,6 +353,263 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
     '--output-file',
     'requirements.txt'
   ])
+}
+
+async function updatePythonRuntime(
+  root: string,
+  options: {
+    request: ProductAssetManifestRequest
+    allowedPathPrefixes: string[]
+    manifestResolver: ProductAssetManifestResolver
+    commandRunner: UpdateCommandRunner
+    downloader?: AssetDownloader
+    onDownloadProgress?: DownloadProgressReporter
+  }
+): Promise<{ written: string[] } | undefined> {
+  if (!(await exists(join(root, 'pyproject.toml')))) {
+    throw new Error('--update python-runtime requires an Agent project with pyproject.toml.')
+  }
+  if (!(await exists(join(root, 'requirements.txt')))) {
+    throw new Error(
+      '--update python-runtime requires requirements.txt. Run --update python-deps first.'
+    )
+  }
+
+  const platform = resolveRuntimePlatform(options.request.platform)
+  if (!platform || platform === 'all') {
+    throw new Error(
+      '--update python-runtime requires exactly one runtime platform because Agent dependencies are installed into a platform-specific Python runtime. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>.'
+    )
+  }
+  if (platform.startsWith('linux-')) {
+    return updateLinuxPythonRuntime(root, platform, options.commandRunner)
+  }
+  if (platform.startsWith('win-')) {
+    return updateWindowsEmbeddedPythonRuntime(root, platform, options)
+  }
+
+  const manifest = await options.manifestResolver({ ...options.request, platform })
+  if (!manifest) return undefined
+  await rm(join(root, '.create-maa-project/runtime/python', platform), {
+    recursive: true,
+    force: true
+  })
+  const assets = await downloadProjectManifestAssets(
+    manifest,
+    options.downloader
+      ? {
+          downloader: options.downloader,
+          allowedPathPrefixes: options.allowedPathPrefixes,
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
+        }
+      : {
+          allowedPathPrefixes: options.allowedPathPrefixes,
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
+        }
+  )
+  const written = await writeDownloadedProjectAssets(root, assets)
+  const python = embeddedPythonExecutable(platform)
+  if (!(await exists(join(root, python)))) {
+    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
+  }
+  await options.commandRunner(root, 'uv', [
+    'pip',
+    'install',
+    '--python',
+    python,
+    '--system',
+    '--requirement',
+    'requirements.txt'
+  ])
+  return {
+    written: [
+      ...written,
+      python
+    ]
+  }
+}
+
+async function updateWindowsEmbeddedPythonRuntime(
+  root: string,
+  platform: string,
+  options: {
+    commandRunner: UpdateCommandRunner
+    downloader?: AssetDownloader
+    onDownloadProgress?: DownloadProgressReporter
+  }
+): Promise<{ written: string[] }> {
+  await rm(join(root, '.create-maa-project/runtime/python', platform), {
+    recursive: true,
+    force: true
+  })
+  const arch = platform.endsWith('-arm64') ? 'arm64' : 'amd64'
+  const filename = `python-${PYTHON_EMBED_VERSION}-embed-${arch}.zip`
+  const url = `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/${filename}`
+  const archive = await downloadRuntimeArchive(url, options.downloader, options.onDownloadProgress)
+  const assets = patchWindowsEmbeddedPythonAssets(
+    platform,
+    extractProjectArchiveAssets(archive, {
+      path: `.create-maa-project/runtime/python/${platform}/${filename}`,
+      url,
+      sha256: sha256(archive),
+      size: archive.byteLength,
+      extract: {
+        product: 'Python',
+        platform,
+        format: 'zip'
+      }
+    })
+  )
+  const written = await writeDownloadedProjectAssets(root, assets)
+  const python = embeddedPythonExecutable(platform)
+  if (!(await exists(join(root, python)))) {
+    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
+  }
+  await options.commandRunner(root, 'uv', [
+    'pip',
+    'install',
+    '--python',
+    python,
+    '--system',
+    '--requirement',
+    'requirements.txt'
+  ])
+  return {
+    written: [
+      ...written,
+      python
+    ]
+  }
+}
+
+async function updateLinuxPythonRuntime(
+  root: string,
+  platform: string,
+  commandRunner: UpdateCommandRunner
+): Promise<{ written: string[] }> {
+  const depsPath = `.create-maa-project/runtime/python-deps/${platform}`
+  await rm(join(root, depsPath), {
+    recursive: true,
+    force: true
+  })
+  await mkdir(join(root, depsPath), { recursive: true })
+  await commandRunner(root, 'python3', [
+    '-m',
+    'pip',
+    'download',
+    '--requirement',
+    'requirements.txt',
+    '--dest',
+    depsPath,
+    '--only-binary=:all:',
+    ...linuxWheelPlatformArgs(platform)
+  ])
+  return {
+    written: await listRelativeFiles(root, depsPath)
+  }
+}
+
+async function downloadRuntimeArchive(
+  url: string,
+  downloader?: AssetDownloader,
+  onDownloadProgress?: DownloadProgressReporter
+): Promise<Buffer> {
+  const options = onDownloadProgress
+    ? {
+        onProgress: onDownloadProgress
+      }
+    : undefined
+  return downloader ? downloader(url, options) : downloadUrl(url, options)
+}
+
+function patchWindowsEmbeddedPythonAssets(
+  platform: string,
+  assets: ReturnType<typeof extractProjectArchiveAssets>
+): ReturnType<typeof extractProjectArchiveAssets> {
+  const pthPath = `.create-maa-project/runtime/python/${platform}/`
+  const index = assets.findIndex(
+    (asset) =>
+      asset.path.startsWith(pthPath) &&
+      /^python\d*\._pth$/i.test(asset.path.split('/').at(-1) ?? '')
+  )
+  if (index < 0) {
+    throw new Error(`Windows embedded Python archive is missing python*._pth for ${platform}.`)
+  }
+  const asset = assets[index]
+  if (!asset) return assets
+  const content = patchWindowsPythonPth(asset.content.toString('utf8'))
+  const nextContent = Buffer.from(content, 'utf8')
+  assets[index] = {
+    ...asset,
+    content: nextContent,
+    sha256: sha256(nextContent),
+    size: nextContent.byteLength
+  }
+  return assets
+}
+
+function patchWindowsPythonPth(content: string): string {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  while (lines.length > 0 && lines.at(-1)?.trim() === '') lines.pop()
+  const next = lines.map((line) => {
+    const trimmed = line.trim()
+    return trimmed === '#import site' || trimmed === '# import site' ? 'import site' : line
+  })
+  if (!next.some((line) => line.trim() === 'import site')) {
+    next.push('import site')
+  }
+  for (const path of [
+    '.',
+    'Lib',
+    'Lib\\site-packages',
+    'DLLs'
+  ]) {
+    if (!next.some((line) => line.trim() === path)) next.push(path)
+  }
+  return `${next.filter((line, index) => line.length > 0 || index < next.length - 1).join('\n')}\n`
+}
+
+function linuxWheelPlatformArgs(platform: string): string[] {
+  const tags = platform === 'linux-arm64' ? [
+          'manylinux_2_28_aarch64',
+          'manylinux_2_17_aarch64',
+          'manylinux2014_aarch64',
+          'linux_aarch64'
+        ] : [
+          'manylinux_2_28_x86_64',
+          'manylinux_2_17_x86_64',
+          'manylinux2014_x86_64',
+          'linux_x86_64'
+        ]
+  return tags.flatMap((tag) => [
+    '--platform',
+    tag
+  ])
+}
+
+async function listRelativeFiles(root: string, basePath: string): Promise<string[]> {
+  const base = join(root, basePath)
+  if (!(await exists(base))) return []
+  const written: string[] = []
+  await collectRelativeFiles(base, basePath, written)
+  return written
+}
+
+async function collectRelativeFiles(
+  path: string,
+  relativePath: string,
+  output: string[]
+): Promise<void> {
+  const entries = await readdir(path, { withFileTypes: true })
+  for (const entry of entries) {
+    const childRelativePath = `${relativePath}/${entry.name}`
+    const childPath = join(path, entry.name)
+    if (entry.isDirectory()) {
+      await collectRelativeFiles(childPath, childRelativePath, output)
+    } else if (entry.isFile()) {
+      output.push(childRelativePath)
+    }
+  }
 }
 
 export async function updateOcrModels(

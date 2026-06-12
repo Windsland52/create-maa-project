@@ -30,7 +30,9 @@ Current implementation covers the local scaffold core:
 - `--update node-deps` and `--update python-deps` dependency refreshes, with successful pending-action cleanup
 - `--update schema` refreshes the generated project from the CLI's embedded schema baseline
 - runtime updates resolve MaaFramework and MFAAvalonia assets from GitHub Releases, verify GitHub-provided sha256 digests, cache MFAAvalonia GUI files for release staging, and extract MaaFramework into the generated runtime layout
-- `pnpm sync:runtime` in generated projects calls `create-maa-project --update maafw --update runtime:mfa`; set `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` to sync every desktop platform instead of the current platform
+- Agent runtime updates use embedded Python for Windows/macOS release packages and Linux wheel dependencies for system-`python3` `.venv` startup
+- `pnpm sync:runtime` in generated projects calls `create-maa-project --update maafw --update runtime:mfa`, and Agent projects also run `--update python-runtime`; set `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` to sync every desktop MaaFramework/MFAAvalonia platform instead of the current platform, while Agent Python dependency sync remains single-platform
+- Generated GitHub Actions pass `CREATE_MAA_PROJECT_RUNTIME_PLATFORM` from the release matrix; runtime asset sync refuses to infer the platform from runner architecture inside GitHub Actions
 - default asset downloads retry transient network failures; set `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` to override the default
 - OCR downloads can be seeded for local/offline verification with `CREATE_MAA_PROJECT_OCR_ZIP_PATH`
 - OCR model updates use a verified manifest from `CREATE_MAA_PROJECT_OCR_MANIFEST_URL` when configured, with the existing OCR zip as fallback

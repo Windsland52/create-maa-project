@@ -5,6 +5,7 @@
         "esbenp.prettier-vscode",
         "DavidAnson.vscode-markdownlint",
         "charliermarsh.ruff",
+        "ms-python.debugpy",
         "ms-python.python",
         "ms-python.vscode-pylance"
     ]

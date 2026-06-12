@@ -8,6 +8,15 @@ const updateArgs = [
   '--update',
   'runtime:mfa'
 ]
+if (existsSync('pyproject.toml')) {
+  if (runtimePlatformAll()) {
+    console.warn(
+      '[WARN] Skipping --update python-runtime because Agent release dependencies are platform-specific. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch> to sync them.'
+    )
+  } else {
+    updateArgs.push('--update', 'python-runtime')
+  }
+}
 const invocation = resolveCreateMaaProject()
 
 const result = spawnSync(
@@ -73,6 +82,14 @@ function findLocalGeneratorBin() {
     dir = parent
   }
   return undefined
+}
+
+function runtimePlatformAll() {
+  const value =
+    process.env.CREATE_MAA_PROJECT_RUNTIME_PLATFORM?.trim() ||
+    process.env.CREATE_MAA_PROJECT_PLATFORM?.trim() ||
+    ''
+  return value.toLowerCase() === 'all'
 }
 
 function packageName(dir) {

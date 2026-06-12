@@ -57,7 +57,7 @@ jobs:
             else
               tar -czf "../$archive" .
               tar -tzvf "../$archive" > "../$archive.manifest"
-              if ! awk '$1 ~ /^-/ && $0 ~ /(^|\/)({{slug}}|MFAAvalonia|MaaPiCli|MaaAgentServer|maa-cli)$/ && $1 !~ /^-..x/ { print; bad=1 } END { exit bad }' "../$archive.manifest"; then
+              if ! awk '$1 ~ /^-/ && $0 ~ /(^|\/)({{slug}}|MFAAvalonia|MaaPiCli|MaaAgentServer|maa-cli|python3?)$/ && $1 !~ /^-..x/ { print; bad=1 } END { exit bad }' "../$archive.manifest"; then
                 echo "[ERR] Unix archive is missing executable permission metadata"
                 exit 1
               fi

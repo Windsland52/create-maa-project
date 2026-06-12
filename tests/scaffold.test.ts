@@ -27,6 +27,7 @@ import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
 import {
+  PYTHON_EMBED_VERSION,
   downloadManifestAssets,
   downloadProjectManifestAssets,
   resolveProductAssetManifestFromGithubRelease,
@@ -722,7 +723,8 @@ describe('scaffold', () => {
         'agent/utils/pienv.py',
         'agent/utils/params.py',
         'agent/utils/runtime_paths.py',
-        'agent/utils/maa_types.py'
+        'agent/utils/maa_types.py',
+        '.vscode/launch.json'
       ])
     )
     expect(result.written).not.toContain('config/pip_config.json')
@@ -734,6 +736,10 @@ describe('scaffold', () => {
         expect.objectContaining({
           kind: 'python-deps',
           command: 'create-maa-project --update python-deps'
+        }),
+        expect.objectContaining({
+          kind: 'python-runtime',
+          command: 'create-maa-project --update python-runtime'
         })
       ])
     )
@@ -833,12 +839,13 @@ describe('scaffold', () => {
       recommendations: expect.arrayContaining([
         'windsland52.maa-log-analyzer',
         'charliermarsh.ruff',
+        'ms-python.debugpy',
         'ms-python.python',
         'ms-python.vscode-pylance'
       ])
     })
     expect(await readJson(join(root, 'maa-agent-test', '.vscode/settings.json'))).toMatchObject({
-      'python.defaultInterpreterPath': '${workspaceFolder}/.venv/bin/python',
+      'python.defaultInterpreterPath': '${workspaceFolder}/.venv',
       '[jsonc]': {
         'editor.defaultFormatter': 'esbenp.prettier-vscode'
       },
@@ -858,6 +865,39 @@ describe('scaffold', () => {
         })
       ])
     })
+    expect(await readJson(join(root, 'maa-agent-test', '.vscode/launch.json'))).toMatchObject({
+      configurations: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Maa Agent: Debug',
+          type: 'debugpy',
+          program: '${workspaceFolder}/agent/bootstrap.py',
+          args: [
+            '{AGENT_ID}'
+          ],
+          env: '{AGENT_ENV}'
+        })
+      ])
+    })
+    expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
+      name: 'maa-agent-test',
+      agent: [
+        {
+          child_exec: 'uv',
+          child_args: [
+            'run',
+            'python',
+            'agent/bootstrap.py'
+          ],
+          identifier: 'maa-agent-test.agent'
+        }
+      ]
+    })
+    const maatoolsConfig = await readFile(
+      join(root, 'maa-agent-test', 'maatools.config.mts'),
+      'utf8'
+    )
+    expect(maatoolsConfig).toContain('vscode:')
+    expect(maatoolsConfig).toContain("uv: 'Maa Agent: Debug'")
     const releaseWorkflow = await readFile(
       join(root, 'maa-agent-test', '.github/workflows/release.yml'),
       'utf8'
@@ -2581,60 +2621,109 @@ version = "0.1.0"
     await createProject(defaultOptions({ name: 'maa-agent-release-test', template: 'agent' }))
     const projectRoot = join(root, 'maa-agent-release-test')
     await clearPending(projectRoot)
-    const runtimePlatform = currentRuntimePlatformForTest()
-    const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
-    await mkdir(guiRoot, { recursive: true })
-    await writeFile(
-      join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
-      'gui',
-      'utf8'
-    )
     await mkdir(join(projectRoot, 'runtimes'), { recursive: true })
     await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
     await mkdir(join(projectRoot, 'plugins'), { recursive: true })
-    await mkdir(join(projectRoot, 'python'), { recursive: true })
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs'
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v2.0.0', RUNNER_OS: 'Linux' }
-        }
-      )
-    ).resolves.toBeDefined()
-
-    const packageInterface = (await readJson(join(projectRoot, 'dist/package/interface.json'))) as {
-      $schema?: unknown
-      version?: unknown
-      agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
-    }
     const sourceInterface = (await readJson(join(projectRoot, 'interface.json'))) as {
       $schema?: unknown
       version?: unknown
       agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
     }
 
-    expect(packageInterface.$schema).toBeUndefined()
-    expect(packageInterface.version).toBe('v2.0.0')
-    expect(packageInterface.agent?.[0]?.child_exec).toBe('python3')
-    expect(packageInterface.agent?.[0]?.child_args).toEqual([
-      'python/agent/bootstrap.py'
-    ])
+    for (const runtimePlatform of [
+      'win-x64',
+      'osx-arm64',
+      'linux-x64'
+    ]) {
+      const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
+      await mkdir(guiRoot, { recursive: true })
+      await writeFile(
+        join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
+        'gui',
+        'utf8'
+      )
+      if (runtimePlatform.startsWith('linux-')) {
+        const depsRoot = join(
+          projectRoot,
+          '.create-maa-project/runtime/python-deps',
+          runtimePlatform
+        )
+        await mkdir(depsRoot, { recursive: true })
+        await writeFile(join(depsRoot, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
+      } else {
+        const pythonRuntimeRoot = join(
+          projectRoot,
+          '.create-maa-project/runtime/python',
+          runtimePlatform
+        )
+        if (runtimePlatform.startsWith('win-')) {
+          await mkdir(pythonRuntimeRoot, { recursive: true })
+          await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
+        } else {
+          await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
+          await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
+        }
+      }
+
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            'tools/build-release.mjs'
+          ],
+          {
+            cwd: projectRoot,
+            env: {
+              ...process.env,
+              GITHUB_REF_NAME: 'v2.0.0',
+              CREATE_MAA_PROJECT_RUNTIME_PLATFORM: runtimePlatform
+            }
+          }
+        )
+      ).resolves.toBeDefined()
+
+      const packageInterface = (await readJson(
+        join(projectRoot, 'dist/package/interface.json')
+      )) as {
+        $schema?: unknown
+        version?: unknown
+        agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
+      }
+      const expectedChildExec = runtimePlatform.startsWith('win-')
+        ? 'python/python.exe'
+        : runtimePlatform.startsWith('osx-')
+          ? 'python/bin/python3'
+          : 'python3'
+
+      expect(packageInterface.$schema).toBeUndefined()
+      expect(packageInterface.version).toBe('v2.0.0')
+      expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
+      expect(packageInterface.agent?.[0]?.child_args).toEqual([
+        '-u',
+        'agent/bootstrap.py'
+      ])
+      expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(
+        packageInterface.agent?.[0]?.child_args
+      )
+      const packagedBootstrap = await readFile(
+        join(projectRoot, 'dist/package/agent/bootstrap.py'),
+        'utf8'
+      )
+      expect(packagedBootstrap).toContain('Python >=3.13,<3.14 is required')
+      expect(packagedBootstrap).toContain('agent-bootstrap.log')
+      if (runtimePlatform.startsWith('linux-')) {
+        expect(await pathExists(join(projectRoot, 'dist/package/python'))).toBe(false)
+        expect(
+          await pathExists(join(projectRoot, 'dist/package/deps/maafw-0.0.0-py3-none-any.whl'))
+        ).toBe(true)
+      } else {
+        expect(await pathExists(join(projectRoot, 'dist/package', expectedChildExec))).toBe(true)
+      }
+    }
+
     expect(sourceInterface.$schema).toBeUndefined()
     expect(sourceInterface.version).toBe('v0.1.0')
-    expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(
-      packageInterface.agent?.[0]?.child_args
-    )
-    const packagedBootstrap = await readFile(
-      join(projectRoot, 'dist/package/python/agent/bootstrap.py'),
-      'utf8'
-    )
-    expect(packagedBootstrap).toContain('Python >=3.11,<3.14 is required')
-    expect(packagedBootstrap).toContain('agent-bootstrap.log')
   })
 
   it('diffs and accepts managed local changes', async () => {
@@ -2817,7 +2906,7 @@ version = "0.1.0"
     ).rejects.toThrow('--update all is not supported')
   })
 
-  it('resolves MaaFramework and MFAAvalonia assets from GitHub release metadata', async () => {
+  it('resolves MaaFramework, MFAAvalonia, and Python assets from GitHub release metadata', async () => {
     const mfa = await resolveProductAssetManifestFromGithubRelease(
       { product: 'MFAAvalonia', channel: 'latest', platform: 'win-x64' },
       {
@@ -2900,6 +2989,78 @@ version = "0.1.0"
         }
       ]
     })
+
+    const python = await resolveProductAssetManifestFromGithubRelease(
+      { product: 'Python', channel: '20260610', platform: 'osx-arm64' },
+      {
+        fetchJson: async (url) => {
+          expect(url).toBe(
+            'https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20260610'
+          )
+          return {
+            tag_name: '20260610',
+            assets: [
+              {
+                name: 'cpython-3.13.14+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
+                browser_download_url:
+                  'https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
+                digest: `sha256:${'d'.repeat(64)}`,
+                size: 25135839
+              },
+              {
+                name: 'cpython-3.13.14+20260610-aarch64-apple-darwin-freethreaded-install_only_stripped.tar.gz',
+                browser_download_url: 'https://example.test/freethreaded.tar.gz',
+                digest: `sha256:${'e'.repeat(64)}`,
+                size: 1
+              },
+              {
+                name: 'cpython-3.12.20+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
+                browser_download_url: 'https://example.test/py312.tar.gz',
+                digest: `sha256:${'f'.repeat(64)}`,
+                size: 1
+              }
+            ]
+          }
+        }
+      }
+    )
+
+    expect(python).toMatchObject({
+      product: 'Python',
+      tag: '20260610',
+      platform: 'osx-arm64',
+      assets: [
+        {
+          path: '.create-maa-project/runtime/python/osx-arm64/cpython-3.13.14+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
+          sha256: 'd'.repeat(64),
+          extract: {
+            product: 'Python',
+            platform: 'osx-arm64',
+            format: 'tar.gz'
+          }
+        }
+      ]
+    })
+
+    await withEnvironment(
+      {
+        GITHUB_ACTIONS: 'true',
+        CREATE_MAA_PROJECT_RUNTIME_PLATFORM: undefined,
+        CREATE_MAA_PROJECT_PLATFORM: undefined
+      },
+      async () => {
+        await expect(
+          resolveProductAssetManifestFromGithubRelease(
+            { product: 'Python', channel: 'latest' },
+            {
+              fetchJson: async () => {
+                throw new Error('should not fetch without explicit platform')
+              }
+            }
+          )
+        ).rejects.toThrow('Runtime platform must be explicit in GitHub Actions')
+      }
+    )
   })
 
   it('extracts MFAAvalonia archives into the GUI release input layout and preserves executable bits', async () => {
@@ -3112,6 +3273,305 @@ version = "0.1.0"
       'Resolving MFAAvalonia runtime assets...',
       'MFAAvalonia runtime assets downloaded.'
     ])
+  })
+
+  it('downloads macOS embedded Python runtime assets and installs Agent requirements', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-runtime-macos', template: 'agent' }))
+    const projectRoot = join(root, 'maa-python-runtime-macos')
+    process.chdir(projectRoot)
+
+    const archive = createTarGzArchive([
+      {
+        path: 'python/bin/python3',
+        content: Buffer.from('python'),
+        mode: 0o755
+      },
+      {
+        path: 'python/lib/python3.13/site-packages/README.txt',
+        content: Buffer.from('site'),
+        mode: 0o644
+      }
+    ])
+    const commands: Array<{ root: string; command: string; args: string[] }> = []
+    const progress: string[] = []
+
+    await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'osx-arm64' }, async () => {
+      const result = await recordUpdateRequests(
+        defaultOptions({
+          update: [
+            'python-runtime'
+          ]
+        }),
+        {
+          productManifestResolver: async (request) => {
+            expect(request).toEqual({
+              product: 'Python',
+              channel: 'latest',
+              platform: 'osx-arm64'
+            })
+            return {
+              schemaVersion: 1,
+              product: 'Python',
+              version: '20260610',
+              assets: [
+                {
+                  path: '.create-maa-project/runtime/python/osx-arm64/cpython-3.13.14+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
+                  url: 'https://example.test/python.tar.gz',
+                  sha256: sha256(archive),
+                  size: archive.byteLength,
+                  extract: {
+                    product: 'Python',
+                    platform: 'osx-arm64',
+                    format: 'tar.gz'
+                  }
+                }
+              ]
+            }
+          },
+          assetDownloader: async () => archive,
+          commandRunner: async (cwd, command, args) => {
+            commands.push({ root: cwd, command, args })
+          },
+          onProgress: (message) => progress.push(message)
+        }
+      )
+
+      expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
+      expect(result.written).toEqual(
+        expect.arrayContaining([
+          '.create-maa-project/runtime/python/osx-arm64/bin/python3',
+          '.create-maa-project/runtime/python/osx-arm64/lib/python3.13/site-packages/README.txt'
+        ])
+      )
+      expect(
+        await readFile(
+          join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'),
+          'utf8'
+        )
+      ).toBe('python')
+      expect(
+        (await stat(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3')))
+          .mode & 0o111
+      ).not.toBe(0)
+    })
+
+    expect(commands).toEqual([
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'pip',
+          'install',
+          '--python',
+          '.create-maa-project/runtime/python/osx-arm64/bin/python3',
+          '--system',
+          '--requirement',
+          'requirements.txt'
+        ]
+      }
+    ])
+    expect(progress).toEqual([
+      'Synchronizing Python release runtime assets...',
+      'Python release runtime synchronized.'
+    ])
+  })
+
+  it('downloads Windows embeddable Python runtime assets and patches site paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-runtime-windows', template: 'agent' }))
+    const projectRoot = join(root, 'maa-python-runtime-windows')
+    process.chdir(projectRoot)
+
+    const archive = createZipArchive([
+      {
+        path: 'python.exe',
+        content: Buffer.from('python')
+      },
+      {
+        path: 'python313._pth',
+        content: Buffer.from('python313.zip\n.\n#import site\n')
+      },
+      {
+        path: 'Lib/site-packages/README.txt',
+        content: Buffer.from('site')
+      }
+    ])
+    const commands: Array<{ root: string; command: string; args: string[] }> = []
+    const progress: string[] = []
+    const urls: string[] = []
+
+    await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'win-arm64' }, async () => {
+      const result = await recordUpdateRequests(
+        defaultOptions({
+          update: [
+            'python-runtime'
+          ]
+        }),
+        {
+          productManifestResolver: async () => {
+            throw new Error('Windows Python runtime should not use GitHub release resolver')
+          },
+          assetDownloader: async (url) => {
+            urls.push(url)
+            return archive
+          },
+          commandRunner: async (cwd, command, args) => {
+            commands.push({ root: cwd, command, args })
+          },
+          onProgress: (message) => progress.push(message)
+        }
+      )
+
+      expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
+      expect(result.written).toEqual(
+        expect.arrayContaining([
+          '.create-maa-project/runtime/python/win-arm64/python.exe',
+          '.create-maa-project/runtime/python/win-arm64/python313._pth',
+          '.create-maa-project/runtime/python/win-arm64/Lib/site-packages/README.txt'
+        ])
+      )
+    })
+
+    expect(urls).toEqual([
+      `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-arm64.zip`
+    ])
+    expect(
+      await readFile(
+        join(projectRoot, '.create-maa-project/runtime/python/win-arm64/python313._pth'),
+        'utf8'
+      )
+    ).toContain('import site\nLib\nLib\\site-packages\nDLLs\n')
+    expect(commands).toEqual([
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'pip',
+          'install',
+          '--python',
+          '.create-maa-project/runtime/python/win-arm64/python.exe',
+          '--system',
+          '--requirement',
+          'requirements.txt'
+        ]
+      }
+    ])
+    expect(progress).toEqual([
+      'Synchronizing Python release runtime assets...',
+      'Python release runtime synchronized.'
+    ])
+  })
+
+  it('downloads Linux Agent wheels without embedding Python', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-runtime-linux', template: 'agent' }))
+    const projectRoot = join(root, 'maa-python-runtime-linux')
+    process.chdir(projectRoot)
+
+    const commands: Array<{ root: string; command: string; args: string[] }> = []
+    const progress: string[] = []
+
+    await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'linux-arm64' }, async () => {
+      const result = await recordUpdateRequests(
+        defaultOptions({
+          update: [
+            'python-runtime'
+          ]
+        }),
+        {
+          productManifestResolver: async () => {
+            throw new Error('Linux Python runtime should not use GitHub release resolver')
+          },
+          assetDownloader: async () => {
+            throw new Error('Linux Python runtime should not download an embedded Python archive')
+          },
+          commandRunner: async (cwd, command, args) => {
+            commands.push({ root: cwd, command, args })
+            await mkdir(join(cwd, '.create-maa-project/runtime/python-deps/linux-arm64'), {
+              recursive: true
+            })
+            await writeFile(
+              join(
+                cwd,
+                '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'
+              ),
+              'wheel',
+              'utf8'
+            )
+          },
+          onProgress: (message) => progress.push(message)
+        }
+      )
+
+      expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
+      expect(result.written).toEqual(
+        expect.arrayContaining([
+          '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'
+        ])
+      )
+      expect(
+        await pathExists(join(projectRoot, '.create-maa-project/runtime/python/linux-arm64'))
+      ).toBe(false)
+    })
+
+    expect(commands).toEqual([
+      {
+        root: projectRoot,
+        command: 'python3',
+        args: expect.arrayContaining([
+          '-m',
+          'pip',
+          'download',
+          '--requirement',
+          'requirements.txt',
+          '--dest',
+          '.create-maa-project/runtime/python-deps/linux-arm64',
+          '--only-binary=:all:',
+          '--platform',
+          'manylinux_2_28_aarch64'
+        ])
+      }
+    ])
+    expect(progress).toEqual([
+      'Synchronizing Python release runtime assets...',
+      'Python release runtime synchronized.'
+    ])
+  })
+
+  it('rejects implicit Python runtime platform detection in GitHub Actions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-runtime-gha', template: 'agent' }))
+    const projectRoot = join(root, 'maa-python-runtime-gha')
+    process.chdir(projectRoot)
+
+    await withEnvironment(
+      {
+        GITHUB_ACTIONS: 'true',
+        CREATE_MAA_PROJECT_RUNTIME_PLATFORM: undefined,
+        CREATE_MAA_PROJECT_PLATFORM: undefined
+      },
+      async () => {
+        await expect(
+          recordUpdateRequests(
+            defaultOptions({
+              update: [
+                'python-runtime'
+              ]
+            }),
+            {
+              commandRunner: async () => {
+                throw new Error('should not run')
+              }
+            }
+          )
+        ).rejects.toThrow('Runtime platform must be explicit in GitHub Actions')
+      }
+    )
   })
 
   it('downloads OCR model assets from a verified manifest and clears OCR pending', async () => {
@@ -3364,7 +3824,7 @@ version = "0.1.0"
     ).rejects.toThrow('--update python-deps requires an Agent project')
   })
 
-  it('rejects reserved python runtime updates', async () => {
+  it('rejects python runtime updates outside Agent projects', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-no-python-runtime' }))
@@ -3378,9 +3838,7 @@ version = "0.1.0"
           ]
         })
       )
-    ).rejects.toThrow(
-      '--update python-runtime is reserved for future Agent release runtime support'
-    )
+    ).rejects.toThrow('--update python-runtime requires an Agent project')
   })
 
   it('previews template updates without writing files', async () => {
@@ -3804,6 +4262,69 @@ function createTarGzArchive(
   return gzipSync(Buffer.concat(chunks))
 }
 
+function createZipArchive(
+  files: Array<{
+    path: string
+    content: Buffer
+    mode?: number
+  }>
+): Buffer {
+  const localChunks: Buffer[] = []
+  const centralChunks: Buffer[] = []
+  let offset = 0
+  for (const file of files) {
+    const name = Buffer.from(file.path, 'utf8')
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(0x0800, 6)
+    local.writeUInt16LE(0, 8)
+    local.writeUInt32LE(0, 10)
+    local.writeUInt32LE(0, 14)
+    local.writeUInt32LE(file.content.byteLength, 18)
+    local.writeUInt32LE(file.content.byteLength, 22)
+    local.writeUInt16LE(name.byteLength, 26)
+    local.writeUInt16LE(0, 28)
+    localChunks.push(local, name, file.content)
+
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(20, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt16LE(0x0800, 8)
+    central.writeUInt16LE(0, 10)
+    central.writeUInt32LE(0, 12)
+    central.writeUInt32LE(0, 16)
+    central.writeUInt32LE(file.content.byteLength, 20)
+    central.writeUInt32LE(file.content.byteLength, 24)
+    central.writeUInt16LE(name.byteLength, 28)
+    central.writeUInt16LE(0, 30)
+    central.writeUInt16LE(0, 32)
+    central.writeUInt16LE(0, 34)
+    central.writeUInt16LE(0, 36)
+    central.writeUInt32LE((file.mode ?? 0o644) << 16, 38)
+    central.writeUInt32LE(offset, 42)
+    centralChunks.push(central, name)
+    offset += local.byteLength + name.byteLength + file.content.byteLength
+  }
+
+  const centralDirectory = Buffer.concat(centralChunks)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(0, 4)
+  end.writeUInt16LE(0, 6)
+  end.writeUInt16LE(files.length, 8)
+  end.writeUInt16LE(files.length, 10)
+  end.writeUInt32LE(centralDirectory.byteLength, 12)
+  end.writeUInt32LE(offset, 16)
+  end.writeUInt16LE(0, 20)
+  return Buffer.concat([
+    ...localChunks,
+    centralDirectory,
+    end
+  ])
+}
+
 function writeTarString(buffer: Buffer, value: string, offset: number, length: number): void {
   buffer.write(value, offset, Math.min(Buffer.byteLength(value), length), 'utf8')
 }
@@ -3853,4 +4374,34 @@ async function findBackedUpFile(root: string, target: string): Promise<boolean> 
     if (path.replaceAll('\\', '/').endsWith(`/${target}`)) return true
   }
   return false
+}
+
+async function withEnvironment(
+  values: Record<string, string | undefined>,
+  action: () => Promise<void>
+): Promise<void> {
+  const previous = new Map<string, string | undefined>()
+  for (const name of Object.keys(values)) {
+    previous.set(name, process.env[name])
+    const value = values[name]
+    if (value === undefined) {
+      delete process.env[name]
+    } else {
+      process.env[name] = value
+    }
+  }
+  try {
+    await action()
+  } finally {
+    for (const [
+      name,
+      value
+    ] of previous) {
+      if (value === undefined) {
+        delete process.env[name]
+      } else {
+        process.env[name] = value
+      }
+    }
+  }
 }

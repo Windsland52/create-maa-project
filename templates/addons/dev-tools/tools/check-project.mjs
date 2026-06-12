@@ -325,7 +325,12 @@ function interfaceAgent(project) {
   const [
     childExec = '',
     ...childArgs
-  ] = project.python.devCommand ?? []
+  ] = project.python.devCommand ?? [
+    'uv',
+    'run',
+    'python',
+    'agent/bootstrap.py'
+  ]
   return [
     {
       child_exec: childExec,

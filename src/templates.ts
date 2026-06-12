@@ -90,6 +90,20 @@ export type ProjectTemplateInput = {
   resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
 }
 
+const AGENT_DEBUG_SESSION_NAME = 'Maa Agent: Debug'
+const DEFAULT_AGENT_DEV_COMMAND = [
+  'uv',
+  'run',
+  'python',
+  'agent/bootstrap.py'
+]
+
+export function defaultAgentDevCommand(): string[] {
+  return [
+    ...DEFAULT_AGENT_DEV_COMMAND
+  ]
+}
+
 export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   const files: ManagedFileInput[] = [
     managed('.editorconfig', template('base/.editorconfig')),
@@ -110,7 +124,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
     once('LICENSE', licenseText(input)),
     once(
       'maatools.config.mts',
-      maatoolsConfig(resourcePaths(input.resources ?? defaultResources()))
+      maatoolsConfig(resourcePaths(input.resources ?? defaultResources()), input.includeAgent)
     )
   ]
 
@@ -152,6 +166,9 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     once('.prettierignore', template('base/.prettierignore')),
     once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
     once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
+    ...(input.includeAgent ? [
+          once('.vscode/launch.json', vscodeLaunch())
+        ] : []),
     managed('.vscode/tasks.json', vscodeTasks(input.includeGithub)),
     managed('tools/check-project.mjs', checkProjectScript()),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
@@ -201,8 +218,8 @@ export function configFile(config: MaaProjectConfig): ManagedFileInput {
   return once('maa-project.json', stableJson(config))
 }
 
-export function maatoolsConfigFile(resources: string[]): ManagedFileInput {
-  return once('maatools.config.mts', maatoolsConfig(resources))
+export function maatoolsConfigFile(resources: string[], includeAgent = false): ManagedFileInput {
+  return once('maatools.config.mts', maatoolsConfig(resources, includeAgent))
 }
 
 export function gitCliffFiles(): ManagedFileInput[] {
@@ -348,7 +365,7 @@ export function interfaceAgent(
   const [
     childExec = '',
     ...childArgs
-  ] = command ?? []
+  ] = command ?? defaultAgentDevCommand()
   return {
     child_exec: childExec,
     ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
@@ -435,9 +452,12 @@ function pnpmWorkspaceYaml(): string {
   return template('addons/dev-tools/pnpm-workspace.yaml')
 }
 
-function maatoolsConfig(resources: string[]): string {
+function maatoolsConfig(resources: string[], includeAgent = false): string {
   return template('base/maatools.config.mts', {
-    resources: javascriptStringArray(resources)
+    resources: javascriptStringArray(resources),
+    vscodeBlock: includeAgent
+      ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}'\n    }\n  }`
+      : ''
   })
 }
 
@@ -505,6 +525,12 @@ function vscodeTasks(includeGithub: boolean): string {
       ? 'addons/dev-tools/.vscode/tasks.github.json'
       : 'addons/dev-tools/.vscode/tasks.json'
   )
+}
+
+function vscodeLaunch(): string {
+  return template('addons/dev-tools/.vscode/launch.agent.json', {
+    agentDebugSessionName: AGENT_DEBUG_SESSION_NAME
+  })
 }
 
 function checkProjectScript(): string {

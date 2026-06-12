@@ -9,6 +9,7 @@ import {
   configFile,
   communityFiles,
   dependabotFile,
+  defaultAgentDevCommand,
   devToolFiles,
   emptyPng,
   gitCliffFiles,
@@ -112,7 +113,7 @@ export async function createProject(
   const resolvedAddons = resolveAddonDependencies(options.add, { includeAgent })
   const includeDevTools = resolvedAddons.includes('dev-tools')
   const includeGithub = resolvedAddons.includes('github')
-  const pythonDevCommand = includeAgent ? await detectPythonDevCommand() : undefined
+  const pythonDevCommand = includeAgent ? defaultAgentDevCommand() : undefined
   const config = createConfig({
     slug,
     displayName,
@@ -127,7 +128,7 @@ export async function createProject(
     includeAgent,
     options,
     includeDevTools,
-    pythonDevCommand,
+    includeGithub,
     includeOcrPending: !shouldDownloadOcrModels
   })
   const files = [
@@ -321,7 +322,12 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     },
     configFile(config)
   ]
-  return writeAddonFiles(root, config, lock, files, options, { overwriteUnmanaged: true })
+  const pending: PendingItem[] = []
+  if (config.python) pending.push(pythonRuntimePending())
+  return writeAddonFiles(root, config, lock, files, options, {
+    overwriteUnmanaged: true,
+    pending
+  })
 }
 
 export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
@@ -340,12 +346,12 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   }
 
   config.project.initialTemplate = 'agent'
-  const pythonDevCommand = await detectPythonDevCommand()
+  const pythonDevCommand = defaultAgentDevCommand()
   config.python = {
-    requiresPython: '>=3.11,<3.14',
+    requiresPython: '>=3.13,<3.14',
     recommendedPython: '3.13'
   }
-  if (pythonDevCommand) config.python.devCommand = pythonDevCommand
+  config.python.devCommand = pythonDevCommand
   const interfaceJson = await readInterfaceJson(root)
   interfaceJson.agent = [
     interfaceAgent(config.project.slug, config.python.devCommand)
@@ -363,11 +369,12 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   vscodeExtensions.recommendations = appendUnique(recommendations, [
     'windsland52.maa-log-analyzer',
     'charliermarsh.ruff',
+    'ms-python.debugpy',
     'ms-python.python',
     'ms-python.vscode-pylance'
   ])
   const vscodeSettings = await readJsonObject(root, '.vscode/settings.json')
-  vscodeSettings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv/bin/python'
+  vscodeSettings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv'
   vscodeSettings['[python]'] = {
     'editor.defaultFormatter': 'charliermarsh.ruff'
   }
@@ -397,8 +404,19 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       content: stableJson(vscodeSettings),
       managed: false
     },
+    maatoolsConfigFile(
+      config.resources.map((pack) => `./${pack.path}`),
+      true
+    ),
     configFile(config)
   ]
+  if (config.features.vscode.enabled && !(await exists(join(root, '.vscode/launch.json')))) {
+    files.push(
+      ...devToolFiles(templateInputFromConfig(config)).filter(
+        (file) => file.path === '.vscode/launch.json'
+      )
+    )
+  }
   if (hasGithubAutomation(config)) {
     files.push(
       releaseWorkflowFile({
@@ -418,7 +436,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
-      lock.pending = mergePending(lock.pending, pythonPending(pythonDevCommand))
+      lock.pending = mergePending(lock.pending, pythonPending(hasGithubAutomation(config)))
       lock.template.lastUpdatedBy = 'create-maa-project'
       lock.template.templateVersion = CLI_VERSION
       await writeProjectState(root, config, lock)
@@ -474,7 +492,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
       content: emptyPng(),
       managed: false
     },
-    maatoolsConfigFile(resourcePaths),
+    maatoolsConfigFile(resourcePaths, Boolean(config.python)),
     configFile(config)
   ]
 
@@ -682,10 +700,10 @@ function createConfig(input: {
   }
   if (input.includeAgent) {
     config.python = {
-      requiresPython: '>=3.11,<3.14',
+      requiresPython: '>=3.13,<3.14',
       recommendedPython: '3.13'
     }
-    if (input.pythonDevCommand) config.python.devCommand = input.pythonDevCommand
+    config.python.devCommand = input.pythonDevCommand ?? defaultAgentDevCommand()
   }
   return config
 }
@@ -1012,8 +1030,8 @@ function errorMessage(error: unknown): string {
 function defaultPending(input: {
   includeAgent: boolean
   includeDevTools: boolean
+  includeGithub: boolean
   options: CliOptions
-  pythonDevCommand?: string[] | undefined
   includeOcrPending?: boolean
 }): PendingItem[] {
   const pending: PendingItem[] = []
@@ -1039,7 +1057,7 @@ function defaultPending(input: {
     })
   }
   if (input.includeAgent) {
-    pending.push(...pythonPending(input.pythonDevCommand))
+    pending.push(...pythonPending(input.includeGithub))
   }
   return pending
 }
@@ -1052,7 +1070,15 @@ function ocrDownloadPending(error: unknown): PendingItem {
   }
 }
 
-function pythonPending(pythonDevCommand: string[] | undefined): PendingItem[] {
+function pythonRuntimePending(): PendingItem {
+  return {
+    kind: 'python-runtime',
+    reason: 'Python release runtime dependencies are required for Agent release packaging.',
+    command: 'create-maa-project --update python-runtime'
+  }
+}
+
+function pythonPending(includePythonRuntime: boolean): PendingItem[] {
   const pending: PendingItem[] = [
     {
       kind: 'python-deps',
@@ -1060,75 +1086,10 @@ function pythonPending(pythonDevCommand: string[] | undefined): PendingItem[] {
       command: 'create-maa-project --update python-deps'
     }
   ]
-  if (!pythonDevCommand) {
-    pending.push({
-      kind: 'python-runtime',
-      reason: 'No compatible local Python command was detected for Agent development.',
-      command: 'Install Python >=3.11,<3.14, then run create-maa-project --sync metadata'
-    })
+  if (includePythonRuntime) {
+    pending.push(pythonRuntimePending())
   }
   return pending
-}
-
-async function detectPythonDevCommand(): Promise<string[] | undefined> {
-  const candidates = process.platform === 'win32' ? [
-          [
-            'py',
-            '-3.13'
-          ],
-          [
-            'python'
-          ],
-          [
-            'python3'
-          ]
-        ] : [
-          [
-            'python3.13'
-          ],
-          [
-            'python3'
-          ],
-          [
-            'python'
-          ]
-        ]
-  for (const candidate of candidates) {
-    const [
-      command,
-      ...baseArgs
-    ] = candidate
-    if (!command) continue
-    try {
-      const result = await execFileAsync(
-        command,
-        [
-          ...baseArgs,
-          '--version'
-        ],
-        {
-          timeout: 3000
-        }
-      )
-      const versionOutput = `${result.stdout} ${result.stderr}`
-      if (!isCompatiblePythonVersion(versionOutput)) continue
-      return [
-        ...candidate,
-        'agent/bootstrap.py'
-      ]
-    } catch {
-      continue
-    }
-  }
-  return undefined
-}
-
-function isCompatiblePythonVersion(output: string): boolean {
-  const match = output.match(/Python\s+(\d+)\.(\d+)\.(\d+)/)
-  if (!match) return false
-  const major = Number(match[1])
-  const minor = Number(match[2])
-  return major === 3 && minor >= 11 && minor < 14
 }
 
 function assertValidVersion(version: string): void {

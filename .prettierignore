@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.create-maa-project/
+.uv-cache/
+.venv/
+py-wrapper/dist/
+py-wrapper/build/
+py-wrapper/*.egg-info/
+
+# Upstream MaaFW schema baselines are copied from upstream. Only the two
+# project-owned custom schema files should be formatted.
+templates/base/tools/schema/interface.schema.json
+templates/base/tools/schema/interface_config.schema.json
+templates/base/tools/schema/interface_import.schema.json
+templates/base/tools/schema/pipeline.schema.json
+
+# These template sources contain replacement tokens and only become parseable
+# after create-maa-project renders them.
+templates/addons/dev-tools/package.json
+templates/addons/github/.github/workflows/release.yml
+templates/addons/github/tools/build-release.mjs
+templates/base/maatools.config.mts

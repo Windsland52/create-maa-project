@@ -47,8 +47,20 @@ function main() {
   for (const file of files) {
     const beforeHash = sha256(file)
     const beforeSize = statSync(file).size
-    runOxipng(['-o', 'max', '--fast', '-Z', '-s', file])
-    runOxipng(['-o', '2', '-s', file])
+    runOxipng([
+      '-o',
+      'max',
+      '--fast',
+      '-Z',
+      '-s',
+      file
+    ])
+    runOxipng([
+      '-o',
+      '2',
+      '-s',
+      file
+    ])
     const afterSize = statSync(file).size
     const afterHash = sha256(file)
 
@@ -73,7 +85,13 @@ Set OPTIMIZE_IMAGE_PATHS to pass newline, comma, or space-separated targets in C
 }
 
 function ensureOxipng() {
-  const result = spawnSync('oxipng', ['--version'], { encoding: 'utf8' })
+  const result = spawnSync(
+    'oxipng',
+    [
+      '--version'
+    ],
+    { encoding: 'utf8' }
+  )
   if (result.error?.code === 'ENOENT') {
     throw new Error('oxipng is required. Install it from https://github.com/shssoichiro/oxipng.')
   }
@@ -87,7 +105,9 @@ function resolveTargets() {
   if (args.length > 0) return args
 
   const envTargets = process.env.OPTIMIZE_IMAGE_PATHS?.trim()
-  if (!envTargets) return ['.']
+  if (!envTargets) return [
+      '.'
+    ]
 
   return envTargets
     .split(/[\r\n,\s]+/)
@@ -106,12 +126,16 @@ function collectPngFiles(targets) {
       files.set(file, file)
     }
   }
-  return [...files.keys()].sort((left, right) => displayPath(left).localeCompare(displayPath(right)))
+  return [
+    ...files.keys()
+  ].sort((left, right) => displayPath(left).localeCompare(displayPath(right)))
 }
 
 function collectTargetFiles(target) {
   const stats = statSync(target)
-  if (stats.isFile()) return isPng(target) ? [target] : []
+  if (stats.isFile()) return isPng(target) ? [
+          target
+        ] : []
   if (!stats.isDirectory()) return []
   return walkDirectory(target)
 }

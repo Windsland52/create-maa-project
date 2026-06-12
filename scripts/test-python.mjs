@@ -1,15 +1,29 @@
 import { spawn } from 'node:child_process'
 
-const candidates =
-  process.platform === 'win32'
-    ? [
-        ['py', '-3'],
-        ['python'],
-        ['python3']
+const candidates = process.platform === 'win32' ? [
+        [
+          'py',
+          '-3'
+        ],
+        [
+          'python'
+        ],
+        [
+          'python3'
+        ]
+      ] : [
+        [
+          'python3'
+        ],
+        [
+          'python'
+        ]
       ]
-    : [['python3'], ['python']]
 
-for (const [command, ...baseArgs] of candidates) {
+for (const [
+  command,
+  ...baseArgs
+] of candidates) {
   const code = await run(command, [
     ...baseArgs,
     '-m',

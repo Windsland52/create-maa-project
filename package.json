@@ -20,18 +20,23 @@
         "build": "node scripts/build.mjs",
         "build:sea": "node scripts/build-sea.mjs",
         "dev": "tsx src/index.ts",
+        "format": "prettier --write . --ignore-unknown",
+        "format:check": "prettier --check . --ignore-unknown",
         "release:manifest": "node scripts/create-release-manifest.mjs",
         "release:prepare-pypi": "node scripts/prepare-pypi-release.mjs",
         "release:sync-version": "node scripts/sync-release-version.mjs",
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
         "test": "vitest run && node scripts/test-python.mjs",
-        "check": "pnpm typecheck && pnpm test"
+        "check": "pnpm format:check && pnpm typecheck && pnpm test"
     },
     "devDependencies": {
+        "@nekosu/prettier-plugin-maafw-sort": "1.0.5",
         "@types/node": "24.0.0",
         "esbuild": "0.25.5",
         "postject": "1.0.0-alpha.6",
+        "prettier": "3.8.4",
+        "prettier-plugin-multiline-arrays": "4.1.9",
         "tsx": "4.20.3",
         "typescript": "5.8.3",
         "vitest": "3.2.4"

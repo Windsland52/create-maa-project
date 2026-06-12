@@ -1,65 +1,277 @@
 # create-maa-project
 
-MaaFW project scaffolding CLI.
+English | [简体中文](./README.zh-CN.md)
+
+`create-maa-project` is the scaffold and maintenance CLI for new MaaFW application
+projects. It creates deterministic Pipeline or Python Agent projects, records project
+intent in committed state files, and provides update, sync, diff, doctor, and JSON report
+interfaces for humans and tool wrappers.
+
+The CLI is intentionally independent from LLMs or MCP servers. MaaMCP or other tools can
+wrap it through the stable `--report` protocol, but all writes still go through the CLI's
+backup, lock, hash, and validation paths.
+
+## Installation
 
 ```bash
 npx create-maa-project my-project
+uvx create-maa-project my-project
+pipx run create-maa-project my-project
 ```
 
-Current implementation covers the local scaffold core:
+npm is the primary distribution channel. The PyPI package is a lightweight wrapper that
+uses the same-version GitHub Release binary when available and gives clear fallback
+guidance when it cannot run the cached binary.
 
-- interactive create flow without LLM
-- default `resource/base` project shape
-- create presets for All (Recommended), Minimal, and Custom repository features
-- multiple MaaFW PI V2 control targets such as `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, and `WlRoots`
-- optional Python Agent template
-- `--add dev-tools` and `--add github` for repository tooling and GitHub workflows
-- `--add agent` for adding the Python Agent files to an existing project
-- `--add resource-pack <folder> --label <display>`
-- `--add git-cliff` for git-cliff release notes
-- `--add auto-format` for a scheduled/manual formatting workflow
-- `--add optimize-images` for a lossless PNG optimization script and workflow
-- `--add community`, `--add dependabot`, and `--add schema-sync`
-- reserved add-on reporting for options such as `mirrorchyan`
-- committed `maa-project.json` and `maa-project.lock.json`
-- project-owned files such as `interface.json`, `package.json`, `tasks/`, `resource/`, editor ignores/settings, and OCR model files are created once instead of managed as template baselines
-- metadata sync for interface, package, controller, license, network mode, display name, and validated GitHub repository URLs
-- managed file hash checks through `--doctor` and `--diff`
-- `--accept-changes [path...]` to accept selected or all changed managed files
-- accepted local baseline reporting in `--doctor` and generated `tools/check-project.mjs`
-- `--update node-deps` and `--update python-deps` dependency refreshes, with successful pending-action cleanup
-- `--update schema` refreshes the generated project from the CLI's embedded schema baseline
-- runtime updates resolve MaaFramework and MFAAvalonia assets from GitHub Releases, verify GitHub-provided sha256 digests, cache MFAAvalonia GUI files for release staging, and extract MaaFramework into the generated runtime layout
-- Agent runtime updates use embedded Python for Windows/macOS release packages and Linux wheel dependencies for system-`python3` `.venv` startup
-- `pnpm sync:runtime` in generated projects calls `create-maa-project --update maafw --update runtime:mfa`, and Agent projects also run `--update python-runtime`; set `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` to sync every desktop MaaFramework/MFAAvalonia platform instead of the current platform, while Agent Python dependency sync remains single-platform
-- Generated GitHub Actions pass `CREATE_MAA_PROJECT_RUNTIME_PLATFORM` from the release matrix; runtime asset sync refuses to infer the platform from runner architecture inside GitHub Actions
-- default asset downloads retry transient network failures; set `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` to override the default
-- OCR downloads can be seeded for local/offline verification with `CREATE_MAA_PROJECT_OCR_ZIP_PATH`
-- OCR model updates use a verified manifest from `CREATE_MAA_PROJECT_OCR_MANIFEST_URL` when configured, with the existing OCR zip as fallback
-- optional schema baseline sync through `--add schema-sync`, including `pnpm sync:schema` and a generated daily schema-sync workflow
-- CLI project creation attempts OCR model download by default and runs `pnpm install` when dev tools are selected, keeping actionable pending items if either fails
-- conservative `--update template` with `--update template --diff` preview and `--force` overwrite
-- generated project lint and release dry-run smoke checks, including pending-action, pnpm lockfile, VS Code settings, and interface schema guards
-- release staging through generated `tools/build-release.mjs`, with MFAAvalonia GUI files laid down first, MaaFramework runtime overlaid after it, package-only `interface.json` rewriting, tag-based version injection, Agent `child_exec` normalization, dev-file exclusion, package smoke checks, and Unix tar executable metadata smoke in the release workflow
-- default release workflow packages the 3 OS x 2 arch desktop artifact matrix using M9A-style GUI suffixes such as `-MFAA`: Windows zip artifacts, plus Linux/macOS tar.gz artifacts; MFAAvalonia runtime sync uses its upstream `win/linux/osx` and `x64/arm64` asset matrix separately
-- explicit `--git`/`--no-git` creation flow with parent-repository and pending-commit guards
-- write lock, explicit stale-lock cleanup, local backups for file overwrites and non-empty target directories, cache cleanup, and backup restore
-- PyPI wrapper trust-chain checks for the same-version release manifest and SEA asset, verified binary cache reuse, manual `npx`/source fallback guidance, and Windows execution diagnostics
+## Quick Start
 
-Schema syncing is explicit and PR-based rather than part of build. The PyPI
-wrapper source tree contains the trust-chain code; release wheels must embed the
-matching release manifest digest before they can download and cache a SEA binary.
+```bash
+npx create-maa-project my-project
+cd my-project
+create-maa-project --doctor
+pnpm check
+```
 
-## JSON report mode
+For a reproducible non-interactive repository scaffold:
 
-Pass `--report` to make `create`, `sync`, `update`, `diff`, and `doctor` emit a
-single machine-readable JSON document on stdout. In report mode, `--report`
-forces non-interactive execution. Progress, `Log:`, and human `Error:` text are
-not written to stdout; wrappers may ignore stderr unless they want diagnostics.
+```bash
+npx create-maa-project my-project \
+  --add dev-tools \
+  --add github \
+  --skip-download \
+  --no-interactive
+```
 
-Exit code `0` means the command completed successfully. Exit code `1` means the
-command failed, or `doctor` found project problems. The JSON `exitCode` field
-matches the process exit code.
+Use `--template agent` for a Python Agent project. Use `--slug` when the folder or display
+name cannot produce an ASCII kebab-case project ID.
+
+## Project Model
+
+Project identity is split into two fields:
+
+- `slug`: ASCII kebab-case ID used for repository names, package names, artifacts, and
+  `interface.json` `name`.
+- `displayName`: user-facing label used for `interface.json` `label`; it may be Chinese
+  or any other display text.
+
+A full repository/tooling project can include:
+
+```text
+my-project/
+├── interface.json
+├── maa-project.json
+├── maa-project.lock.json
+├── tasks/tutorial.json
+├── resource/base/
+│   ├── default_pipeline.json
+│   ├── pipeline/tutorial.json
+│   ├── image/empty.png
+│   └── model/ocr/
+├── tools/
+├── tools/schema/
+├── .github/workflows/
+├── .vscode/
+├── package.json
+├── maatools.config.mts
+└── README.md
+```
+
+The resource layout is fixed around `resource/base/` plus optional `resource/<pack>/`
+folders. `interface.json` resource paths are generated in the order recorded in
+`maa-project.json`; later packs have higher override priority in MaaFW resource lookup.
+
+The CLI creates project-owned files such as `interface.json`, `package.json`, `tasks/`,
+`resource/`, README, and license once. Later updates do not treat those as managed
+template baselines unless a specific `--sync` or `--add` operation rewrites a supported
+structured field.
+
+## State and Safety
+
+Committed state:
+
+- `maa-project.json`: user intent, including project metadata, feature/add-on choices,
+  resources, runtime channels, network mode, license, and Agent configuration.
+- `maa-project.lock.json`: resolved state, pending actions, template version, and managed
+  file hashes.
+
+Local state lives under `.create-maa-project/` and is ignored by generated projects:
+
+```text
+.create-maa-project/
+├── backups/
+├── baselines/
+├── cache/
+├── logs/
+└── run.lock
+```
+
+Safety rules:
+
+- Writes to config, lock, and managed files use a project write lock.
+- Files are backed up before overwrites.
+- `--force` skips prompts but still keeps backups.
+- `--yes` is not the same as `--force`.
+- Non-empty non-Git targets require explicit `--force --allow-non-git-dir`.
+- `--doctor` and `--diff` are read-only.
+- `--accept-changes [path...]` accepts current managed-file contents as the new local
+  baseline; it does not restore the official template.
+
+Managed files are tool-owned files such as workflows, schema baselines, generated release
+scripts, and project checks. If they drift, `--diff` shows the change and `--doctor` gives
+an actionable repair or accept command.
+
+## Commands
+
+Common create options:
+
+```bash
+create-maa-project [name]
+create-maa-project .
+create-maa-project [name] --template pipeline
+create-maa-project [name] --template agent
+create-maa-project [name] --slug maa-helper --name "明日方舟助手"
+create-maa-project [name] --controller Adb,Win32,MacOS
+create-maa-project [name] --license MIT
+create-maa-project [name] --git
+create-maa-project [name] --no-git
+```
+
+Supported `--controller` targets: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`,
+`WlRoots`. Comma-separated for multiple targets. Default is `Adb`.
+
+Add-ons:
+
+```bash
+create-maa-project --add dev-tools
+create-maa-project --add github
+create-maa-project --add agent
+create-maa-project --add resource-pack extra --label "Extra Resource"
+create-maa-project --add git-cliff
+create-maa-project --add auto-format
+create-maa-project --add optimize-images
+create-maa-project --add community
+create-maa-project --add dependabot
+create-maa-project --add schema-sync
+```
+
+Metadata sync:
+
+```bash
+create-maa-project --sync metadata
+create-maa-project --sync display-name --name "New Display Name"
+create-maa-project --sync version --version 0.2.0
+create-maa-project --sync license --license MIT
+create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
+create-maa-project --sync network --network official
+```
+
+Updates:
+
+```bash
+create-maa-project --update schema
+create-maa-project --update maafw
+create-maa-project --update runtime:mfa
+create-maa-project --update ocr-models
+create-maa-project --update node-deps
+create-maa-project --update python-deps
+create-maa-project --update python-runtime
+create-maa-project --update template
+create-maa-project --update template --diff
+create-maa-project --update schema --diff
+```
+
+`--update all` is intentionally unsupported. Run explicit updates so pending actions and
+logs stay clear.
+
+Diagnostics and maintenance:
+
+```bash
+create-maa-project --doctor
+create-maa-project --doctor --report
+create-maa-project --diff
+create-maa-project --accept-changes [path...]
+create-maa-project --restore <backup-id>
+create-maa-project --clean-cache
+```
+
+Useful execution flags:
+
+```bash
+--yes
+--no-interactive
+--force
+--clear-stale-lock
+--allow-non-git-dir
+--allow-pending-commit
+--skip-download
+--log-file <path>
+--no-color
+```
+
+## Tooling
+
+Generated repository tooling targets Node 24 and pnpm 11.5.1. Dev-tool projects include
+project-local scripts for formatting, schema validation, MaaFW checks, project state
+linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python checks.
+
+Asset and dependency operations are explicit and recoverable:
+
+- Project creation tries OCR download and `pnpm install` when relevant.
+- Network or tool failures leave committed pending actions with repair commands.
+- `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` changes download retry attempts.
+- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip.
+- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest.
+- `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` syncs all desktop MaaFramework and
+  MFAAvalonia runtime platforms.
+
+## Agent Projects
+
+`--template agent` or `--add agent` adds a Python Agent scaffold on top of the Pipeline
+project:
+
+```text
+agent/
+├── bootstrap.py
+├── main.py
+├── agent_runtime.py
+├── custom/
+└── utils/
+pyproject.toml
+uv.lock
+requirements.txt
+```
+
+The generated bootstrap handles local runtime setup, dependency checks, debug logging, and
+starting `agent/main.py`. Runtime-local files such as `config/pip_config.json`, `.venv/`,
+and `debug/` are ignored instead of committed.
+
+## Release and Runtime
+
+Projects with the GitHub add-on include check and release workflows. Release packaging is
+tag-driven: source metadata can stay at `0.1.0`, while the release package injects the Git
+tag version into the staged `interface.json`.
+
+The default runtime profile targets MFAAvalonia:
+
+- `create-maa-project --update maafw` syncs MaaFramework assets.
+- `create-maa-project --update runtime:mfa` syncs MFAAvalonia GUI runtime assets.
+- Generated `pnpm sync:runtime` runs both, plus Python runtime sync for Agent projects.
+- Release jobs pass `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` for the target
+  runtime asset.
+
+Default release artifacts cover Windows, Linux, and macOS on `x86_64` and `aarch64`.
+Windows artifacts are `.zip`; Linux and macOS artifacts are `.tar.gz`.
+
+## JSON Report Mode
+
+Pass `--report` to make `create`, `sync`, `update`, `diff`, and `doctor` emit a single
+machine-readable JSON document on stdout. In report mode, `--report` forces
+non-interactive execution. Progress, `Log:`, and human `Error:` text are not written to
+stdout; wrappers may ignore stderr unless they want diagnostics.
+
+Exit code `0` means the command completed successfully. Exit code `1` means the command
+failed, or `doctor` found project problems. The JSON `exitCode` field matches the process
+exit code.
 
 ```ts
 type CliJsonReport = {
@@ -83,33 +295,6 @@ type CliJsonReport = {
   doctor?: { lines: string[] }
   diff?: { lines: string[] }
   error?: { message: string; code?: string }
-}
-```
-
-Example success report:
-
-```json
-{
-  "schemaVersion": 1,
-  "tool": "create-maa-project",
-  "command": "sync",
-  "ok": true,
-  "timestamp": "2026-06-12T10:30:00.000Z",
-  "durationMs": 42,
-  "exitCode": 0,
-  "executionId": "2026-06-12T10-30-00-000Z-00000000-0000-4000-8000-000000000000",
-  "root": "/path/to/project",
-  "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-30-00-000Z-00000000-0000-4000-8000-000000000000.log",
-  "written": [
-    "interface.json",
-    "maa-project.json",
-    "maa-project.lock.json"
-  ],
-  "skipped": [],
-  "pending": [],
-  "changedManagedFiles": [],
-  "changedUserFiles": [],
-  "suggestedCommands": []
 }
 ```
 
@@ -139,10 +324,24 @@ Example failure report:
 }
 ```
 
-## Release
+## MCP Boundary
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the
-repo, builds the npm package, builds SEA binaries for Windows/Linux/macOS on
-`x86_64` and `aarch64`, writes `create-maa-project-manifest.json`, publishes the
-GitHub Release assets, publishes npm, then builds the PyPI wrapper with the
-release manifest digest embedded and publishes it through trusted publishing.
+The recommended MCP integration is a thin wrapper around this CLI:
+
+- MCP calls `create-maa-project --report` with explicit arguments.
+- MCP parses only stdout JSON.
+- MCP does not expose arbitrary shell access.
+- MCP keeps writes in the CLI engine, so backups, locks, managed baselines, and pending
+  actions remain consistent.
+
+Useful MCP tools can map to `create`, `doctor`, `diff`, `sync`, and `update` today.
+`add resource-pack` and `accept-changes` should wait for report coverage before being
+exposed through the same wrapper contract.
+
+## Releasing This CLI
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the repo,
+builds the npm package, builds SEA binaries for Windows/Linux/macOS on `x86_64` and
+`aarch64`, writes `create-maa-project-manifest.json`, publishes GitHub Release assets,
+publishes npm, then builds the PyPI wrapper with the release manifest digest embedded and
+publishes it through trusted publishing.

@@ -183,6 +183,11 @@ const maatoolsConfigContent = readFileSync('maatools.config.mts', 'utf8')
 if (maatoolsConfigContent.includes('defineConfig')) {
   throw new Error('maatools.config.mts must not use @nekosu/maa-tools defineConfig')
 }
+if (!hasMaatoolsRequiredFields(maatoolsConfigContent)) {
+  throw new Error(
+    "maatools.config.mts must set maaVersion, interfacePath: 'interface.json', and check: {}"
+  )
+}
 const maatoolsResources = parseMaatoolsResourceArray(maatoolsConfigContent)
 if (
   !maatoolsResources ||
@@ -547,6 +552,14 @@ function escapeRegExp(value) {
 function parseTomlStringField(section, key) {
   const match = section.match(new RegExp('^\\s*' + key + '\\s*=\\s*"([^"]*)"\\s*$', 'm'))
   return match?.[1]
+}
+
+function hasMaatoolsRequiredFields(content) {
+  return (
+    /\bmaaVersion\s*:\s*['"][^'"]+['"]/.test(content) &&
+    /\binterfacePath\s*:\s*['"]interface\.json['"]/.test(content) &&
+    /\bcheck\s*:\s*\{/.test(content)
+  )
 }
 
 function parseMaatoolsResourceArray(content) {

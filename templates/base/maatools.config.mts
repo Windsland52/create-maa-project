@@ -1,4 +1,7 @@
 export default {
-  interface: 'interface.json',
-  resource: {{resources}}{{vscodeBlock}}
+  cwd: import.meta.dirname,
+  maaVersion: 'latest',
+  interfacePath: 'interface.json',
+  resource: {{resources}},
+  check: {}{{vscodeBlock}}
 }

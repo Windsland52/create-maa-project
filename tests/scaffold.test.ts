@@ -133,9 +133,11 @@ describe('scaffold', () => {
     expect(result.written).not.toContain('tools/schema/interface.schema.json')
     expect(await pathExists(join(projectRoot, 'package.json'))).toBe(false)
     expect(await pathExists(join(projectRoot, '.vscode/settings.json'))).toBe(false)
-    expect(await readFile(join(projectRoot, 'maatools.config.mts'), 'utf8')).not.toContain(
-      'defineConfig'
-    )
+    const maatoolsConfig = await readFile(join(projectRoot, 'maatools.config.mts'), 'utf8')
+    expect(maatoolsConfig).not.toContain('defineConfig')
+    expect(maatoolsConfig).toContain("maaVersion: 'latest'")
+    expect(maatoolsConfig).toContain("interfacePath: 'interface.json'")
+    expect(maatoolsConfig).toContain('check: {}')
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/schema/interface.schema.json'))).toBe(false)
@@ -1987,7 +1989,13 @@ version = "ignored"
     )
     await writeFile(
       join(projectRoot, 'maatools.config.mts'),
-      'export default { resource: ["./resource/other"] }\n',
+      `export default {
+  maaVersion: 'latest',
+  interfacePath: 'interface.json',
+  resource: ['./resource/other'],
+  check: {}
+}
+`,
       'utf8'
     )
 
@@ -2256,7 +2264,13 @@ jobs:
     await clearPending(projectRoot)
     await writeFile(
       join(projectRoot, 'maatools.config.mts'),
-      'export default { resource: ["./resource/other"] }\n',
+      `export default {
+  maaVersion: 'latest',
+  interfacePath: 'interface.json',
+  resource: ['./resource/other'],
+  check: {}
+}
+`,
       'utf8'
     )
 

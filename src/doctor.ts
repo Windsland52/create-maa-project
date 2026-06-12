@@ -450,6 +450,12 @@ async function checkMaatoolsConfig(
     lines.push('      To fix: create-maa-project --sync metadata')
     return false
   }
+  if (!hasMaatoolsRequiredFields(content)) {
+    lines.push('[ERR] maatools.config.mts is missing maa-tools check fields.')
+    lines.push("      Expected maaVersion, interfacePath: 'interface.json', and check: {}.")
+    lines.push('      To fix: create-maa-project --sync metadata')
+    return false
+  }
   const expected = config.resources.map((pack) => `./${pack.path}`)
   const actual = parseMaatoolsResourceArray(content)
   if (!actual || JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -459,6 +465,14 @@ async function checkMaatoolsConfig(
   }
   lines.push('[OK] Maa tools resource order matches project config.')
   return true
+}
+
+function hasMaatoolsRequiredFields(content: string): boolean {
+  return (
+    /\bmaaVersion\s*:\s*['"][^'"]+['"]/.test(content) &&
+    /\binterfacePath\s*:\s*['"]interface\.json['"]/.test(content) &&
+    /\bcheck\s*:\s*\{/.test(content)
+  )
 }
 
 async function checkManagedFiles(

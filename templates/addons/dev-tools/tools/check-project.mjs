@@ -179,7 +179,11 @@ if (!existsSync('maatools.config.mts')) {
   throw new Error('maatools.config.mts is missing')
 }
 
-const maatoolsResources = parseMaatoolsResourceArray(readFileSync('maatools.config.mts', 'utf8'))
+const maatoolsConfigContent = readFileSync('maatools.config.mts', 'utf8')
+if (maatoolsConfigContent.includes('defineConfig')) {
+  throw new Error('maatools.config.mts must not use @nekosu/maa-tools defineConfig')
+}
+const maatoolsResources = parseMaatoolsResourceArray(maatoolsConfigContent)
 if (
   !maatoolsResources ||
   JSON.stringify(maatoolsResources) !== JSON.stringify(expectedResourcePaths)

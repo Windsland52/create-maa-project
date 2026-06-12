@@ -445,6 +445,11 @@ async function checkMaatoolsConfig(
     return false
   }
   const content = await readText(configPath)
+  if (content.includes('defineConfig')) {
+    lines.push('[ERR] maatools.config.mts must not use @nekosu/maa-tools defineConfig.')
+    lines.push('      To fix: create-maa-project --sync metadata')
+    return false
+  }
   const expected = config.resources.map((pack) => `./${pack.path}`)
   const actual = parseMaatoolsResourceArray(content)
   if (!actual || JSON.stringify(actual) !== JSON.stringify(expected)) {

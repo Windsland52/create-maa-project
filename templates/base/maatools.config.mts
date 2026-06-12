@@ -1,6 +1,4 @@
-import { defineConfig } from '@nekosu/maa-tools'
-
-export default defineConfig({
+export default {
   interface: 'interface.json',
   resource: {{resources}}{{vscodeBlock}}
-})
+}

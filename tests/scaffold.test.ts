@@ -133,6 +133,9 @@ describe('scaffold', () => {
     expect(result.written).not.toContain('tools/schema/interface.schema.json')
     expect(await pathExists(join(projectRoot, 'package.json'))).toBe(false)
     expect(await pathExists(join(projectRoot, '.vscode/settings.json'))).toBe(false)
+    expect(await readFile(join(projectRoot, 'maatools.config.mts'), 'utf8')).not.toContain(
+      'defineConfig'
+    )
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/schema/interface.schema.json'))).toBe(false)
@@ -1995,6 +1998,23 @@ version = "ignored"
     expect(output).toContain('interface.json import path is missing')
     expect(output).toContain('MaaFW JSON paths must use forward slashes')
     expect(output).toContain('maatools.config.mts resource order differs')
+
+    await writeFile(
+      join(projectRoot, 'maatools.config.mts'),
+      `import { defineConfig } from '@nekosu/maa-tools'
+
+export default defineConfig({
+  resource: ['./resource/base']
+})
+`,
+      'utf8'
+    )
+    const defineConfigReport = await runDoctor(projectRoot)
+    expect(defineConfigReport.ok).toBe(false)
+    expect(defineConfigReport.lines.join('\n')).toContain(
+      'maatools.config.mts must not use @nekosu/maa-tools defineConfig'
+    )
+    expect(defineConfigReport.lines.join('\n')).toContain('create-maa-project --sync metadata')
   })
 
   it('generated project lint script checks project state', async () => {
@@ -2249,6 +2269,27 @@ jobs:
         { cwd: projectRoot }
       )
     ).rejects.toThrow('maatools.config.mts resource order differs')
+
+    await writeFile(
+      join(projectRoot, 'maatools.config.mts'),
+      `import { defineConfig } from '@nekosu/maa-tools'
+
+export default defineConfig({
+  resource: ['./resource/base']
+})
+`,
+      'utf8'
+    )
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs'
+        ],
+        { cwd: projectRoot }
+      )
+    ).rejects.toThrow('maatools.config.mts must not use @nekosu/maa-tools defineConfig')
   })
 
   it('generated project lint script checks interface version and agent metadata', async () => {

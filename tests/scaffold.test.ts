@@ -3792,7 +3792,7 @@ version = "0.1.0"
             await writeFile(join(cwd, 'uv.lock'), '# updated uv lock\n', 'utf8')
           }
           if (command === 'uv' && args[0] === 'export') {
-            await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\n', 'utf8')
+            await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\r\n', 'utf8')
           }
         }
       }
@@ -3830,9 +3830,20 @@ version = "0.1.0"
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
+    await writeFile(join(projectRoot, 'requirements.txt'), 'maa-fw==0.0.0\n', 'utf8')
+    await clearPending(projectRoot)
     expect(await diffManagedFiles(projectRoot)).toEqual([
       'No managed file changes.'
     ])
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs'
+        ],
+        { cwd: projectRoot }
+      )
+    ).resolves.toBeDefined()
   })
 
   it('rejects python dependency updates outside Agent projects', async () => {

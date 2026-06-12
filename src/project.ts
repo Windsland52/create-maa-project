@@ -361,8 +361,11 @@ export async function backupProjectSnapshot(root: string): Promise<string | unde
   return stamp
 }
 
-export function managedFileHash(_path: string, content: string | Buffer): string {
-  return sha256(content)
+export function managedFileHash(path: string, content: string | Buffer): string {
+  if (isBinaryPath(path)) return sha256(content)
+  const text = content.toString()
+  const hashContent = path === '.gitignore' ? (extractGitignoreBlock(text) ?? text) : text
+  return sha256(normalizeManagedText(hashContent))
 }
 
 export function prepareManagedFileContent(
@@ -371,6 +374,19 @@ export function prepareManagedFileContent(
   generated: string
 ): string {
   return generated
+}
+
+function normalizeManagedText(content: string): string {
+  return content.replace(/\r\n?/g, '\n')
+}
+
+function extractGitignoreBlock(content: string): string | undefined {
+  const start = content.indexOf('# BEGIN create-maa-project')
+  if (start < 0) return undefined
+  const markerEnd = content.indexOf('# END create-maa-project', start)
+  if (markerEnd < 0) return undefined
+  const end = content.indexOf('\n', markerEnd)
+  return content.slice(start, end < 0 ? content.length : end + 1)
 }
 
 export async function listDirectoryEntries(path: string): Promise<string[]> {

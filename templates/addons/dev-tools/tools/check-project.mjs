@@ -443,10 +443,22 @@ function expectedPackageScripts(project) {
 }
 
 function managedFileHash(path, content) {
-  if (path === '.gitignore') {
-    return sha256(extractGitignoreBlock(content.toString()) ?? content)
+  if (isBinaryManagedPath(path)) {
+    return sha256(content)
   }
-  return sha256(content)
+  const text = content.toString()
+  if (path === '.gitignore') {
+    return sha256(normalizeManagedText(extractGitignoreBlock(text) ?? text))
+  }
+  return sha256(normalizeManagedText(text))
+}
+
+function isBinaryManagedPath(path) {
+  return path.endsWith('.onnx')
+}
+
+function normalizeManagedText(content) {
+  return content.replace(/\r\n?/g, '\n')
 }
 
 function extractGitignoreBlock(content) {

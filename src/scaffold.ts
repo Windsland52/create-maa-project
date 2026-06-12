@@ -128,7 +128,6 @@ export async function createProject(
     includeAgent,
     options,
     includeDevTools,
-    includeGithub,
     includeOcrPending: !shouldDownloadOcrModels
   })
   const files = [
@@ -322,11 +321,9 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     },
     configFile(config)
   ]
-  const pending: PendingItem[] = []
-  if (config.python) pending.push(pythonRuntimePending())
   return writeAddonFiles(root, config, lock, files, options, {
     overwriteUnmanaged: true,
-    pending
+    pending: []
   })
 }
 
@@ -436,7 +433,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
-      lock.pending = mergePending(lock.pending, pythonPending(hasGithubAutomation(config)))
+      lock.pending = mergePending(lock.pending, pythonPending())
       lock.template.lastUpdatedBy = 'create-maa-project'
       lock.template.templateVersion = CLI_VERSION
       await writeProjectState(root, config, lock)
@@ -1030,7 +1027,6 @@ function errorMessage(error: unknown): string {
 function defaultPending(input: {
   includeAgent: boolean
   includeDevTools: boolean
-  includeGithub: boolean
   options: CliOptions
   includeOcrPending?: boolean
 }): PendingItem[] {
@@ -1057,7 +1053,7 @@ function defaultPending(input: {
     })
   }
   if (input.includeAgent) {
-    pending.push(...pythonPending(input.includeGithub))
+    pending.push(...pythonPending())
   }
   return pending
 }
@@ -1070,26 +1066,14 @@ function ocrDownloadPending(error: unknown): PendingItem {
   }
 }
 
-function pythonRuntimePending(): PendingItem {
-  return {
-    kind: 'python-runtime',
-    reason: 'Python release runtime dependencies are required for Agent release packaging.',
-    command: 'create-maa-project --update python-runtime'
-  }
-}
-
-function pythonPending(includePythonRuntime: boolean): PendingItem[] {
-  const pending: PendingItem[] = [
+function pythonPending(): PendingItem[] {
+  return [
     {
       kind: 'python-deps',
       reason: 'Agent dependencies are managed by uv and need to be synchronized locally.',
       command: 'create-maa-project --update python-deps'
     }
   ]
-  if (includePythonRuntime) {
-    pending.push(pythonRuntimePending())
-  }
-  return pending
 }
 
 function assertValidVersion(version: string): void {

@@ -350,6 +350,7 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
     '--format',
     'requirements-txt',
     '--no-hashes',
+    '--no-emit-project',
     '--output-file',
     'requirements.txt'
   ])

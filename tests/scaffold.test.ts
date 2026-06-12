@@ -10,6 +10,7 @@ import {
   addAgent,
   addCommunity,
   addDependabot,
+  addGithub,
   addGitCliff,
   addResourcePack,
   assertCanCreateTarget,
@@ -736,13 +737,10 @@ describe('scaffold', () => {
         expect.objectContaining({
           kind: 'python-deps',
           command: 'create-maa-project --update python-deps'
-        }),
-        expect.objectContaining({
-          kind: 'python-runtime',
-          command: 'create-maa-project --update python-runtime'
         })
       ])
     )
+    expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
     const pyproject = await readFile(join(root, 'maa-agent-test', 'pyproject.toml'), 'utf8')
     expect(pyproject).toContain('name = "maa-agent-test"\nversion = "0.1.0"')
     expect(pyproject).toContain('[tool.ruff]')
@@ -1110,6 +1108,38 @@ describe('scaffold', () => {
         '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object)
       }
     })
+  })
+
+  it('does not mark release-only Python runtime as pending when adding GitHub automation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-agent-github-runtime',
+        template: 'agent',
+        add: [
+          'dev-tools'
+        ]
+      })
+    )
+    process.chdir(join(root, 'maa-agent-github-runtime'))
+
+    const result = await addGithub(
+      defaultOptions({ add: [
+          'github'
+        ] })
+    )
+
+    expect(result.config.addons.github).toMatchObject({
+      enabled: true
+    })
+    expect(result.written).toEqual(
+      expect.arrayContaining([
+        '.github/workflows/release.yml',
+        'tools/sync-runtime.mjs'
+      ])
+    )
+    expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
   })
 
   it('supports git-cliff, community, and dependabot during project creation', async () => {
@@ -3783,6 +3813,7 @@ version = "0.1.0"
           '--format',
           'requirements-txt',
           '--no-hashes',
+          '--no-emit-project',
           '--output-file',
           'requirements.txt'
         ]

@@ -73,17 +73,16 @@ const UPDATE_PENDING: Record<string, PendingItem> = {
     reason: 'Python dependencies need to be synchronized locally.',
     command: 'create-maa-project --update python-deps'
   },
-  'python-runtime': {
-    kind: 'python-runtime',
-    reason: 'Embedded Python runtime asset update is pending.',
-    command: 'create-maa-project --update python-runtime'
-  },
   template: {
     kind: 'template',
     reason: 'Template update is pending.',
     command: 'create-maa-project --update template'
   }
 }
+
+const RESERVED_UPDATE_TARGETS = new Set([
+  'python-runtime'
+])
 
 export type UpdateCommandRunner = (root: string, command: string, args: string[]) => Promise<void>
 export type ProgressReporter = (message: string) => void
@@ -270,6 +269,11 @@ export async function previewTemplateUpdate(options: CliOptions): Promise<string
 function validateUpdateTarget(target: string): string {
   if (target === 'all') {
     throw new Error('--update all is not supported. Update one target at a time.')
+  }
+  if (RESERVED_UPDATE_TARGETS.has(target)) {
+    throw new Error(
+      `--update ${target} is reserved for future Agent release runtime support and is not implemented in this version.`
+    )
   }
   if (!UPDATE_PENDING[target]) {
     throw new Error(`Unsupported update target: ${target}`)

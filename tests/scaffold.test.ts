@@ -3364,6 +3364,25 @@ version = "0.1.0"
     ).rejects.toThrow('--update python-deps requires an Agent project')
   })
 
+  it('rejects reserved python runtime updates', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-no-python-runtime' }))
+    process.chdir(join(root, 'maa-no-python-runtime'))
+
+    await expect(
+      recordUpdateRequests(
+        defaultOptions({
+          update: [
+            'python-runtime'
+          ]
+        })
+      )
+    ).rejects.toThrow(
+      '--update python-runtime is reserved for future Agent release runtime support'
+    )
+  })
+
   it('previews template updates without writing files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

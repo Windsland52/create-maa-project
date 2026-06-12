@@ -27,6 +27,7 @@
         "release:sync-version": "node scripts/sync-release-version.mjs",
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
+        "check:network": "tsx scripts/check-network-assets.ts",
         "test": "vitest run && node scripts/test-python.mjs",
         "check": "pnpm format:check && pnpm typecheck && pnpm test"
     },

@@ -1,0 +1,27 @@
+name: Network Assets
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:network
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS: 2

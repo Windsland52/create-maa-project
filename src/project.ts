@@ -275,7 +275,8 @@ export async function refreshManagedFileState(
 export async function refreshManagedFileContent(
   root: string,
   lock: MaaProjectLock,
-  files: Array<{ path: string; content: string | Buffer }>
+  files: Array<{ path: string; content: string | Buffer }>,
+  options: { template?: boolean } = {}
 ): Promise<string[]> {
   const refreshed: string[] = []
   for (const file of files) {
@@ -284,7 +285,7 @@ export async function refreshManagedFileContent(
     const hash = managedFileHash(file.path, file.content)
     lock.managedFiles[file.path] = {
       hash,
-      templateHash: state.templateHash ?? hash
+      templateHash: options.template ? hash : (state.templateHash ?? hash)
     }
     await writeBaseline(root, file.path, file.content)
     refreshed.push(file.path)

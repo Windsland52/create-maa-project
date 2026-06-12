@@ -22,6 +22,7 @@ import {
   acceptManagedChanges,
   cleanCache,
   diffManagedFiles,
+  managedFileHash,
   restoreBackup
 } from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
@@ -3977,6 +3978,53 @@ version = "0.1.0"
 
     expect(forced.written).toContain('tools/check-project.mjs')
     expect(await readFile(toolPath, 'utf8')).toContain('project structure looks valid')
+    expect(await diffManagedFiles(projectRoot)).toEqual([
+      'No managed file changes.'
+    ])
+  })
+
+  it('refreshes stale template lock entries when files already match the current template', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-template-refresh' }))
+    const projectRoot = join(root, 'maa-template-refresh')
+    process.chdir(projectRoot)
+    const releasePath = '.github/workflows/release.yml'
+    const lockPath = join(projectRoot, 'maa-project.lock.json')
+    const lock = (await readJson(lockPath)) as {
+      managedFiles: Record<string, { hash: string; templateHash?: string }>
+    }
+    lock.managedFiles[releasePath] = {
+      hash: '0'.repeat(64),
+      templateHash: '0'.repeat(64)
+    }
+    await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
+
+    expect(
+      await previewTemplateUpdate(
+        defaultOptions({ update: [
+            'template'
+          ] })
+      )
+    ).toContain(`[REFRESH] ${releasePath}`)
+
+    const result = await recordUpdateRequests(
+      defaultOptions({ update: [
+          'template'
+        ] })
+    )
+    const nextLock = (await readJson(lockPath)) as {
+      managedFiles: Record<string, { hash: string; templateHash?: string }>
+    }
+    const currentHash = managedFileHash(
+      releasePath,
+      await readFile(join(projectRoot, releasePath), 'utf8')
+    )
+
+    expect(result.skipped.join('\n')).not.toContain(`${releasePath}: local changes`)
+    expect(result.written).toContain(releasePath)
+    expect(nextLock.managedFiles[releasePath]?.hash).toBe(currentHash)
+    expect(nextLock.managedFiles[releasePath]?.templateHash).toBe(currentHash)
     expect(await diffManagedFiles(projectRoot)).toEqual([
       'No managed file changes.'
     ])

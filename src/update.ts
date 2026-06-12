@@ -126,6 +126,11 @@ export async function recordUpdateRequests(
         })
         Object.assign(lock.managedFiles, result.lockEntries)
         for (const path of result.written) written.add(path)
+        for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
+          template: true
+        })) {
+          written.add(path)
+        }
         skipped.push(...plan.skipped, ...result.skipped)
         lock.pending = removePending(lock.pending, 'template')
       }
@@ -140,6 +145,11 @@ export async function recordUpdateRequests(
           })
           Object.assign(lock.managedFiles, result.lockEntries)
           for (const path of result.written) written.add(path)
+          for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
+            template: true
+          })) {
+            written.add(path)
+          }
           skipped.push(...plan.skipped, ...result.skipped)
           lock.pending = removePending(lock.pending, 'schema')
           continue
@@ -283,6 +293,8 @@ export async function previewTemplateUpdate(options: CliOptions): Promise<string
       lines.push(...createUnifiedDiff(item.path, item.current, item.next))
     } else if (item.kind === 'add') {
       lines.push(`[ADD] ${item.path}`)
+    } else if (item.kind === 'refresh') {
+      lines.push(`[REFRESH] ${item.path}`)
     }
   }
   for (const skipped of plan.skipped) {
@@ -801,8 +813,11 @@ async function planTemplateUpdate(
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
+  refreshed: Array<{ path: string; content: string | Buffer }>
   preview: Array<
-    { kind: 'diff'; path: string; current: string; next: string } | { kind: 'add'; path: string }
+    | { kind: 'diff'; path: string; current: string; next: string }
+    | { kind: 'add'; path: string }
+    | { kind: 'refresh'; path: string }
   >
 }> {
   return planManagedTemplateFiles(root, lock, force, templateFilesForConfig(config))
@@ -816,8 +831,11 @@ async function planSchemaUpdate(
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
+  refreshed: Array<{ path: string; content: string | Buffer }>
   preview: Array<
-    { kind: 'diff'; path: string; current: string; next: string } | { kind: 'add'; path: string }
+    | { kind: 'diff'; path: string; current: string; next: string }
+    | { kind: 'add'; path: string }
+    | { kind: 'refresh'; path: string }
   >
 }> {
   return planManagedTemplateFiles(
@@ -836,14 +854,20 @@ async function planManagedTemplateFiles(
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
+  refreshed: Array<{ path: string; content: string | Buffer }>
   preview: Array<
-    { kind: 'diff'; path: string; current: string; next: string } | { kind: 'add'; path: string }
+    | { kind: 'diff'; path: string; current: string; next: string }
+    | { kind: 'add'; path: string }
+    | { kind: 'refresh'; path: string }
   >
 }> {
   const files: ManagedFileInput[] = []
   const skipped: string[] = []
+  const refreshed: Array<{ path: string; content: string | Buffer }> = []
   const preview: Array<
-    { kind: 'diff'; path: string; current: string; next: string } | { kind: 'add'; path: string }
+    | { kind: 'diff'; path: string; current: string; next: string }
+    | { kind: 'add'; path: string }
+    | { kind: 'refresh'; path: string }
   > = []
   for (const file of templateFiles) {
     if (typeof file.content !== 'string') {
@@ -881,11 +905,17 @@ async function planManagedTemplateFiles(
 
     if (currentContent !== undefined) {
       const currentHash = managedFileHash(file.path, currentContent)
+      if (currentHash === nextHash) {
+        if (currentHash !== state.hash || state.templateHash !== nextHash) {
+          refreshed.push({ path: file.path, content: nextContent })
+          preview.push({ kind: 'refresh', path: file.path })
+        }
+        continue
+      }
       if (currentHash !== state.hash && !force) {
         skipped.push(`${file.path}: local changes`)
         continue
       }
-      if (currentContent === nextContent || currentHash === nextHash) continue
       files.push({ ...file, content: nextContent })
       preview.push({ kind: 'diff', path: file.path, current: currentContent, next: nextContent })
     } else {
@@ -893,7 +923,7 @@ async function planManagedTemplateFiles(
       preview.push({ kind: 'add', path: file.path })
     }
   }
-  return { files, skipped, preview }
+  return { files, skipped, refreshed, preview }
 }
 
 function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {

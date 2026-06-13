@@ -753,6 +753,7 @@ describe('scaffold', () => {
     expect(pyproject).toContain('[tool.ruff]')
     expect(pyproject).toContain('[tool.pyright]')
     expect(pyproject).toContain('extraPaths = ["agent"]')
+    expect(pyproject).toContain('typeCheckingMode = "basic"')
     expect(await pathExists(join(root, 'maa-agent-test', 'ruff.toml'))).toBe(false)
     expect(await pathExists(join(root, 'maa-agent-test', 'pyrightconfig.json'))).toBe(false)
     const bootstrap = await readFile(join(root, 'maa-agent-test', 'agent/bootstrap.py'), 'utf8')
@@ -772,13 +773,20 @@ describe('scaffold', () => {
     )
     const pienv = await readFile(join(root, 'maa-agent-test', 'agent/utils/pienv.py'), 'utf8')
     const params = await readFile(join(root, 'maa-agent-test', 'agent/utils/params.py'), 'utf8')
+    const utilsInit = await readFile(
+      join(root, 'maa-agent-test', 'agent/utils/__init__.py'),
+      'utf8'
+    )
     const gitignore = await readFile(join(root, 'maa-agent-test', '.gitignore'), 'utf8')
     expect(bootstrap).toContain('debug')
     expect(bootstrap).toContain('agent-bootstrap.log')
     expect(bootstrap).toContain('created config/pip_config.json')
     expect(bootstrap).toContain('importlib.metadata.version("maafw")')
     expect(bootstrap).toContain('create-maa-project --update python-deps')
-    expect(main).toContain('from agent_runtime import run_agent')
+    expect(bootstrap).toContain('from datetime import UTC, datetime')
+    expect(bootstrap).not.toContain('timezone.utc')
+    expect(main).toContain('pyright: ignore[reportAttributeAccessIssue]')
+    expect(main).toContain('from agent_runtime import run_agent  # noqa: E402')
     expect(main).toContain('sys.exit(main())')
     expect(agentRuntime).toContain('custom.register_all()')
     expect(agentRuntime).toContain('AgentServer.start_up(socket_id)')
@@ -787,9 +795,11 @@ describe('scaffold', () => {
     expect(action).toContain('@AgentServer.custom_action("DisableNode")')
     expect(action).toContain('@AgentServer.custom_action("SubTask")')
     expect(reco).toContain('@AgentServer.custom_recognition("ExampleRecognition")')
+    expect(reco).not.toContain('AnalyzeResult(box=cast(RectType, reco_box), detail=result_detail)')
     expect(pienv).toContain('PI_CONTROLLER')
     expect(pienv).toContain('PI_RESOURCE')
     expect(params).toContain('parse_params')
+    expect(utilsInit).toContain('# noqa: E402,F403')
     expect(await pathExists(join(root, 'maa-agent-test', 'config/pip_config.json'))).toBe(false)
     expect(gitignore).toContain('config/')
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
@@ -3913,6 +3923,17 @@ version = "0.1.0"
     expect(await diffManagedFiles(projectRoot)).toEqual([
       'No managed file changes.'
     ])
+
+    const templateUpdate = await recordUpdateRequests(
+      defaultOptions({ update: [
+          'template'
+        ] })
+    )
+    expect(templateUpdate.written).not.toContain('uv.lock')
+    expect(templateUpdate.written).not.toContain('requirements.txt')
+    expect(await readFile(join(projectRoot, 'uv.lock'), 'utf8')).toBe('# updated uv lock\n')
+    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toBe('maa-fw==0.0.0\n')
+
     await expect(
       execFileAsync(
         process.execPath,

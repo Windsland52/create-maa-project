@@ -2,7 +2,7 @@ import os
 import sys
 
 try:
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
 except AttributeError:
     pass
 
@@ -16,7 +16,7 @@ if os.getcwd() != project_root_dir:
 if agent_dir not in sys.path:
     sys.path.insert(0, agent_dir)
 
-from agent_runtime import run_agent
+from agent_runtime import run_agent  # noqa: E402
 
 
 def main() -> int:

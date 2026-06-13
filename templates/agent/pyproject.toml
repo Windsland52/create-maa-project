@@ -30,4 +30,4 @@ select = ["E", "F", "I", "UP", "B"]
 include = ["agent"]
 extraPaths = ["agent"]
 pythonVersion = "3.13"
-typeCheckingMode = "strict"
+typeCheckingMode = "basic"

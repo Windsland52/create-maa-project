@@ -78,7 +78,10 @@ class ExampleRecognition(CustomRecognition):
                 "detail": getattr(reco_detail, "detail", None),
             }
             result_detail.update(detail)
-            return CustomRecognition.AnalyzeResult(box=cast(RectType, reco_box), detail=result_detail)
+            return CustomRecognition.AnalyzeResult(
+                box=cast(RectType, reco_box),
+                detail=result_detail,
+            )
 
         if box is not None:
             return CustomRecognition.AnalyzeResult(box=box, detail=detail)

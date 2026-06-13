@@ -944,5 +944,6 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     resources: config.resources
   })
     .filter((file) => file.managed && file.path !== 'maa-project.json')
+    .filter((file) => file.path !== 'uv.lock' && file.path !== 'requirements.txt')
     .filter((file) => !file.path.startsWith('resource/base/model/ocr/'))
 }

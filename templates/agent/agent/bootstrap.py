@@ -6,7 +6,7 @@ import json
 import runpy
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PYTHON_MIN = (3, 13)
@@ -108,7 +108,10 @@ def venv_python(target_venv: Path) -> Path:
 def check_requirements(project_root: Path) -> tuple[Path, str] | None:
     requirements = find_requirements_file(project_root)
     if not requirements.exists():
-        warn(project_root, "requirements.txt is missing; run create-maa-project --update python-deps")
+        warn(
+            project_root,
+            "requirements.txt is missing; run create-maa-project --update python-deps",
+        )
         return None
     digest = hashlib.sha256(requirements.read_bytes()).hexdigest()
     log(project_root, "requirements sha256=" + digest)
@@ -303,7 +306,7 @@ def warn(project_root: Path, message: str) -> None:
 def log(project_root: Path, message: str) -> None:
     debug_dir = project_root / "debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     with (debug_dir / "agent-bootstrap.log").open("a", encoding="utf8") as handle:
         handle.write(f"{timestamp} {message}\n")
 

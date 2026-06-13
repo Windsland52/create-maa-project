@@ -251,13 +251,15 @@ async function controllerMultiChoice(
   )
 }
 
-function setupAddons(setup: SetupPreset, current: string[]): string[] {
+export function setupAddons(setup: SetupPreset, current: string[]): string[] {
   if (setup === 'minimal') return current
   if (setup === 'all')
     return addUnique(current, [
       'dev-tools',
       'github',
       'git-cliff',
+      'auto-format',
+      'optimize-images',
       'schema-sync',
       'community'
     ])

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -6,6 +7,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -187,6 +189,7 @@ function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
   if (packageHasAgent(interfaceJson) && hasEmbeddedPythonRuntime(runtimePlatform)) {
     copyPath(pythonRuntimePath(runtimePlatform), join('dist/package', 'python'))
   }
+  ensureUnixExecutablePermissions('dist/package', runtimePlatform)
 }
 
 function smokeReleasePackage(root, packagePaths, runtimePlatform) {
@@ -243,6 +246,7 @@ function smokeReleasePackage(root, packagePaths, runtimePlatform) {
       throw new Error('release package smoke failed: Agent bootstrap is missing')
     }
   }
+  assertUnixExecutablePermissions(root, runtimePlatform)
   for (const path of [
     ...interfaceResourcePaths(packagedInterface.resource),
     ...strings(packagedInterface.import)
@@ -283,6 +287,51 @@ function copyDirectoryContents(source, target) {
   mkdirSync(target, { recursive: true })
   for (const entry of readdirSync(source)) {
     copyPath(join(source, entry), join(target, entry))
+  }
+}
+
+function ensureUnixExecutablePermissions(root, runtimePlatform) {
+  if (runtimePlatform.startsWith('win-')) return
+  for (const path of findUnixExecutableFiles(root)) {
+    const mode = statSync(path).mode
+    chmodSync(path, mode | 0o755)
+  }
+}
+
+function assertUnixExecutablePermissions(root, runtimePlatform) {
+  if (runtimePlatform.startsWith('win-')) return
+  for (const path of findUnixExecutableFiles(root)) {
+    if ((statSync(path).mode & 0o111) === 0) {
+      throw new Error(`release package smoke failed: executable bit is missing: ${path}`)
+    }
+  }
+}
+
+function findUnixExecutableFiles(root) {
+  const names = new Set([
+    projectSlug,
+    'MFAAvalonia',
+    'MaaPiCli',
+    'MaaAgentServer',
+    'maa-cli',
+    'python',
+    'python3'
+  ])
+  const found = []
+  walkFiles(root, (path, name) => {
+    if (names.has(name)) found.push(path)
+  })
+  return found
+}
+
+function walkFiles(root, visit) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name)
+    if (entry.isDirectory()) {
+      walkFiles(path, visit)
+    } else if (entry.isFile()) {
+      visit(path, entry.name)
+    }
   }
 }
 

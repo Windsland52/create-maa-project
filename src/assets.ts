@@ -531,9 +531,12 @@ function mapPythonArchiveEntry(platform: string, relativePath: string): string[]
   const normalizedPath = relativePath.startsWith('python/')
     ? relativePath.slice('python/'.length)
     : relativePath
-  if (!normalizedPath) return []
+  const installPath = normalizedPath.startsWith('install/')
+    ? normalizedPath.slice('install/'.length)
+    : normalizedPath
+  if (!installPath) return []
   return [
-    `.create-maa-project/runtime/python/${platform}/${normalizedPath}`
+    `.create-maa-project/runtime/python/${platform}/${installPath}`
   ]
 }
 

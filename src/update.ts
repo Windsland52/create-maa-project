@@ -13,7 +13,7 @@ import {
 } from './project.js'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { mkdir, readdir, rm } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, readdir, rm } from 'node:fs/promises'
 import {
   downloadDefaultOcrZip,
   downloadUrl,
@@ -421,10 +421,7 @@ async function updatePythonRuntime(
         }
   )
   const written = await writeDownloadedProjectAssets(root, assets)
-  const python = embeddedPythonExecutable(platform)
-  if (!(await exists(join(root, python)))) {
-    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
-  }
+  const python = await ensureEmbeddedPythonExecutable(root, platform)
   await options.commandRunner(root, 'uv', [
     'pip',
     'install',
@@ -474,10 +471,7 @@ async function updateWindowsEmbeddedPythonRuntime(
     })
   )
   const written = await writeDownloadedProjectAssets(root, assets)
-  const python = embeddedPythonExecutable(platform)
-  if (!(await exists(join(root, python)))) {
-    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
-  }
+  const python = await ensureEmbeddedPythonExecutable(root, platform)
   await options.commandRunner(root, 'uv', [
     'pip',
     'install',
@@ -493,6 +487,41 @@ async function updateWindowsEmbeddedPythonRuntime(
       python
     ]
   }
+}
+
+async function ensureEmbeddedPythonExecutable(root: string, platform: string): Promise<string> {
+  const python = embeddedPythonExecutable(platform)
+  if (await exists(join(root, python))) {
+    await chmod(join(root, python), 0o755)
+    return python
+  }
+  if (!platform.startsWith('osx-')) {
+    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
+  }
+
+  const binPath = `.create-maa-project/runtime/python/${platform}/bin`
+  const candidate = await findPythonExecutableCandidate(root, binPath)
+  if (!candidate) {
+    throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
+  }
+  await copyFile(join(root, binPath, candidate), join(root, python))
+  await chmod(join(root, python), 0o755)
+  return python
+}
+
+async function findPythonExecutableCandidate(
+  root: string,
+  binPath: string
+): Promise<string | undefined> {
+  if (!(await exists(join(root, binPath)))) return undefined
+  for (const name of [
+    'python3.13',
+    'python3.13t',
+    'python'
+  ]) {
+    if (await exists(join(root, binPath, name))) return name
+  }
+  return (await readdir(join(root, binPath))).find((name) => /^python3(?:\.\d+)?$/.test(name))
 }
 
 async function updateLinuxPythonRuntime(

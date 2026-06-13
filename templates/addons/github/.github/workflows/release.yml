@@ -40,6 +40,7 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         env:
           CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
+          GITHUB_TOKEN: ${{ github.token }}
       - run: node tools/build-release.mjs
         if: github.event_name != 'workflow_dispatch'
         env:

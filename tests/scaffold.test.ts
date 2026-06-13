@@ -920,6 +920,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('actions/setup-python@v6')
     expect(releaseWorkflow).toContain('astral-sh/setup-uv@v8.1.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
+    expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
     expect(releaseWorkflow).toContain('-MFAA.${{ matrix.ext }}"')
     expect(releaseWorkflow).not.toContain('package_paths=')
     expectReleaseWorkflowTargets(releaseWorkflow)
@@ -1157,6 +1158,48 @@ describe('scaffold', () => {
       ])
     )
     expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
+
+    const syncRuntime = await readFile(
+      join(root, 'maa-agent-github-runtime', 'tools/sync-runtime.mjs'),
+      'utf8'
+    )
+    expect(syncRuntime).toContain('async function syncPythonRuntime')
+    expect(syncRuntime).not.toContain('python-runtime')
+
+    const fakeBin = join(root, 'fake-create-maa-project.mjs')
+    await writeFile(
+      fakeBin,
+      `import { writeFileSync } from 'node:fs'
+writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
+`,
+      'utf8'
+    )
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/sync-runtime.mjs'
+        ],
+        {
+          cwd: join(root, 'maa-agent-github-runtime'),
+          env: {
+            ...process.env,
+            CREATE_MAA_PROJECT_BIN: `${JSON.stringify(process.execPath)} ${JSON.stringify(fakeBin)}`,
+            CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'all'
+          }
+        }
+      )
+    ).resolves.toBeDefined()
+    expect(
+      JSON.parse(
+        await readFile(join(root, 'maa-agent-github-runtime', 'sync-runtime-args.json'), 'utf8')
+      )
+    ).toEqual([
+      '--update',
+      'maafw',
+      '--update',
+      'runtime:mfa'
+    ])
   })
 
   it('supports git-cliff, community, and dependabot during project creation', async () => {
@@ -2754,12 +2797,15 @@ version = "0.1.0"
       'osx-arm64',
       'linux-x64'
     ]) {
+      const nativeRuntimeRoot = join(projectRoot, 'runtimes', runtimePlatform, 'native')
+      await mkdir(nativeRuntimeRoot, { recursive: true })
+      await writeFile(join(nativeRuntimeRoot, 'MaaPiCli'), 'cli', { mode: 0o666 })
       const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
       await mkdir(guiRoot, { recursive: true })
       await writeFile(
         join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
         'gui',
-        'utf8'
+        { mode: 0o666 }
       )
       if (runtimePlatform.startsWith('linux-')) {
         const depsRoot = join(
@@ -2837,6 +2883,26 @@ version = "0.1.0"
         ).toBe(true)
       } else {
         expect(await pathExists(join(projectRoot, 'dist/package', expectedChildExec))).toBe(true)
+      }
+      if (!runtimePlatform.startsWith('win-')) {
+        expect(
+          (
+            await stat(
+              join(
+                projectRoot,
+                'dist/package',
+                mfaaEntrypointForTest('maa-agent-release-test', runtimePlatform)
+              )
+            )
+          ).mode & 0o111
+        ).not.toBe(0)
+        expect(
+          (
+            await stat(
+              join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/MaaPiCli')
+            )
+          ).mode & 0o111
+        ).not.toBe(0)
       }
     }
 
@@ -3402,12 +3468,12 @@ version = "0.1.0"
 
     const archive = createTarGzArchive([
       {
-        path: 'python/bin/python3',
+        path: 'python/install/bin/python3.13',
         content: Buffer.from('python'),
         mode: 0o755
       },
       {
-        path: 'python/lib/python3.13/site-packages/README.txt',
+        path: 'python/install/lib/python3.13/site-packages/README.txt',
         content: Buffer.from('site'),
         mode: 0o644
       }
@@ -3466,6 +3532,12 @@ version = "0.1.0"
       expect(
         await readFile(
           join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'),
+          'utf8'
+        )
+      ).toBe('python')
+      expect(
+        await readFile(
+          join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3.13'),
           'utf8'
         )
       ).toBe('python')

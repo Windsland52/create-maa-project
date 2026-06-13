@@ -182,7 +182,7 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   return [
     managed('.github/workflows/check.yml', checkWorkflow()),
     releaseWorkflowFile(input),
-    managed('tools/build-release.mjs', buildReleaseScript(input.slug)),
+    managed('tools/build-release.mjs', buildReleaseScript(input)),
     managed('tools/sync-runtime.mjs', syncRuntimeScript())
   ]
 }
@@ -246,7 +246,7 @@ export function dependabotFile(): ManagedFileInput {
 }
 
 export function releaseWorkflowFile(
-  input: Pick<ProjectTemplateInput, 'slug' | 'includeGitCliff'>
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>
 ): ManagedFileInput {
   return managed('.github/workflows/release.yml', releaseWorkflow(input))
 }
@@ -465,10 +465,13 @@ function checkWorkflow(): string {
   return template('addons/github/.github/workflows/check.yml')
 }
 
-function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'includeGitCliff'>): string {
+function releaseWorkflow(
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>
+): string {
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/release.yml', {
       slug: input.slug,
+      releaseArtifactName: releaseArtifactName(input),
       releaseTargetMatrix: releaseTargetMatrixYaml(),
       gitCliffJob: input.includeGitCliff ? `  ${gitCliffWorkflowJob()}\n` : '',
       releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
@@ -541,11 +544,26 @@ function validateSchemaScript(): string {
   return template('addons/dev-tools/tools/validate-schema.mjs')
 }
 
-function buildReleaseScript(slug: string): string {
+function buildReleaseScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
   return template('addons/github/tools/build-release.mjs', {
-    projectSlug: javascriptString(slug),
+    projectSlug: javascriptString(input.slug),
+    releaseArtifactName: javascriptString(releaseArtifactName(input)),
     releaseTargetArtifactTuples: releaseTargetArtifactTuples()
   })
+}
+
+function releaseArtifactName(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
+  const sanitized = [
+    ...input.displayName.trim().normalize('NFKC')
+  ]
+    .map((char) => {
+      if (/\s/u.test(char)) return '-'
+      return /^[\p{L}\p{N}._-]$/u.test(char) ? char : '-'
+    })
+    .join('')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  return sanitized || input.slug
 }
 
 function releaseTargetMatrixYaml(): string {

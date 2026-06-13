@@ -418,6 +418,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     files.push(
       releaseWorkflowFile({
         slug: config.project.slug,
+        displayName: config.project.displayName,
         includeGitCliff: Boolean(config.addons.gitCliff)
       })
     )

@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          archive="{{slug}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"
+          archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"
           (
             cd dist/package
             if [[ "${{ matrix.ext }}" == "zip" ]]; then
@@ -86,4 +86,6 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           {{releaseNotesInput}}
-          files: release-assets/*
+          files: |
+            release-assets/*.zip
+            release-assets/*.tar.gz

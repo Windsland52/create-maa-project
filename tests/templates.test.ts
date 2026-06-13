@@ -7,7 +7,11 @@ describe('workflow templates', () => {
     false,
     true
   ])('emits formatted release workflow with git-cliff=%s', async (includeGitCliff) => {
-    const file = releaseWorkflowFile({ slug: 'maaxxxx', includeGitCliff })
+    const file = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff
+    })
     expect(typeof file.content).toBe('string')
     await expect(
       check(file.content.toString(), {

@@ -381,7 +381,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).toContain(
-      'archive="maa-test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
     )
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
@@ -389,6 +389,9 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
     expect(releaseWorkflow).toContain('actions/download-artifact@v7')
     expect(releaseWorkflow).toContain('generate_release_notes: true')
+    expect(releaseWorkflow).toContain('release-assets/*.zip')
+    expect(releaseWorkflow).toContain('release-assets/*.tar.gz')
+    expect(releaseWorkflow).not.toContain('files: release-assets/*')
     expect(releaseWorkflow).not.toContain('orhun/git-cliff-action@v4')
     expect(releaseWorkflow).not.toContain('package_paths=')
     expect(releaseWorkflow).not.toContain('|| true')
@@ -1792,6 +1795,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       name: 'maaxx',
       label: 'MaaXX'
     })
+    expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
+    )
     expect(await readFile(join(root, 'MaaXX', 'README.md'), 'utf8')).toContain('# MaaXX')
   })
 

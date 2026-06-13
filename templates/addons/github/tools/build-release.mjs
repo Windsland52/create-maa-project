@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path'
 
 const dryRun = process.argv.includes('--dry-run')
 const projectSlug = {{projectSlug}}
+const releaseArtifactName = {{releaseArtifactName}}
 mkdirSync('dist', { recursive: true })
 
 const lock = readJson('maa-project.lock.json')
@@ -91,14 +92,14 @@ const artifacts = [
     os,
     arch,
     ext
-  ]) => `${projectSlug}-${os}-${arch}-${version}-MFAA.${ext}`
+  ]) => `${releaseArtifactName}-${os}-${arch}-${version}-MFAA.${ext}`
 )
 
 for (const artifact of artifacts) {
   if (
     !new RegExp(
       '^' +
-        escapeRegExp(projectSlug) +
+        escapeRegExp(releaseArtifactName) +
         '-(win|linux|macos)-(x86_64|aarch64)-v.+-MFAA\\.(zip|tar\\.gz)$'
     ).test(artifact)
   ) {

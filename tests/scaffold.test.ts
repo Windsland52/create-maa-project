@@ -218,6 +218,7 @@ describe('scaffold', () => {
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).toMatchObject({
       name: 'maa-test',
       label: 'Maa Test',
+      icon: 'logo.ico',
       controller: [
         { name: 'Android', label: 'Android / Emulator', type: 'Adb' }
       ],
@@ -386,6 +387,10 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
     expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
+    expect(releaseWorkflow).toContain('- name: Apply app icon')
+    expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
+    expect(releaseWorkflow).toContain('cp logo.ico dist/package/logo.ico')
+    expect(releaseWorkflow).toContain('rcedit-x64.exe')
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
     expect(releaseWorkflow).toContain('actions/download-artifact@v7')
     expect(releaseWorkflow).toContain('generate_release_notes: true')
@@ -807,6 +812,7 @@ describe('scaffold', () => {
     expect(gitignore).toContain('config/')
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
+      icon: 'logo.ico',
       agent: [
         {
           identifier: 'maa-agent-test.agent'
@@ -925,6 +931,8 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('pnpm check:py')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
     expect(releaseWorkflow).toContain('-MFAA.${{ matrix.ext }}"')
+    expect(releaseWorkflow).toContain('- name: Apply app icon')
+    expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
     expect(releaseWorkflow).not.toContain('package_paths=')
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).not.toContain('|| true')
@@ -1608,7 +1616,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'MaaSync' }))
-    process.chdir(join(root, 'MaaSync'))
+    const projectRoot = join(root, 'MaaSync')
+    const interfacePath = join(projectRoot, 'interface.json')
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
+    delete interfaceJson.icon
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+    process.chdir(projectRoot)
 
     await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
     const result = await syncProject(
@@ -1620,7 +1633,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(await readJson(join(root, 'MaaSync', 'interface.json'))).toMatchObject({
       name: 'maasync',
       label: 'Maa Sync',
-      version: 'v0.2.0'
+      version: 'v0.2.0',
+      icon: 'logo.ico'
     })
     expect(await readJson(join(root, 'MaaSync', 'package.json'))).toMatchObject({
       name: 'maasync',
@@ -1811,7 +1825,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(result.config.project.displayName).toBe('MaaXX')
     expect(await readJson(join(root, 'MaaXX', 'interface.json'))).toMatchObject({
       name: 'maaxx',
-      label: 'MaaXX'
+      label: 'MaaXX',
+      icon: 'logo.ico'
     })
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
       'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
@@ -1827,12 +1842,14 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.name = 'Wrong Display Name'
+    interfaceJson.icon = 'wrong.ico'
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
 
     const report = await runDoctor(projectRoot)
 
     expect(report.ok).toBe(false)
     expect(report.lines.join('\n')).toContain('interface.json name differs')
+    expect(report.lines.join('\n')).toContain('interface.json icon must be logo.ico')
     expect(report.lines.join('\n')).toContain('create-maa-project --sync metadata')
   })
 
@@ -2412,6 +2429,20 @@ export default defineConfig({
     ).rejects.toThrow('interface.json version must match')
 
     interfaceJson.version = 'v0.1.0'
+    interfaceJson.icon = 'wrong.ico'
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs'
+        ],
+        { cwd: projectRoot }
+      )
+    ).rejects.toThrow('interface.json icon must be logo.ico')
+
+    interfaceJson.icon = 'logo.ico'
     interfaceJson.agent = [
       {
         child_exec: [],
@@ -2704,6 +2735,7 @@ version = "0.1.0"
       'maafw-fw',
       'utf8'
     )
+    await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
     await expect(
       execFileAsync(
         process.execPath,
@@ -2724,6 +2756,7 @@ version = "0.1.0"
       unknown
     >
     expect(packageInterface.version).toBe('v1.2.3')
+    expect(packageInterface.icon).toBe('logo.ico')
     expect(packageInterface.$schema).toBeUndefined()
     expect(sourceInterface.version).toBe('v0.1.0')
     expect(sourceInterface.$schema).toBeUndefined()
@@ -2731,6 +2764,7 @@ version = "0.1.0"
       [
         'interface.json',
         'libs',
+        'logo.ico',
         guiEntrypoint,
         'plugins',
         'resource',

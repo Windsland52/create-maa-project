@@ -193,6 +193,7 @@ function applyInterfaceMetadata(
   interfaceJson.name = config.project.slug
   interfaceJson.label = config.project.displayName
   interfaceJson.version = addV(config.project.version)
+  interfaceJson.icon = 'logo.ico'
   interfaceJson.controller = interfaceController(projectControllerKinds(config))
   interfaceJson.resource = interfaceResourceItems(config.resources)
   if (config.project.github) {

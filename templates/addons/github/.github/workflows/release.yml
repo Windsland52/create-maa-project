@@ -45,6 +45,22 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         env:
           CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
+      - name: Apply app icon
+        if: github.event_name != 'workflow_dispatch' && hashFiles('logo.ico') != ''
+        shell: bash
+        run: |
+          cp logo.ico dist/package/logo.ico
+
+          if [[ "${{ matrix.runtime_os }}" == "win" ]]; then
+            curl -fsSL https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe -o rcedit.exe
+            exe="$(find dist/package -maxdepth 1 -type f -name '*.exe' | head -n 1)"
+            if [[ -n "$exe" ]]; then
+              ./rcedit.exe "$exe" --set-icon logo.ico
+              echo "[OK] Applied Windows executable icon: $exe"
+            else
+              echo "[WARN] Windows executable was not found; skipped executable icon update."
+            fi
+          fi
       - name: Package
         if: github.event_name != 'workflow_dispatch'
         shell: bash

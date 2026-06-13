@@ -64,6 +64,7 @@ async function checkInterfaceMetadata(
     name?: unknown
     label?: unknown
     version?: unknown
+    icon?: unknown
     github?: unknown
     agent?: unknown
     controller?: unknown
@@ -81,6 +82,11 @@ async function checkInterfaceMetadata(
   }
   if (interfaceJson.version !== addV(config.project.version)) {
     lines.push('[ERR] interface.json version differs from maa-project.json project.version.')
+    lines.push('      To fix: create-maa-project --sync metadata')
+    ok = false
+  }
+  if (interfaceJson.icon !== 'logo.ico') {
+    lines.push('[ERR] interface.json icon must be logo.ico.')
     lines.push('      To fix: create-maa-project --sync metadata')
     ok = false
   }

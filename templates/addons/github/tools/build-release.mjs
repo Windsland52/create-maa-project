@@ -184,6 +184,9 @@ function prepareReleasePackage(packagePaths, interfaceJson, runtimePlatform) {
   copyDirectoryContents(mfaaGuiPath(runtimePlatform), 'dist/package')
   renameMfaaEntrypoint('dist/package', runtimePlatform)
   writeJson('dist/package/interface.json', interfaceJson)
+  if (existsSync('logo.ico')) {
+    copyPath('logo.ico', join('dist/package', 'logo.ico'))
+  }
   for (const path of packagePaths) {
     copyPath(path, join('dist/package', releasePackagePath(path)))
   }

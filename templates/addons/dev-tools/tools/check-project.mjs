@@ -19,6 +19,10 @@ if (interfaceJson.version !== addV(project.project?.version)) {
   throw new Error('interface.json version must match maa-project.json project.version')
 }
 
+if (interfaceJson.icon !== 'logo.ico') {
+  throw new Error('interface.json icon must be logo.ico')
+}
+
 if (packageJson.name !== project.project?.slug) {
   throw new Error('package.json name must match maa-project.json project.slug')
 }

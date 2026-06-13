@@ -98,8 +98,40 @@ jobs:
           path: dist/release/create-maa-project-manifest.json
           if-no-files-found: error
 
+  git_cliff:
+    name: Generate release notes
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Generate release notes
+        shell: bash
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="2.13.1"
+          archive="git-cliff-${version}-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "$RUNNER_TEMP/git-cliff"
+          curl -fsSL "https://github.com/orhun/git-cliff/releases/download/v${version}/$archive" -o "$RUNNER_TEMP/$archive"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/git-cliff"
+          git_cliff="$(find "$RUNNER_TEMP/git-cliff" -type f -name git-cliff -perm -111 | head -n 1)"
+          if [[ -z "$git_cliff" ]]; then
+            echo "[ERR] git-cliff binary was not found after extraction"
+            exit 1
+          fi
+          "$git_cliff" --config .github/cliff.toml --latest --strip header --output CHANGES.md
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: CHANGES.md
+
   github-release:
-    needs: release-manifest
+    needs: [release-manifest, git_cliff]
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
@@ -114,9 +146,13 @@ jobs:
         with:
           name: release-manifest
           path: dist/release
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-notes
+          path: dist/release-notes
       - uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          body_path: dist/release-notes/CHANGES.md
           files: dist/release/*
 
   npm:

@@ -1,9 +1,10 @@
-import { execFile, type ExecFileException } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { testChildEnv } from './child-env.js'
 
 type JsonReport = {
   schemaVersion: 1
@@ -284,8 +285,16 @@ async function tempRoot(): Promise<string> {
 }
 
 async function runCli(args: string[], cwd: string): Promise<CliResult> {
+  const ioRoot = await mkdtemp(join(tmpdir(), 'cmp-report-io-'))
+  tempRoots.push(ioRoot)
+  const stdoutPath = join(ioRoot, 'stdout.txt')
+  const stderrPath = join(ioRoot, 'stderr.txt')
+  const stdout = await open(stdoutPath, 'w')
+  const stderr = await open(stderrPath, 'w')
   return new Promise((resolve, reject) => {
-    execFile(
+    let settled = false
+    let timedOut = false
+    const child = spawn(
       process.execPath,
       [
         cliEntry,
@@ -293,31 +302,47 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
       ],
       {
         cwd,
-        timeout: 15000,
-        env: testChildEnv()
-      },
-      (error, stdout, stderr) => {
-        const execError = error as ExecFileException | null
-        if (execError?.killed) {
+        env: testChildEnv(),
+        stdio: [
+          'ignore',
+          stdout.fd,
+          stderr.fd
+        ]
+      }
+    )
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill()
+    }, 15000)
+    const finish = async (action: () => Promise<void>): Promise<void> => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      await Promise.all([
+        stdout.close(),
+        stderr.close()
+      ])
+      await action()
+    }
+    child.on('error', (error) => {
+      void finish(async () => {
+        reject(error)
+      })
+    })
+    child.on('exit', (code, signal) => {
+      void finish(async () => {
+        if (timedOut) {
           reject(new Error(`CLI timed out while running: ${args.join(' ')}`))
           return
         }
-        const code = execError?.code
         resolve({
-          stdout,
-          stderr,
-          exitCode: typeof code === 'number' ? code : error ? 1 : 0
+          stdout: await readFile(stdoutPath, 'utf8'),
+          stderr: await readFile(stderrPath, 'utf8'),
+          exitCode: code ?? (signal ? 1 : 0)
         })
-      }
-    )
+      })
+    })
   })
-}
-
-function testChildEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS: '1'
-  }
 }
 
 function parseStdoutReport(stdout: string, stderr: string): JsonReport {

@@ -1,10 +1,14 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { createMcpServer } from '../src/mcp.js'
+import { testChildEnv } from './child-env.js'
 
 type JsonRpcResponse = {
   jsonrpc: '2.0'
@@ -65,7 +69,7 @@ afterAll(async () => {
 
 describe('MCP server', () => {
   it(
-    'responds to initialize over stdio',
+    'responds to initialize over MCP transport',
     async () => {
       const session = await startSession(await tempRoot())
       const response = await initialize(session)
@@ -340,7 +344,7 @@ async function createValidProject(name: string): Promise<string> {
 }
 
 async function startSession(cwd: string): Promise<McpSession> {
-  const session = new McpSession(cwd)
+  const session = await McpSession.create(cwd)
   sessions.push(session)
   return session
 }
@@ -389,10 +393,11 @@ async function tempRoot(): Promise<string> {
 }
 
 class McpSession {
-  private child: ChildProcessWithoutNullStreams
+  private clientTransport: InMemoryTransport
+  private previousCwd: string
   private nextId = 1
-  private stdoutBuffer = ''
-  private stderrText = ''
+  private closed = false
+  private exit: number | null = null
   private pending = new Map<
     number,
     {
@@ -402,48 +407,33 @@ class McpSession {
     }
   >()
 
-  constructor(cwd: string) {
-    this.child = spawn(
-      process.execPath,
-      [
-        distCli,
-        '--mcp'
-      ],
-      {
-        cwd,
-        env: testChildEnv(),
-        stdio: [
-          'pipe',
-          'pipe',
-          'pipe'
-        ]
-      }
-    )
-    this.child.stdout.setEncoding('utf8')
-    this.child.stderr.setEncoding('utf8')
-    this.child.stdout.on('data', (chunk: string) => {
-      this.handleStdout(chunk)
-    })
-    this.child.stderr.on('data', (chunk: string) => {
-      this.stderrText += chunk
-    })
-    this.child.on('exit', (code, signal) => {
-      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
-      for (const [
-        id,
-        waiter
-      ] of this.pending) {
-        clearTimeout(waiter.timer)
-        waiter.reject(
-          new Error(
-            `MCP server exited before response ${id} (${suffix}). stderr=${JSON.stringify(
-              this.stderrText
-            )}`
-          )
-        )
-      }
-      this.pending.clear()
-    })
+  private constructor(clientTransport: InMemoryTransport, previousCwd: string) {
+    this.clientTransport = clientTransport
+    this.previousCwd = previousCwd
+    this.clientTransport.onmessage = (message) => {
+      this.handleMessage(message as JsonRpcResponse)
+    }
+    this.clientTransport.onerror = (error) => {
+      this.failPending(error)
+    }
+    this.clientTransport.onclose = () => {
+      this.exit = 0
+      this.failPending(new Error('MCP transport closed before response.'))
+    }
+  }
+
+  static async create(cwd: string): Promise<McpSession> {
+    const previousCwd = process.cwd()
+    process.chdir(cwd)
+    const [
+      clientTransport,
+      serverTransport
+    ] = InMemoryTransport.createLinkedPair()
+    const server = createMcpServer(cwd)
+    const session = new McpSession(clientTransport, previousCwd)
+    await server.connect(serverTransport)
+    await clientTransport.start()
+    return session
   }
 
   request(method: string, params?: unknown): Promise<JsonRpcResponse> {
@@ -454,9 +444,7 @@ class McpSession {
     const promise = new Promise<JsonRpcResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(
-          new Error(`Timed out waiting for ${method}. stderr=${JSON.stringify(this.stderrText)}`)
-        )
+        reject(new Error(`Timed out waiting for ${method}.`))
       }, 10000)
       this.pending.set(id, {
         resolve,
@@ -464,63 +452,34 @@ class McpSession {
         timer
       })
     })
-    this.child.stdin.write(`${JSON.stringify(payload)}\n`)
+    void this.clientTransport.send(payload as JSONRPCMessage)
     return promise
   }
 
   notify(method: string, params?: unknown): void {
     const payload =
       params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params }
-    this.child.stdin.write(`${JSON.stringify(payload)}\n`)
+    void this.clientTransport.send(payload as JSONRPCMessage)
   }
 
   exitCode(): number | null {
-    return this.child.exitCode
+    return this.exit
   }
 
   async close(): Promise<void> {
-    if (this.child.exitCode !== null) return
-    this.child.stdin.end()
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        this.child.kill()
-        resolve()
-      }, 1000)
-      this.child.once('exit', () => {
-        clearTimeout(timer)
-        resolve()
-      })
-    })
+    if (this.closed) return
+    this.closed = true
+    process.chdir(this.previousCwd)
+    await this.clientTransport.close()
   }
 
-  private handleStdout(chunk: string): void {
-    this.stdoutBuffer += chunk
-    for (;;) {
-      const newline = this.stdoutBuffer.indexOf('\n')
-      if (newline < 0) return
-      const line = this.stdoutBuffer.slice(0, newline).trim()
-      this.stdoutBuffer = this.stdoutBuffer.slice(newline + 1)
-      if (!line) continue
-      let response: JsonRpcResponse
-      try {
-        response = JSON.parse(line) as JsonRpcResponse
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        this.failPending(
-          new Error(
-            `MCP server wrote invalid JSON to stdout: ${JSON.stringify(
-              line
-            )}. ${message}. stderr=${JSON.stringify(this.stderrText)}`
-          )
-        )
-        return
-      }
-      const waiter = this.pending.get(response.id)
-      if (!waiter) continue
-      this.pending.delete(response.id)
-      clearTimeout(waiter.timer)
-      waiter.resolve(response)
-    }
+  private handleMessage(response: JsonRpcResponse): void {
+    if (response.id === undefined) return
+    const waiter = this.pending.get(response.id)
+    if (!waiter) return
+    this.pending.delete(response.id)
+    clearTimeout(waiter.timer)
+    waiter.resolve(response)
   }
 
   private failPending(error: Error): void {
@@ -529,12 +488,5 @@ class McpSession {
       waiter.reject(error)
     }
     this.pending.clear()
-  }
-}
-
-function testChildEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS: '1'
   }
 }

@@ -87,7 +87,7 @@ const ADDONS = [
   'schema-sync'
 ] as const
 
-const SERVER_ROOT = safeProcessCwd('.')
+let serverRoot = safeProcessCwd('.')
 
 type ToolName =
   | 'create_project'
@@ -102,7 +102,8 @@ type ToolName =
 
 type JsonObject = Record<string, unknown>
 
-export async function startMcpServer(): Promise<void> {
+export function createMcpServer(root = safeProcessCwd('.')): Server {
+  serverRoot = root
   const server = new Server(
     { name: 'create-maa-project', version: SERVER_VERSION },
     { capabilities: { tools: {} } }
@@ -115,6 +116,12 @@ export async function startMcpServer(): Promise<void> {
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
     callTool(request.params.name, request.params.arguments)
   )
+
+  return server
+}
+
+export async function startMcpServer(): Promise<void> {
+  const server = createMcpServer()
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
@@ -763,7 +770,7 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
 }
 
 function currentRoot(): string {
-  return safeProcessCwd(SERVER_ROOT)
+  return safeProcessCwd(serverRoot)
 }
 
 function safeProcessCwd(fallback: string): string {

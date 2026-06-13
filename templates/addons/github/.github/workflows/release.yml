@@ -105,3 +105,10 @@ jobs:
           files: |
             release-assets/*.zip
             release-assets/*.tar.gz
+      - name: Dispatch post-release hooks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" \
+            -f event_type=create-maa-project-release \
+            -f client_payload[tag]="$GITHUB_REF_NAME"

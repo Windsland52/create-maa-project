@@ -1085,7 +1085,13 @@ describe('scaffold', () => {
     )
     expect(
       await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('orhun/git-cliff-action@v4')
+    ).toContain('body_path: release-assets/CHANGES.md')
+    expect(
+      await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
+    ).toContain('GITHUB_REPO: ${{ github.repository }}')
+    expect(
+      await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
+    ).not.toContain('orhun/git-cliff-action@v4')
     expect(communityResult.skipped).toContain('CONTRIBUTING.md')
     expect(communityResult.written).toEqual(
       expect.arrayContaining([
@@ -1240,7 +1246,13 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     )
     expect(
       await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('body: ${{ needs.git_cliff.outputs.release_body }}')
+    ).toContain('body_path: release-assets/CHANGES.md')
+    expect(
+      await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
+    ).toContain('GITHUB_REPO: ${{ github.repository }}')
+    expect(
+      await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
+    ).not.toContain('orhun/git-cliff-action@v4')
     expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
       'Contributing to maa-create-addons'
     )
@@ -1327,7 +1339,13 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
     expect(
       await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('orhun/git-cliff-action@v4')
+    ).toContain('body_path: release-assets/CHANGES.md')
+    expect(
+      await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
+    ).toContain('GITHUB_REPO: ${{ github.repository }}')
+    expect(
+      await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
+    ).not.toContain('orhun/git-cliff-action@v4')
   })
 
   it('supports auto-format during project creation', async () => {

@@ -476,7 +476,7 @@ function releaseWorkflow(
       gitCliffJob: input.includeGitCliff ? `  ${gitCliffWorkflowJob()}\n` : '',
       releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
       releaseNotesInput: input.includeGitCliff
-        ? 'body: ${{ needs.git_cliff.outputs.release_body }}'
+        ? 'body_path: release-assets/CHANGES.md'
         : 'generate_release_notes: true'
     })
   )
@@ -485,24 +485,35 @@ function releaseWorkflow(
 function gitCliffWorkflowJob(): string {
   return `git_cliff:
     name: Generate release notes
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    outputs:
-      release_body: \${{ steps.git-cliff.outputs.content }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Generate release notes
-        uses: orhun/git-cliff-action@v4
-        id: git-cliff
-        with:
-          config: .github/cliff.toml
-          args: -vv --latest --strip header
+        shell: bash
         env:
-          OUTPUT: CHANGES.md
           GITHUB_REPO: \${{ github.repository }}
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="2.13.1"
+          archive="git-cliff-\${version}-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "$RUNNER_TEMP/git-cliff"
+          curl -fsSL "https://github.com/orhun/git-cliff/releases/download/v\${version}/$archive" -o "$RUNNER_TEMP/$archive"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/git-cliff"
+          git_cliff="$(find "$RUNNER_TEMP/git-cliff" -type f -name git-cliff -perm -111 | head -n 1)"
+          if [[ -z "$git_cliff" ]]; then
+            echo "[ERR] git-cliff binary was not found after extraction"
+            exit 1
+          fi
+          "$git_cliff" --config .github/cliff.toml --latest --strip header --output CHANGES.md
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: CHANGES.md
 `
 }
 

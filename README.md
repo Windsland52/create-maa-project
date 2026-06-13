@@ -10,39 +10,122 @@ interfaces for humans and tool wrappers.
 The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
 the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consistent.
 
-## Installation
+## Install The CLI
+
+The simplest setup is the npm CLI. Install Node.js first, then install
+`create-maa-project` globally:
 
 ```bash
-npx create-maa-project my-project
-uvx create-maa-project my-project
-pipx run create-maa-project my-project
+npm install -g create-maa-project
 ```
 
-npm is the primary distribution channel. The PyPI package is a lightweight wrapper that
-uses the same-version GitHub Release binary when available and gives clear fallback
-guidance when it cannot run the cached binary.
-
-## Quick Start
+You can also run it once without a global install:
 
 ```bash
-npx create-maa-project my-project
-cd my-project
+npx create-maa-project@latest
+```
+
+The PyPI package is available for Python-based environments, but npm is the primary
+distribution channel:
+
+```bash
+uvx create-maa-project
+pipx run create-maa-project
+```
+
+## Create A Project Interactively
+
+For a first project, run the CLI without flags and answer the prompts:
+
+```bash
+create-maa-project
+```
+
+If you used `npx`, run:
+
+```bash
+npx create-maa-project@latest
+```
+
+The interactive flow asks for the project name, project type, controller targets, and
+optional add-ons. Choose `pipeline` for a normal task/resource project. Choose `agent`
+only when you need Python custom logic.
+
+After the project is created:
+
+```bash
+cd <project-folder>
 create-maa-project --doctor
+```
+
+If the tool prints pending actions, run the suggested commands from the project root.
+Projects with dev tools can then run:
+
+```bash
 pnpm check
 ```
 
-For a reproducible non-interactive repository scaffold:
+If automatic language detection does not match your terminal, force the prompt language:
 
 ```bash
-npx create-maa-project my-project \
-  --add dev-tools \
-  --add github \
-  --skip-download \
-  --no-interactive
+create-maa-project --lang zh-CN
+create-maa-project --lang en
 ```
 
-Use `--template agent` for a Python Agent project. Use `--slug` when the folder or display
-name cannot produce an ASCII kebab-case project ID.
+## Use With An MCP Client
+
+MCP is useful when an AI coding agent should create or maintain the project for you. It is
+not interactive by itself: the agent should ask you for the project name, whether you want
+a Pipeline or Python Agent project, which add-ons to include, and any resource pack folder
+name before it calls the MCP tool.
+
+If the CLI is installed globally, configure the MCP server like this:
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "create-maa-project",
+      "args": [
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+If you do not want a global install, let the MCP client run it through `npx`:
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "create-maa-project@latest",
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+Set `cwd` to the parent directory when creating a new project. Set `cwd` to an existing
+MaaFW project root when running `doctor`, `diff`, `sync`, `update`, `add`,
+`accept_changes`, `restore`, or `clean_cache`.
+
+Typical agent request:
+
+```text
+Create a MaaFW project in ./MaaExample. Use a Pipeline project, Android controller,
+and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
+```
+
+If the agent adds a resource pack, it must pass a `resourcePackSlug` such as `extra` or
+`cn`; otherwise the MCP tool will reject the call.
 
 ## Project Model
 
@@ -326,54 +409,6 @@ Example failure report:
   }
 }
 ```
-
-## MCP Server
-
-Run the MCP server over stdio with:
-
-```bash
-create-maa-project --mcp
-```
-
-Configure the server `cwd` as the MaaFW project root for `doctor`, `diff`, `sync`,
-`update`, `add`, `accept_changes`, `restore`, and `clean_cache`. For `create_project`,
-set `cwd` to the parent directory where the new project should be created.
-
-Example MCP server configuration:
-
-```json
-{
-  "mcpServers": {
-    "create-maa-project": {
-      "command": "create-maa-project",
-      "args": [
-        "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
-    }
-  }
-}
-```
-
-Available tools:
-
-- `create_project`: `name`, optional `template`, `slug`, `displayName`, `controller`,
-  `license`, `network`, `add`, `resourcePackSlug`, `resourcePackLabel`, `skipDownload`,
-  and `git`. MCP mode is non-interactive; clients should ask the user for unresolved
-  creation choices before calling. If `add` includes `resource-pack`, `resourcePackSlug`
-  is required.
-- `doctor`, `diff`, and `clean_cache`: no parameters.
-- `sync`: `target` plus optional `value`. `display-name`, `version`, `license`, and
-  `github-url` require `value`; `metadata` and `network` can omit it.
-- `update`: `targets` and optional `diff`.
-- `add`: `addon`, optional `resourcePackSlug`, and optional `label`.
-  `resourcePackSlug` is required when `addon` is `resource-pack`.
-- `accept_changes`: optional `paths`.
-- `restore`: `backupId`.
-
-Tool calls return one text content item containing a compact `CliJsonReport`. MCP
-`isError` is set to `true` when `report.ok` is `false`. The MCP server does not write
-tool results to stdout directly and does not exit after tool-call errors.
 
 ## Releasing This CLI
 

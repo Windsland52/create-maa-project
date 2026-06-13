@@ -810,6 +810,7 @@ describe('scaffold', () => {
     expect(utilsInit).toContain('# noqa: E402,F403')
     expect(await pathExists(join(root, 'maa-agent-test', 'config/pip_config.json'))).toBe(false)
     expect(gitignore).toContain('config/')
+    expect(gitignore).toContain('__pycache__/')
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
       icon: 'logo.ico',

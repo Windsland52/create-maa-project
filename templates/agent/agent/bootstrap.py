@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 PYTHON_MIN = (3, 13)
 PYTHON_MAX = (3, 14)
@@ -197,7 +198,9 @@ def install_from_local_wheels(project_root: Path, requirements: Path) -> bool:
     )
 
 
-def install_from_indexes(project_root: Path, requirements: Path, pip_config: dict) -> bool:
+def install_from_indexes(
+    project_root: Path, requirements: Path, pip_config: dict[str, Any]
+) -> bool:
     command = [
         sys.executable,
         "-m",
@@ -243,7 +246,7 @@ def run_pip(project_root: Path, command: list[str], label: str) -> bool:
     return True
 
 
-def read_pip_config(project_root: Path) -> dict:
+def read_pip_config(project_root: Path) -> dict[str, Any]:
     config_path = project_root / "config" / "pip_config.json"
     if not config_path.exists():
         return DEFAULT_PIP_CONFIG

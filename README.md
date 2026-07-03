@@ -2,6 +2,12 @@
 
 [English](https://github.com/Windsland52/create-maa-project/blob/main/README.en.md) | 简体中文
 
+[![npm](https://img.shields.io/npm/v/create-maa-project)](https://www.npmjs.com/package/create-maa-project)
+[![PyPI](https://img.shields.io/pypi/v/create-maa-project)](https://pypi.org/project/create-maa-project)
+[![license](https://img.shields.io/github/license/Windsland52/create-maa-project)](./LICENSE)
+![node](https://img.shields.io/badge/node-%3E%3D24-green)
+![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
+
 `create-maa-project` 是用于创建和维护新 MaaFW 应用项目的脚手架 CLI。它可以生成确定性的
 Pipeline 或 Python Agent 项目，把项目意图记录在已提交的状态文件中，并提供 update、sync、
 diff、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。

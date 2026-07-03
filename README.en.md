@@ -2,6 +2,12 @@
 
 English | [简体中文](https://github.com/Windsland52/create-maa-project/blob/main/README.md)
 
+[![npm](https://img.shields.io/npm/v/create-maa-project)](https://www.npmjs.com/package/create-maa-project)
+[![PyPI](https://img.shields.io/pypi/v/create-maa-project)](https://pypi.org/project/create-maa-project)
+[![license](https://img.shields.io/github/license/Windsland52/create-maa-project)](./LICENSE)
+![node](https://img.shields.io/badge/node-%3E%3D24-green)
+![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
+
 `create-maa-project` is the scaffold and maintenance CLI for new MaaFW application
 projects. It creates deterministic Pipeline or Python Agent projects, records project
 intent in committed state files, and provides update, sync, diff, doctor, and JSON report

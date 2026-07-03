@@ -378,7 +378,8 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   const files: ManagedFileInput[] = [
     ...agentFiles({
       slug: config.project.slug,
-      version: config.project.version
+      version: config.project.version,
+      displayName: config.project.displayName
     }),
     ...projectCustomSchemaFiles(true),
     {

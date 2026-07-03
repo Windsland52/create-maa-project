@@ -188,7 +188,7 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
 }
 
 export function agentFiles(
-  input: Pick<ProjectTemplateInput, 'slug' | 'version'>
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>
 ): ManagedFileInput[] {
   return [
     managed('.python-version', '3.13\n'),
@@ -685,10 +685,13 @@ function packageLicense(license: LicenseKind): string {
   return license === 'None' ? 'UNLICENSED' : license
 }
 
-function agentPyproject(input: Pick<ProjectTemplateInput, 'slug' | 'version'>): string {
+function agentPyproject(
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>
+): string {
   return template('agent/pyproject.toml', {
     slug: input.slug,
-    version: input.version
+    version: input.version,
+    displayName: input.displayName
   })
 }
 

@@ -1,7 +1,7 @@
 [project]
 name = "{{slug}}"
 version = "{{version}}"
-description = "{{displayName}} — MaaFW Agent project"
+description = "{{displayName}} MaaFW Agent project"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "maafw>=5.0"

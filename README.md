@@ -1,85 +1,79 @@
 # create-maa-project
 
-English | [简体中文](./README.zh-CN.md)
+[English](https://github.com/Windsland52/create-maa-project/blob/main/README.en.md) | 简体中文
 
-`create-maa-project` is the scaffold and maintenance CLI for new MaaFW application
-projects. It creates deterministic Pipeline or Python Agent projects, records project
-intent in committed state files, and provides update, sync, diff, doctor, and JSON report
-interfaces for humans and tool wrappers.
+`create-maa-project` 是用于创建和维护新 MaaFW 应用项目的脚手架 CLI。它可以生成确定性的
+Pipeline 或 Python Agent 项目，把项目意图记录在已提交的状态文件中，并提供 update、sync、
+diff、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。
 
-The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
-the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consistent.
+CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、锁、
+hash、pending action 和 JSON report 都能保持一致。
 
-## Install The CLI
+## 安装 CLI
 
-The simplest setup is the npm CLI. Install Node.js first, then install
-`create-maa-project` globally:
+最简单的方式是使用 npm 版本。先安装 Node.js，然后全局安装 `create-maa-project`：
 
 ```bash
 npm install -g create-maa-project
 ```
 
-You can also run it once without a global install:
+也可以不全局安装，直接临时运行最新版：
 
 ```bash
 npx create-maa-project@latest
 ```
 
-The PyPI package is available for Python-based environments, but npm is the primary
-distribution channel:
+PyPI 包适合更偏 Python 工具链的环境，但 npm 是主分发渠道：
 
 ```bash
 uvx create-maa-project
 pipx run create-maa-project
 ```
 
-## Create A Project Interactively
+## 交互式创建项目
 
-For a first project, run the CLI without flags and answer the prompts:
+第一次使用时，直接运行 CLI，然后按提示回答问题：
 
 ```bash
 create-maa-project
 ```
 
-If you used `npx`, run:
+如果使用 `npx`，运行：
 
 ```bash
 npx create-maa-project@latest
 ```
 
-The interactive flow asks for the project name, project type, controller targets, and
-optional add-ons. Choose `pipeline` for a normal task/resource project. Choose `agent`
-only when you need Python custom logic.
+交互流程会询问项目名、项目类型、控制目标和可选 add-ons。普通任务/资源项目选择 `pipeline`；
+只有需要 Python 自定义逻辑时才选择 `agent`。
 
-After the project is created:
+项目创建完成后：
 
 ```bash
 cd <project-folder>
 create-maa-project --doctor
 ```
 
-If the tool prints pending actions, run the suggested commands from the project root.
-Projects with dev tools can then run:
+如果工具输出 pending actions，就在项目根目录执行它提示的命令。带 dev tools 的项目之后可以运行：
 
 ```bash
 pnpm check
 ```
 
-If automatic language detection does not match your terminal, force the prompt language:
+如果自动语言识别不符合你的终端，可以强制指定提示语言：
 
 ```bash
 create-maa-project --lang zh-CN
 create-maa-project --lang en
 ```
 
-## Use With An MCP Client
+## 配合 MCP Client 使用
 
-MCP is useful when an AI coding agent should create or maintain the project for you. It is
-not interactive by itself: the agent should ask you for the project name, whether you want
-a Pipeline or Python Agent project, which add-ons to include, and any resource pack folder
-name before it calls the MCP tool.
+MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交互式的：agent 应该先向你问清项
+目名、要 Pipeline 还是 Python Agent、要启用哪些 add-ons，以及 resource pack 的文件夹名，再调
+用 MCP tool。
 
-If the CLI is installed globally, configure the MCP server like this:
+如果已经全局安装 CLI，可以这样配置 MCP server：
 
 ```json
 {
@@ -95,7 +89,7 @@ If the CLI is installed globally, configure the MCP server like this:
 }
 ```
 
-If you do not want a global install, let the MCP client run it through `npx`:
+如果不想全局安装，可以让 MCP client 通过 `npx` 启动：
 
 ```json
 {
@@ -113,30 +107,30 @@ If you do not want a global install, let the MCP client run it through `npx`:
 }
 ```
 
-Set `cwd` to the parent directory when creating a new project. Set `cwd` to an existing
-MaaFW project root when running `doctor`, `diff`, `sync`, `update`, `add`,
-`accept_changes`, `restore`, or `clean_cache`.
+创建新项目时，`cwd` 配成新项目所在的父目录。维护已有项目时，`cwd` 配成 MaaFW 项目根目录，用
+于 `doctor`、`diff`、`sync`、`update`、`add`、`accept_changes`、`restore` 或
+`clean_cache`。
 
-Typical agent request:
+可以这样要求 agent：
 
 ```text
-Create a MaaFW project in ./MaaExample. Use a Pipeline project, Android controller,
-and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
+在 ./MaaExample 创建一个 MaaFW 项目。使用 Pipeline 项目、Android 控制器，并添加 dev-tools
+和 GitHub workflows。其它可选 add-ons 先问我。
 ```
 
-If the agent adds a resource pack, it must pass a `resourcePackSlug` such as `extra` or
-`cn`; otherwise the MCP tool will reject the call.
+如果 agent 要添加 resource pack，必须传 `resourcePackSlug`，例如 `extra` 或 `cn`；否则 MCP
+tool 会拒绝调用。
 
-## Project Model
+## 项目模型
 
-Project identity is split into two fields:
+项目身份拆成两个字段：
 
-- `slug`: ASCII kebab-case ID used for repository names, package names, artifacts, and
-  `interface.json` `name`.
-- `displayName`: user-facing label used for `interface.json` `label`; it may be Chinese
-  or any other display text.
+- `slug`：ASCII kebab-case ID，用于仓库名、package 名、artifact 名和 `interface.json` 的
+  `name`。
+- `displayName`：面向用户的显示名，用于 `interface.json` 的 `label`，可以是中文或其它展示文
+  本。
 
-A full repository/tooling project can include:
+完整仓库/工具项目通常包含：
 
 ```text
 my-project/
@@ -158,25 +152,22 @@ my-project/
 └── README.md
 ```
 
-The resource layout is fixed around `resource/base/` plus optional `resource/<pack>/`
-folders. `interface.json` resource paths are generated in the order recorded in
-`maa-project.json`; later packs have higher override priority in MaaFW resource lookup.
+资源结构固定围绕 `resource/base/` 和可选的 `resource/<pack>/`。`interface.json` 的 resource
+路径按 `maa-project.json` 中记录的顺序生成；后添加的资源包在 MaaFW 资源查找中有更高覆盖优先级。
 
-The CLI creates project-owned files such as `interface.json`, `package.json`, `tasks/`,
-`resource/`, README, and license once. Later updates do not treat those as managed
-template baselines unless a specific `--sync` or `--add` operation rewrites a supported
-structured field.
+CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`resource/`、README、license
+等项目自有文件。后续模板更新不会把这些文件当成 managed baseline，除非明确的 `--sync` 或 `--add`
+操作需要改写受支持的结构化字段。
 
-## State and Safety
+## 状态与安全
 
-Committed state:
+进入 Git 的状态文件：
 
-- `maa-project.json`: user intent, including project metadata, feature/add-on choices,
-  resources, runtime channels, network mode, license, and Agent configuration.
-- `maa-project.lock.json`: resolved state, pending actions, template version, and managed
-  file hashes.
+- `maa-project.json`：用户意图，包括项目元数据、功能/插件选择、资源包、runtime channel、网络模
+  式、license 和 Agent 配置。
+- `maa-project.lock.json`：resolved 状态、pending actions、模板版本和 managed file hash。
 
-Local state lives under `.create-maa-project/` and is ignored by generated projects:
+本机状态放在 `.create-maa-project/`，生成项目默认忽略该目录：
 
 ```text
 .create-maa-project/
@@ -187,24 +178,22 @@ Local state lives under `.create-maa-project/` and is ignored by generated proje
 └── run.lock
 ```
 
-Safety rules:
+安全规则：
 
-- Writes to config, lock, and managed files use a project write lock.
-- Files are backed up before overwrites.
-- `--force` skips prompts but still keeps backups.
-- `--yes` is not the same as `--force`.
-- Non-empty non-Git targets require explicit `--force --allow-non-git-dir`.
-- `--doctor` and `--diff` are read-only.
-- `--accept-changes [path...]` accepts current managed-file contents as the new local
-  baseline; it does not restore the official template.
+- 写 config、lock 和 managed 文件前会创建项目写锁。
+- 覆盖文件前会先备份。
+- `--force` 跳过确认，但不跳过备份。
+- `--yes` 不等于 `--force`。
+- 非空且不在 Git 仓库中的目标目录需要显式 `--force --allow-non-git-dir`。
+- `--doctor` 和 `--diff` 只读。
+- `--accept-changes [path...]` 表示接受当前 managed 文件内容为新的本地基线，不表示恢复官方模板。
 
-Managed files are tool-owned files such as workflows, schema baselines, generated release
-scripts, and project checks. If they drift, `--diff` shows the change and `--doctor` gives
-an actionable repair or accept command.
+Managed files 是工具拥有的文件，例如 workflows、schema baseline、release 脚本和项目检查脚本。如
+果它们发生漂移，`--diff` 会展示变更，`--doctor` 会给出可执行的修复或接受命令。
 
-## Commands
+## 命令
 
-Common create options:
+常用创建选项：
 
 ```bash
 create-maa-project [name]
@@ -212,22 +201,21 @@ create-maa-project .
 create-maa-project [name] --template pipeline
 create-maa-project [name] --template agent
 create-maa-project [name] --slug maa-helper --name "明日方舟助手"
-create-maa-project [name] --controller Adb,Win32,MacOS
+create-maa-project [name] --controller Adb,Win32
 create-maa-project [name] --license MIT
 create-maa-project [name] --git
 create-maa-project [name] --no-git
 ```
 
-Supported `--controller` targets: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`,
-`WlRoots`. Comma-separated for multiple targets. Default is `Adb`.
+可用的控制目标：`Adb`、`Win32`、`MacOS`、`PlayCover`、`Gamepad`、`WlRoots`。默认为 `Adb`。
 
-Add-ons:
+增量能力：
 
 ```bash
 create-maa-project --add dev-tools
 create-maa-project --add github
 create-maa-project --add agent
-create-maa-project --add resource-pack extra --label "Extra Resource"
+create-maa-project --add resource-pack extra --label "额外资源"
 create-maa-project --add git-cliff
 create-maa-project --add auto-format
 create-maa-project --add optimize-images
@@ -236,18 +224,18 @@ create-maa-project --add dependabot
 create-maa-project --add schema-sync
 ```
 
-Metadata sync:
+元数据同步：
 
 ```bash
 create-maa-project --sync metadata
-create-maa-project --sync display-name --name "New Display Name"
+create-maa-project --sync display-name --name "新显示名"
 create-maa-project --sync version --version 0.2.0
 create-maa-project --sync license --license MIT
 create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
 create-maa-project --sync network --network official
 ```
 
-Updates:
+更新：
 
 ```bash
 create-maa-project --update schema
@@ -262,10 +250,9 @@ create-maa-project --update template --diff
 create-maa-project --update schema --diff
 ```
 
-`--update all` is intentionally unsupported. Run explicit updates so pending actions and
-logs stay clear.
+`--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
 
-Diagnostics and maintenance:
+诊断和维护：
 
 ```bash
 create-maa-project --doctor
@@ -276,7 +263,7 @@ create-maa-project --restore <backup-id>
 create-maa-project --clean-cache
 ```
 
-Useful execution flags:
+常用执行控制：
 
 ```bash
 --yes
@@ -291,29 +278,27 @@ Useful execution flags:
 --no-color
 ```
 
-## Tooling
+## 工具链
 
-Generated repository tooling targets Node 24 and pnpm 11.5.1. Dev-tool projects include
-project-local scripts for formatting, schema validation, MaaFW checks, project state
-linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python checks.
+生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校
+验、MaaFW 检查、项目状态 lint 和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright
+和 Python 检查。
 
-Asset and dependency operations are explicit and recoverable:
+资产和依赖操作是显式且可恢复的：
 
-- Project creation tries OCR download and `pnpm install` when relevant.
-- Network or tool failures leave committed pending actions with repair commands.
-- `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` changes download retry attempts.
-- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip.
-- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest.
-- `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` syncs all desktop MaaFramework and
-  MFAAvalonia runtime platforms.
-- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` controls interactive prompt language.
-  `auto` only enables Chinese prompts for Chinese interactive terminals; machine-readable
-  output stays English.
+- 创建项目时会在相关场景尝试 OCR 下载和 `pnpm install`。
+- 网络或工具失败会留下已提交的 pending action，并附带修复命令。
+- `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
+- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产。
+- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。
+- `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` 同步全部桌面 MaaFramework 和 MFAAvalonia
+  runtime 平台。
+- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` 控制交互式提示语言。`auto` 只会在中文交互终端
+  启用中英提示；机器可读输出仍保持英文。
 
-## Agent Projects
+## Agent 项目
 
-`--template agent` or `--add agent` adds a Python Agent scaffold on top of the Pipeline
-project:
+`--template agent` 或 `--add agent` 会在 Pipeline 项目上增加 Python Agent 脚手架：
 
 ```text
 agent/
@@ -327,37 +312,32 @@ uv.lock
 requirements.txt
 ```
 
-The generated bootstrap handles local runtime setup, dependency checks, debug logging, and
-starting `agent/main.py`. Runtime-local files such as `config/pip_config.json`, `.venv/`,
-and `debug/` are ignored instead of committed.
+生成的 bootstrap 负责本地运行时准备、依赖检查、debug 日志和启动 `agent/main.py`。
+`config/pip_config.json`、`.venv/`、`debug/` 等运行时本地文件会被忽略，不进入提交。
 
-## Release and Runtime
+## Release 与 Runtime
 
-Projects with the GitHub add-on include check and release workflows. Release packaging is
-tag-driven: source metadata can stay at `0.1.0`, while the release package injects the Git
-tag version into the staged `interface.json`.
+带 GitHub add-on 的项目会包含 check 和 release workflows。发布打包以 Git tag 为准：源码元数
+据可以保持 `0.1.0`，release staging 会把 Git tag 版本注入包内的 `interface.json`。
 
-The default runtime profile targets MFAAvalonia:
+默认 runtime profile 面向 MFAAvalonia：
 
-- `create-maa-project --update maafw` syncs MaaFramework assets.
-- `create-maa-project --update runtime:mfa` syncs MFAAvalonia GUI runtime assets.
-- Generated `pnpm sync:runtime` runs both, plus Python runtime sync for Agent projects.
-- Release jobs pass `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` for the target
-  runtime asset.
+- `create-maa-project --update maafw` 同步 MaaFramework 资产。
+- `create-maa-project --update runtime:mfa` 同步 MFAAvalonia GUI runtime 资产。
+- 生成的 `pnpm sync:runtime` 会执行二者；Agent 项目还会同步 Python runtime。
+- Release job 通过 `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` 选择目标 runtime 资产。
 
-Default release artifacts cover Windows, Linux, and macOS on `x86_64` and `aarch64`.
-Windows artifacts are `.zip`; Linux and macOS artifacts are `.tar.gz`.
+默认 release artifact 覆盖 Windows、Linux、macOS 的 `x86_64` 和 `aarch64`。Windows 使用
+`.zip`，Linux 和 macOS 使用 `.tar.gz`。
 
-## JSON Report Mode
+## JSON Report 模式
 
-Pass `--report` to make `create`, `sync`, `update`, `diff`, and `doctor` emit a single
-machine-readable JSON document on stdout. In report mode, `--report` forces
-non-interactive execution. Progress, `Log:`, and human `Error:` text are not written to
-stdout; wrappers may ignore stderr unless they want diagnostics.
+给 `create`、`sync`、`update`、`diff` 和 `doctor` 传入 `--report` 后，CLI 会在 stdout 输出唯一
+一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读
+`Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
 
-Exit code `0` means the command completed successfully. Exit code `1` means the command
-failed, or `doctor` found project problems. The JSON `exitCode` field matches the process
-exit code.
+退出码 `0` 表示命令成功完成。退出码 `1` 表示命令失败，或 `doctor` 发现项目问题。JSON 中的
+`exitCode` 与进程退出码一致。
 
 ```ts
 type CliJsonReport = {
@@ -384,7 +364,7 @@ type CliJsonReport = {
 }
 ```
 
-Example failure report:
+失败报告示例：
 
 ```json
 {
@@ -410,10 +390,9 @@ Example failure report:
 }
 ```
 
-## Releasing This CLI
+## 发布本 CLI
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the repo,
-builds the npm package, builds SEA binaries for Windows/Linux/macOS on `x86_64` and
-`aarch64`, writes `create-maa-project-manifest.json`, publishes GitHub Release assets,
-publishes npm, then builds the PyPI wrapper with the release manifest digest embedded and
-publishes it through trusted publishing.
+推送 `v*` tag 会运行 `.github/workflows/release.yml`。workflow 会检查仓库、构建 npm 包、构建
+Windows/Linux/macOS 的 `x86_64` 和 `aarch64` SEA 二进制、写出
+`create-maa-project-manifest.json`、发布 GitHub Release assets、发布 npm，然后把 release
+manifest digest 嵌入 PyPI wrapper 并通过 trusted publishing 发布。

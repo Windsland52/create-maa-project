@@ -10,9 +10,24 @@ interfaces for humans and tool wrappers.
 The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
 the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consistent.
 
+## Table of Contents
+
+- [Install The CLI](#install-the-cli)
+- [Create A Project Interactively](#create-a-project-interactively)
+- [Use With An MCP Client](#use-with-an-mcp-client)
+- [Project Model](#project-model)
+- [State and Safety](#state-and-safety)
+- [Commands](#commands)
+- [Tooling](#tooling)
+- [Agent Projects](#agent-projects)
+- [Release and Runtime](#release-and-runtime)
+- [JSON Report Mode](#json-report-mode)
+- [Releasing This CLI](#releasing-this-cli)
+- [License](#license)
+
 ## Install The CLI
 
-The simplest setup is the npm CLI. Install Node.js first, then install
+The simplest setup is the npm CLI. Install Node.js (>= 24) first, then install
 `create-maa-project` globally:
 
 ```bash
@@ -105,6 +120,23 @@ If you do not want a global install, let the MCP client run it through `npx`:
       "args": [
         "-y",
         "create-maa-project@latest",
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+For a Python-centric toolchain, let the MCP client launch it through `uvx`:
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "uvx",
+      "args": [
+        "create-maa-project",
         "--mcp"
       ],
       "cwd": "/path/to/project-or-parent"
@@ -417,3 +449,7 @@ builds the npm package, builds SEA binaries for Windows/Linux/macOS on `x86_64` 
 `aarch64`, writes `create-maa-project-manifest.json`, publishes GitHub Release assets,
 publishes npm, then builds the PyPI wrapper with the release manifest digest embedded and
 publishes it through trusted publishing.
+
+## License
+
+[AGPL-3.0-or-later](./LICENSE)

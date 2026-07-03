@@ -9,9 +9,24 @@ diff、doctor 和 JSON report 接口，方便人类用户和工具封装层使�
 CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、锁、
 hash、pending action 和 JSON report 都能保持一致。
 
+## 目录
+
+- [安装 CLI](#安装-cli)
+- [交互式创建项目](#交互式创建项目)
+- [配合 MCP Client 使用](#配合-mcp-client-使用)
+- [项目模型](#项目模型)
+- [状态与安全](#状态与安全)
+- [命令](#命令)
+- [工具链](#工具链)
+- [Agent 项目](#agent-项目)
+- [Release 与 Runtime](#release-与-runtime)
+- [JSON Report 模式](#json-report-模式)
+- [发布本 CLI](#发布本-cli)
+- [License](#license)
+
 ## 安装 CLI
 
-最简单的方式是使用 npm 版本。先安装 Node.js，然后全局安装 `create-maa-project`：
+最简单的方式是使用 npm 版本。先安装 Node.js（>= 24），然后全局安装 `create-maa-project`：
 
 ```bash
 npm install -g create-maa-project
@@ -99,6 +114,23 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
       "args": [
         "-y",
         "create-maa-project@latest",
+        "--mcp"
+      ],
+      "cwd": "/path/to/project-or-parent"
+    }
+  }
+}
+```
+
+如果更偏 Python 工具链，可以让 MCP client 通过 `uvx` 启动：
+
+```json
+{
+  "mcpServers": {
+    "create-maa-project": {
+      "command": "uvx",
+      "args": [
+        "create-maa-project",
         "--mcp"
       ],
       "cwd": "/path/to/project-or-parent"
@@ -396,3 +428,7 @@ type CliJsonReport = {
 Windows/Linux/macOS 的 `x86_64` 和 `aarch64` SEA 二进制、写出
 `create-maa-project-manifest.json`、发布 GitHub Release assets、发布 npm，然后把 release
 manifest digest 嵌入 PyPI wrapper 并通过 trusted publishing 发布。
+
+## License
+
+[AGPL-3.0-or-later](./LICENSE)

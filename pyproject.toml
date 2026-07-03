@@ -1,7 +1,7 @@
 [project]
 name = "create-maa-project"
 version = "0.1.0"
-description = "PyPI wrapper for create-maa-project"
+description = "用于创建和维护 MaaFW 应用项目的脚手架 CLI / Scaffold and maintenance CLI for MaaFW application projects"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []

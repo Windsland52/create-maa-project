@@ -1,6 +1,7 @@
 {
     "name": "create-maa-project",
     "version": "0.1.0",
+    "description": "用于创建和维护 MaaFW 应用项目的脚手架 CLI / Scaffold and maintenance CLI for MaaFW application projects",
     "type": "module",
     "license": "AGPL-3.0-or-later",
     "bin": {

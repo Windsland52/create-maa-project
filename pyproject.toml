@@ -2,6 +2,7 @@
 name = "create-maa-project"
 version = "0.1.0"
 description = "用于创建和维护 MaaFW 应用项目的脚手架 CLI / Scaffold and maintenance CLI for MaaFW application projects"
+keywords = ["maafw", "scaffold", "mcp"]
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []

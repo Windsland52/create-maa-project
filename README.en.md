@@ -103,8 +103,7 @@ If the CLI is installed globally, configure the MCP server like this:
       "command": "create-maa-project",
       "args": [
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
@@ -121,8 +120,7 @@ If you do not want a global install, let the MCP client run it through `npx`:
         "-y",
         "create-maa-project@latest",
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
@@ -138,16 +136,11 @@ For a Python-centric toolchain, let the MCP client launch it through `uvx`:
       "args": [
         "create-maa-project",
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
 ```
-
-Set `cwd` to the parent directory when creating a new project. Set `cwd` to an existing
-MaaFW project root when running `doctor`, `diff`, `sync`, `update`, `add`,
-`accept_changes`, `restore`, or `clean_cache`.
 
 Typical agent request:
 

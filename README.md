@@ -97,8 +97,7 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
       "command": "create-maa-project",
       "args": [
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
@@ -115,8 +114,7 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
         "-y",
         "create-maa-project@latest",
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
@@ -132,16 +130,11 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
       "args": [
         "create-maa-project",
         "--mcp"
-      ],
-      "cwd": "/path/to/project-or-parent"
+      ]
     }
   }
 }
 ```
-
-创建新项目时，`cwd` 配成新项目所在的父目录。维护已有项目时，`cwd` 配成 MaaFW 项目根目录，用
-于 `doctor`、`diff`、`sync`、`update`、`add`、`accept_changes`、`restore` 或
-`clean_cache`。
 
 可以这样要求 agent：
 

@@ -201,7 +201,7 @@ create-maa-project .
 create-maa-project [name] --template pipeline
 create-maa-project [name] --template agent
 create-maa-project [name] --slug maa-helper --name "明日方舟助手"
-create-maa-project [name] --controller Adb,Win32
+create-maa-project [name] --controller Adb,Win32,MacOS
 create-maa-project [name] --license MIT
 create-maa-project [name] --git
 create-maa-project [name] --no-git

@@ -6,7 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { sha256, stableJson } from './utils.js'
 
 export const DEFAULT_OCR_ZIP_URL =
-  'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v5/ppocr_v5-zh_cn.zip'
+  'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip'
 
 export type AssetManifest = {
   schemaVersion?: number

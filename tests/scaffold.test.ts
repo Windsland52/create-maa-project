@@ -764,7 +764,7 @@ describe('scaffold', () => {
     expect(pyproject).toContain('[tool.ruff]')
     expect(pyproject).toContain('[tool.pyright]')
     expect(pyproject).toContain('extraPaths = ["agent"]')
-    expect(pyproject).toContain('typeCheckingMode = "basic"')
+    expect(pyproject).toContain('typeCheckingMode = "strict"')
     expect(await pathExists(join(root, 'maa-agent-test', 'ruff.toml'))).toBe(false)
     expect(await pathExists(join(root, 'maa-agent-test', 'pyrightconfig.json'))).toBe(false)
     const bootstrap = await readFile(join(root, 'maa-agent-test', 'agent/bootstrap.py'), 'utf8')

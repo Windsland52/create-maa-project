@@ -1,9 +1,10 @@
 [project]
 name = "{{slug}}"
 version = "{{version}}"
+description = "{{displayName}} — MaaFW Agent project"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "maafw>=0.0.0"
+    "maafw>=5.0"
 ]
 
 [dependency-groups]
@@ -30,4 +31,12 @@ select = ["E", "F", "I", "UP", "B"]
 include = ["agent"]
 extraPaths = ["agent"]
 pythonVersion = "3.13"
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
+
+# MaaFramework 的 Python 包 (MaaFw) 不发布 PEP 561 类型存根；strict 模式下 Unknown 类型会从 maa 调用向外传播，这里统一抑制。
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"

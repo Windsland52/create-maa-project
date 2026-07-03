@@ -28,7 +28,6 @@ the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consi
 - [Agent Projects](#agent-projects)
 - [Release and Runtime](#release-and-runtime)
 - [JSON Report Mode](#json-report-mode)
-- [Releasing This CLI](#releasing-this-cli)
 - [License](#license)
 
 ## Install The CLI
@@ -440,14 +439,6 @@ Example failure report:
   }
 }
 ```
-
-## Releasing This CLI
-
-Pushing a `v*` tag runs `.github/workflows/release.yml`. The workflow checks the repo,
-builds the npm package, builds SEA binaries for Windows/Linux/macOS on `x86_64` and
-`aarch64`, writes `create-maa-project-manifest.json`, publishes GitHub Release assets,
-publishes npm, then builds the PyPI wrapper with the release manifest digest embedded and
-publishes it through trusted publishing.
 
 ## License
 

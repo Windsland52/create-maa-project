@@ -91,14 +91,14 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 
 ```json
 {
-  "mcpServers": {
-    "create-maa-project": {
-      "command": "create-maa-project",
-      "args": [
-        "--mcp"
-      ]
+    "mcpServers": {
+        "create-maa-project": {
+            "command": "create-maa-project",
+            "args": [
+                "--mcp"
+            ]
+        }
     }
-  }
 }
 ```
 
@@ -106,16 +106,16 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 
 ```json
 {
-  "mcpServers": {
-    "create-maa-project": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "create-maa-project@latest",
-        "--mcp"
-      ]
+    "mcpServers": {
+        "create-maa-project": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "create-maa-project@latest",
+                "--mcp"
+            ]
+        }
     }
-  }
 }
 ```
 
@@ -123,15 +123,15 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 
 ```json
 {
-  "mcpServers": {
-    "create-maa-project": {
-      "command": "uvx",
-      "args": [
-        "create-maa-project",
-        "--mcp"
-      ]
+    "mcpServers": {
+        "create-maa-project": {
+            "command": "uvx",
+            "args": [
+                "create-maa-project",
+                "--mcp"
+            ]
+        }
     }
-  }
 }
 ```
 
@@ -347,52 +347,52 @@ requirements.txt
 
 ```ts
 type CliJsonReport = {
-  schemaVersion: 1
-  tool: 'create-maa-project'
-  command: 'create' | 'sync' | 'update' | 'diff' | 'doctor'
-  ok: boolean
-  timestamp: string
-  durationMs: number
-  exitCode: 0 | 1
-  executionId: string
-  root: string
-  logPath: string | null
-  written: string[]
-  skipped: string[]
-  pending: Array<{ kind: string; reason: string; command: string }>
-  changedManagedFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>
-  changedUserFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>
-  suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
-  git?: { initialized: boolean; committed: boolean; reason?: string }
-  doctor?: { lines: string[] }
-  diff?: { lines: string[] }
-  error?: { message: string; code?: string }
-}
+    schemaVersion: 1;
+    tool: "create-maa-project";
+    command: "create" | "sync" | "update" | "diff" | "doctor";
+    ok: boolean;
+    timestamp: string;
+    durationMs: number;
+    exitCode: 0 | 1;
+    executionId: string;
+    root: string;
+    logPath: string | null;
+    written: string[];
+    skipped: string[];
+    pending: Array<{kind: string; reason: string; command: string}>;
+    changedManagedFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
+    changedUserFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
+    suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
+    git?: {initialized: boolean; committed: boolean; reason?: string};
+    doctor?: {lines: string[]};
+    diff?: {lines: string[]};
+    error?: {message: string; code?: string};
+};
 ```
 
 失败报告示例：
 
 ```json
 {
-  "schemaVersion": 1,
-  "tool": "create-maa-project",
-  "command": "sync",
-  "ok": false,
-  "timestamp": "2026-06-12T10:31:00.000Z",
-  "durationMs": 6,
-  "exitCode": 1,
-  "executionId": "2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000",
-  "root": "/path/to/project",
-  "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
-  "written": [],
-  "skipped": [],
-  "pending": [],
-  "changedManagedFiles": [],
-  "changedUserFiles": [],
-  "suggestedCommands": [],
-  "error": {
-    "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."
-  }
+    "schemaVersion": 1,
+    "tool": "create-maa-project",
+    "command": "sync",
+    "ok": false,
+    "timestamp": "2026-06-12T10:31:00.000Z",
+    "durationMs": 6,
+    "exitCode": 1,
+    "executionId": "2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000",
+    "root": "/path/to/project",
+    "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
+    "written": [],
+    "skipped": [],
+    "pending": [],
+    "changedManagedFiles": [],
+    "changedUserFiles": [],
+    "suggestedCommands": [],
+    "error": {
+        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."
+    }
 }
 ```
 

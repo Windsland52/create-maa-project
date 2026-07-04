@@ -10,7 +10,7 @@ describe('prompt setup presets', () => {
       'auto-format',
       'optimize-images',
       'schema-sync',
-      'community'
+      'community',
     ])
   })
 
@@ -18,8 +18,8 @@ describe('prompt setup presets', () => {
     expect(
       setupAddons('all', [
         'resource-pack',
-        'github'
-      ])
+        'github',
+      ]),
     ).toEqual([
       'resource-pack',
       'github',
@@ -28,7 +28,7 @@ describe('prompt setup presets', () => {
       'auto-format',
       'optimize-images',
       'schema-sync',
-      'community'
+      'community',
     ])
   })
 })

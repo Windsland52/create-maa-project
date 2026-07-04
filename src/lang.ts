@@ -31,7 +31,7 @@ export function resolvePromptLanguage(
   requested: CliLanguage | undefined,
   environment: Environment = process.env,
   isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY),
-  systemLocale = defaultSystemLocale()
+  systemLocale = defaultSystemLocale(),
 ): PromptLanguage {
   if (requested === 'en' || requested === 'zh-CN') return requested
 

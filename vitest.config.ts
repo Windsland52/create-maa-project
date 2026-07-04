@@ -7,12 +7,12 @@ export default defineConfig({
     maxWorkers: 1,
     minWorkers: 1,
     include: [
-      'tests/**/*.test.ts'
+      'tests/**/*.test.ts',
     ],
     coverage: {
       reporter: [
-        'text'
-      ]
-    }
-  }
+        'text',
+      ],
+    },
+  },
 })

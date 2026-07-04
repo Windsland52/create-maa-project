@@ -1,9 +1,5 @@
 import type { CliOptions, ControllerKind, LicenseKind, NetworkMode, TemplateName } from './types.js'
-import {
-  controllerUnavailableMessage,
-  normalizeControllerKind,
-  uniqueControllerKinds
-} from './controllers.js'
+import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { parseCliLanguage } from './lang.js'
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -30,7 +26,7 @@ export function parseArgs(argv: string[]): CliOptions {
     cleanCache: false,
     report: false,
     mcp: false,
-    explicitTemplate: false
+    explicitTemplate: false,
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -148,7 +144,7 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--controller':
         options.controllers = uniqueControllerKinds([
           ...(options.controllers ?? []),
-          ...parseControllerOption(readValue(argv, ++index, arg))
+          ...parseControllerOption(readValue(argv, ++index, arg)),
         ])
         break
       case '--accept-changes':
@@ -184,18 +180,18 @@ export function parseArgs(argv: string[]): CliOptions {
     options.template,
     [
       'pipeline',
-      'agent'
+      'agent',
     ],
-    '--template'
+    '--template',
   )
   if (options.network)
     validateEnum(
       options.network,
       [
         'auto',
-        'official'
+        'official',
       ],
-      '--network'
+      '--network',
     )
   if (options.license) {
     validateEnum(
@@ -203,9 +199,9 @@ export function parseArgs(argv: string[]): CliOptions {
       [
         'AGPL-3.0-or-later',
         'MIT',
-        'None'
+        'None',
       ],
-      '--license'
+      '--license',
     )
   }
   return options

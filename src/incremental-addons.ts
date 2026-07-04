@@ -3,7 +3,7 @@ import {
   incrementalAddonUnavailableMessage,
   isDefaultIncludedAddon,
   isIncrementalAddon,
-  resolveAddonDependencies
+  resolveAddonDependencies,
 } from './addons.js'
 import {
   addAgent,
@@ -15,13 +15,13 @@ import {
   addGithub,
   addOptimizeImages,
   addResourcePack,
-  addSchemaSync
+  addSchemaSync,
 } from './scaffold.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
 
 export async function applyIncrementalAddons(
   options: CliOptions,
-  writeLine: (line: string) => void = console.log
+  writeLine: (line: string) => void = console.log,
 ): Promise<ScaffoldResult | undefined> {
   let lastResult: ScaffoldResult | undefined
   for (const addon of resolveAddonDependencies(options.add)) {

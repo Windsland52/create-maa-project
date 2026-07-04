@@ -78,14 +78,14 @@ describe('MCP server', () => {
       expect(response.result).toMatchObject({
         serverInfo: {
           name: 'create-maa-project',
-          version: '0.1.0'
+          version: '0.1.0',
         },
         capabilities: {
-          tools: {}
-        }
+          tools: {},
+        },
       })
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -106,45 +106,39 @@ describe('MCP server', () => {
         'add',
         'accept_changes',
         'restore',
-        'clean_cache'
+        'clean_cache',
       ])
       expect(toolByName(tools, 'create_project').inputSchema.required).toEqual([
-        'name'
+        'name',
       ])
       expect(toolByName(tools, 'sync').inputSchema.required).toEqual([
-        'target'
+        'target',
       ])
       expect(toolByName(tools, 'update').inputSchema.required).toEqual([
-        'targets'
+        'targets',
       ])
       expect(toolByName(tools, 'add').inputSchema.properties?.addon).toMatchObject({
         enum: expect.arrayContaining([
           'dev-tools',
           'resource-pack',
-          'schema-sync'
-        ])
+          'schema-sync',
+        ]),
       })
-      expect(toolByName(tools, 'create_project').description).toContain(
-        'MCP mode is non-interactive'
-      )
-      expect(
-        toolByName(tools, 'create_project').inputSchema.properties?.resourcePackSlug
-      ).toMatchObject({
+      expect(toolByName(tools, 'create_project').description).toContain('MCP mode is non-interactive')
+      expect(toolByName(tools, 'create_project').inputSchema.properties?.resourcePackSlug).toMatchObject({
         type: 'string',
-        description: expect.stringContaining('Required when add includes "resource-pack"')
+        description: expect.stringContaining('Required when add includes "resource-pack"'),
       })
-      expect(
-        toolByName(tools, 'create_project').inputSchema.properties?.resourcePackLabel
-      ).toMatchObject({
-        type: 'string'
+      expect(toolByName(tools, 'create_project').inputSchema.properties?.resourcePackLabel).toMatchObject({
+        type: 'string',
       })
       expect(toolByName(tools, 'add').description).toContain('resourcePackSlug')
       expect(toolByName(tools, 'add').inputSchema.properties?.resourcePackSlug).toMatchObject({
         type: 'string',
-        description: expect.stringContaining('Required when addon is "resource-pack"')
+        description: expect.stringContaining('Required when addon is "resource-pack"'),
       })
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -156,7 +150,7 @@ describe('MCP server', () => {
 
       const response = await session.request('tools/call', {
         name: 'doctor',
-        arguments: {}
+        arguments: {},
       })
       const { result, report } = parseToolReport(response)
 
@@ -167,13 +161,13 @@ describe('MCP server', () => {
         command: 'doctor',
         ok: true,
         exitCode: 0,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.doctor?.lines.join('\n')).toContain('[OK] Project:')
       expect(report.pending).toEqual([])
       expect(report.changedUserFiles).toEqual([])
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -184,7 +178,7 @@ describe('MCP server', () => {
 
       const response = await session.request('tools/call', {
         name: 'doctor',
-        arguments: {}
+        arguments: {},
       })
       const { result, report } = parseToolReport(response)
 
@@ -192,7 +186,7 @@ describe('MCP server', () => {
       expect(report).toMatchObject({
         command: 'doctor',
         ok: false,
-        exitCode: 1
+        exitCode: 1,
       })
       expect(report.error?.message).toContain('No maa-project.json found')
       expect(session.exitCode()).toBeNull()
@@ -202,7 +196,7 @@ describe('MCP server', () => {
       expect((listAfterError.result as ToolListResult).tools.length).toBeGreaterThan(0)
       expect(session.exitCode()).toBeNull()
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -214,8 +208,8 @@ describe('MCP server', () => {
       const response = await session.request('tools/call', {
         name: 'update',
         arguments: {
-          targets: []
-        }
+          targets: [],
+        },
       })
       const { result, report } = parseToolReport(response)
 
@@ -223,12 +217,12 @@ describe('MCP server', () => {
       expect(report).toMatchObject({
         command: 'update',
         ok: false,
-        exitCode: 1
+        exitCode: 1,
       })
       expect(report.error?.message).toContain('targets must contain at least one item')
       expect(session.exitCode()).toBeNull()
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -242,10 +236,10 @@ describe('MCP server', () => {
         arguments: {
           name: 'maa-mcp-resource-pack',
           add: [
-            'resource-pack'
+            'resource-pack',
           ],
-          skipDownload: true
-        }
+          skipDownload: true,
+        },
       })
       const { result, report } = parseToolReport(response)
 
@@ -253,12 +247,12 @@ describe('MCP server', () => {
       expect(report).toMatchObject({
         command: 'create',
         ok: false,
-        exitCode: 1
+        exitCode: 1,
       })
       expect(report.error?.message).toContain('resourcePackSlug is required')
       expect(session.exitCode()).toBeNull()
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -270,8 +264,8 @@ describe('MCP server', () => {
       const response = await session.request('tools/call', {
         name: 'add',
         arguments: {
-          addon: 'resource-pack'
-        }
+          addon: 'resource-pack',
+        },
       })
       const { result, report } = parseToolReport(response)
 
@@ -279,12 +273,12 @@ describe('MCP server', () => {
       expect(report).toMatchObject({
         command: 'update',
         ok: false,
-        exitCode: 1
+        exitCode: 1,
       })
       expect(report.error?.message).toContain('resourcePackSlug is required')
       expect(session.exitCode()).toBeNull()
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -297,7 +291,7 @@ describe('MCP server', () => {
 
       const response = await session.request('tools/call', {
         name: 'doctor',
-        arguments: {}
+        arguments: {},
       })
       const { result, report } = parseToolReport(response)
 
@@ -306,7 +300,7 @@ describe('MCP server', () => {
         command: 'doctor',
         ok: false,
         exitCode: 1,
-        root
+        root,
       })
       expect(report.error?.message).toEqual(expect.any(String))
       expect(session.exitCode()).toBeNull()
@@ -316,7 +310,7 @@ describe('MCP server', () => {
       expect((listAfterError.result as ToolListResult).tools.length).toBeGreaterThan(0)
       expect(session.exitCode()).toBeNull()
     },
-    MCP_TEST_TIMEOUT_MS
+    MCP_TEST_TIMEOUT_MS,
   )
 })
 
@@ -328,12 +322,12 @@ async function createValidProject(name: string): Promise<string> {
       distCli,
       name,
       '--skip-download',
-      '--report'
+      '--report',
     ],
     {
       cwd: root,
-      env: testChildEnv()
-    }
+      env: testChildEnv(),
+    },
   )
   const projectRoot = join(root, name)
   const lockPath = join(projectRoot, 'maa-project.lock.json')
@@ -355,8 +349,8 @@ async function initialize(session: McpSession): Promise<JsonRpcResponse> {
     capabilities: {},
     clientInfo: {
       name: 'create-maa-project-vitest',
-      version: '0.0.0'
-    }
+      version: '0.0.0',
+    },
   })
   session.notify('notifications/initialized')
   return response
@@ -376,13 +370,13 @@ function parseToolReport(response: JsonRpcResponse): {
   const result = response.result as ToolCallResult
   expect(result.content).toHaveLength(1)
   expect(result.content[0]).toMatchObject({
-    type: 'text'
+    type: 'text',
   })
   const text = result.content[0]?.text
   expect(text).toEqual(expect.any(String))
   return {
     result,
-    report: JSON.parse(text as string) as JsonReport
+    report: JSON.parse(text as string) as JsonReport,
   }
 }
 
@@ -427,7 +421,7 @@ class McpSession {
     process.chdir(cwd)
     const [
       clientTransport,
-      serverTransport
+      serverTransport,
     ] = InMemoryTransport.createLinkedPair()
     const server = createMcpServer(cwd)
     const session = new McpSession(clientTransport, previousCwd)
@@ -439,8 +433,7 @@ class McpSession {
   request(method: string, params?: unknown): Promise<JsonRpcResponse> {
     const id = this.nextId
     this.nextId += 1
-    const payload =
-      params === undefined ? { jsonrpc: '2.0', id, method } : { jsonrpc: '2.0', id, method, params }
+    const payload = params === undefined ? { jsonrpc: '2.0', id, method } : { jsonrpc: '2.0', id, method, params }
     const promise = new Promise<JsonRpcResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
@@ -449,7 +442,7 @@ class McpSession {
       this.pending.set(id, {
         resolve,
         reject,
-        timer
+        timer,
       })
     })
     void this.clientTransport.send(payload as JSONRPCMessage)
@@ -457,8 +450,7 @@ class McpSession {
   }
 
   notify(method: string, params?: unknown): void {
-    const payload =
-      params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params }
+    const payload = params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params }
     void this.clientTransport.send(payload as JSONRPCMessage)
   }
 

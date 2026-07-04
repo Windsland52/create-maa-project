@@ -3,7 +3,7 @@ name: Network Assets
 on:
   workflow_dispatch:
   schedule:
-    - cron: '43 3 * * 1'
+    - cron: "43 3 * * 1"
 
 permissions:
   contents: read

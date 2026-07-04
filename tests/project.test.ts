@@ -4,10 +4,10 @@ import { managedFileHash } from '../src/project.js'
 describe('managedFileHash', () => {
   it('normalizes text file line endings', () => {
     expect(managedFileHash('requirements.txt', 'alpha\nbeta\n')).toBe(
-      managedFileHash('requirements.txt', 'alpha\r\nbeta\r\n')
+      managedFileHash('requirements.txt', 'alpha\r\nbeta\r\n'),
     )
     expect(managedFileHash('requirements.txt', 'alpha\nbeta\n')).toBe(
-      managedFileHash('requirements.txt', 'alpha\rbeta\r')
+      managedFileHash('requirements.txt', 'alpha\rbeta\r'),
     )
   })
 
@@ -17,26 +17,24 @@ describe('managedFileHash', () => {
         'resource/base/model/ocr/det.onnx',
         Buffer.from([
           13,
-          10
-        ])
-      )
+          10,
+        ]),
+      ),
     ).not.toBe(
       managedFileHash(
         'resource/base/model/ocr/det.onnx',
         Buffer.from([
-          10
-        ])
-      )
+          10,
+        ]),
+      ),
     )
   })
 
   it('hashes only the managed gitignore block', () => {
     const block = '# BEGIN create-maa-project\nnode_modules/\n# END create-maa-project\n'
     expect(managedFileHash('.gitignore', `${block}local-cache/\n`)).toBe(
-      managedFileHash('.gitignore', `${block}other-cache/\n`)
+      managedFileHash('.gitignore', `${block}other-cache/\n`),
     )
-    expect(managedFileHash('.gitignore', block)).toBe(
-      managedFileHash('.gitignore', block.replace(/\n/g, '\r\n'))
-    )
+    expect(managedFileHash('.gitignore', block)).toBe(managedFileHash('.gitignore', block.replace(/\n/g, '\r\n')))
   })
 })

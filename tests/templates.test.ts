@@ -5,12 +5,12 @@ import { releaseWorkflowFile } from '../src/templates.js'
 describe('workflow templates', () => {
   it.each([
     false,
-    true
+    true,
   ])('emits formatted release workflow with git-cliff=%s', async (includeGitCliff) => {
     const file = releaseWorkflowFile({
       slug: 'maaxxxx',
       displayName: 'MaaXXXX',
-      includeGitCliff
+      includeGitCliff,
     })
     expect(typeof file.content).toBe('string')
     await expect(
@@ -19,8 +19,8 @@ describe('workflow templates', () => {
         singleQuote: true,
         trailingComma: 'none',
         tabWidth: 2,
-        printWidth: 100
-      })
+        printWidth: 100,
+      }),
     ).resolves.toBe(true)
   })
 })

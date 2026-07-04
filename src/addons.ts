@@ -8,7 +8,7 @@ const CREATE_ADDONS = new Set([
   'optimize-images',
   'community',
   'dependabot',
-  'schema-sync'
+  'schema-sync',
 ])
 const INCREMENTAL_ADDONS = new Set([
   'dev-tools',
@@ -20,14 +20,14 @@ const INCREMENTAL_ADDONS = new Set([
   'optimize-images',
   'community',
   'dependabot',
-  'schema-sync'
+  'schema-sync',
 ])
 const DEFAULT_INCLUDED_ADDONS = new Set<string>()
 const PLANNED_ADDONS = new Set<string>()
 const V1_RESERVED_ADDONS = new Set([
   'i18n',
   'mirrorchyan',
-  'branding'
+  'branding',
 ])
 
 const SUPPORTED_INCREMENTAL_LIST =
@@ -49,10 +49,7 @@ export function isDefaultIncludedAddon(addon: string): boolean {
   return DEFAULT_INCLUDED_ADDONS.has(addon)
 }
 
-export function resolveAddonDependencies(
-  addons: string[],
-  input: { includeAgent?: boolean } = {}
-): string[] {
+export function resolveAddonDependencies(addons: string[], input: { includeAgent?: boolean } = {}): string[] {
   const requested = addons
   const resolved = new Set(requested)
   if (input.includeAgent || resolved.has('agent')) resolved.add('dev-tools')
@@ -87,11 +84,11 @@ export function resolveAddonDependencies(
     'optimize-images',
     'community',
     'dependabot',
-    'schema-sync'
+    'schema-sync',
   ]
   return [
     ...order.filter((addon) => resolved.has(addon)),
-    ...requested.filter((addon) => !order.includes(addon))
+    ...requested.filter((addon) => !order.includes(addon)),
   ]
 }
 

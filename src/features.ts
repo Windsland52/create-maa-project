@@ -10,7 +10,5 @@ export function hasDevTools(config: MaaProjectConfig): boolean {
 }
 
 export function hasGithubAutomation(config: MaaProjectConfig): boolean {
-  return (
-    Boolean(config.addons.github) || config.features.ci.enabled || config.features.release.enabled
-  )
+  return Boolean(config.addons.github) || config.features.ci.enabled || config.features.release.enabled
 }

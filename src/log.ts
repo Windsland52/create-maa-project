@@ -9,11 +9,7 @@ export type Logger = {
   error(error: unknown): Promise<void>
 }
 
-export async function createLogger(
-  root: string,
-  logFile?: string,
-  executionId?: string
-): Promise<Logger> {
+export async function createLogger(root: string, logFile?: string, executionId?: string): Promise<Logger> {
   if (logFile) {
     return createLoggerAt(logFile)
   }
@@ -31,9 +27,8 @@ function createLoggerAt(path: string): Logger {
     path,
     info: (message) => write('INFO', message),
     error: async (error) => {
-      const message =
-        error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)
+      const message = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)
       await write('ERROR', message)
-    }
+    },
   }
 }

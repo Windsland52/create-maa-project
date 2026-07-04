@@ -17,108 +17,108 @@ type LocalizedText = {
 const TEXT = {
   addExtraResourcePack: {
     en: 'Add extra resource pack',
-    zhCN: '添加额外资源包 Add extra resource pack'
+    zhCN: '添加额外资源包 Add extra resource pack',
   },
   atLeastOneRequired: {
     en: 'At least one required.',
-    zhCN: '至少选择一项。 At least one required.'
+    zhCN: '至少选择一项。 At least one required.',
   },
   controlTargets: {
     en: 'Control targets',
-    zhCN: '控制目标 Control targets'
+    zhCN: '控制目标 Control targets',
   },
   custom: {
     en: 'Custom',
-    zhCN: '自定义 Custom'
+    zhCN: '自定义 Custom',
   },
   displayName: {
     en: 'Display name',
-    zhCN: '显示名称 Display name'
+    zhCN: '显示名称 Display name',
   },
   initializeGitRepository: {
     en: 'Initialize Git repository',
-    zhCN: '初始化 Git 仓库 Initialize Git repository'
+    zhCN: '初始化 Git 仓库 Initialize Git repository',
   },
   license: {
     en: 'License',
-    zhCN: '许可证 License'
+    zhCN: '许可证 License',
   },
   minimal: {
     en: 'Minimal',
-    zhCN: '最小 Minimal'
+    zhCN: '最小 Minimal',
   },
   no: {
     en: 'No',
-    zhCN: '否 No'
+    zhCN: '否 No',
   },
   noLicense: {
     en: 'No license',
-    zhCN: '无许可证 No license'
+    zhCN: '无许可证 No license',
   },
   none: {
     en: 'none',
-    zhCN: '无 none'
+    zhCN: '无 none',
   },
   promptCancelled: {
     en: 'Prompt cancelled.',
-    zhCN: '已取消交互。 Prompt cancelled.'
+    zhCN: '已取消交互。 Prompt cancelled.',
   },
   projectFolder: {
     en: 'Project folder',
-    zhCN: '项目目录 Project folder'
+    zhCN: '项目目录 Project folder',
   },
   projectId: {
     en: 'Project ID',
-    zhCN: '项目 ID Project ID'
+    zhCN: '项目 ID Project ID',
   },
   projectIdAsciiOnly: {
     en: 'Project ID must contain ASCII letters, numbers, or hyphens.',
-    zhCN: '项目 ID 只能包含 ASCII 字母、数字或连字符。 Project ID must contain ASCII letters, numbers, or hyphens.'
+    zhCN: '项目 ID 只能包含 ASCII 字母、数字或连字符。 Project ID must contain ASCII letters, numbers, or hyphens.',
   },
   projectType: {
     en: 'Project type',
-    zhCN: '项目类型 Project type'
+    zhCN: '项目类型 Project type',
   },
   recommended: {
     en: 'Recommended',
-    zhCN: '推荐 Recommended'
+    zhCN: '推荐 Recommended',
   },
   repositoryFeatures: {
     en: 'Repository features',
-    zhCN: '仓库功能 Repository features'
+    zhCN: '仓库功能 Repository features',
   },
   resourcePackDisplayName: {
     en: 'Resource pack display name',
-    zhCN: '资源包显示名称 Resource pack display name'
+    zhCN: '资源包显示名称 Resource pack display name',
   },
   resourcePackFolder: {
     en: 'Resource pack folder',
-    zhCN: '资源包目录 Resource pack folder'
+    zhCN: '资源包目录 Resource pack folder',
   },
   resourcePackFolderAsciiOnly: {
     en: 'Resource pack folder must contain ASCII letters, numbers, or hyphens.',
-    zhCN: '资源包目录只能包含 ASCII 字母、数字或连字符。 Resource pack folder must contain ASCII letters, numbers, or hyphens.'
+    zhCN: '资源包目录只能包含 ASCII 字母、数字或连字符。 Resource pack folder must contain ASCII letters, numbers, or hyphens.',
   },
   selectAtLeastOneItem: {
     en: 'Select at least one item.',
-    zhCN: '请至少选择一项。 Select at least one item.'
+    zhCN: '请至少选择一项。 Select at least one item.',
   },
   setup: {
     en: 'Setup',
-    zhCN: '仓库配置 Setup'
+    zhCN: '仓库配置 Setup',
   },
   setupAll: {
     en: 'All',
-    zhCN: '全部 All'
+    zhCN: '全部 All',
   },
   usingProjectId: {
     en: 'Using project ID',
-    zhCN: '使用项目 ID Using project ID'
+    zhCN: '使用项目 ID Using project ID',
   },
   yes: {
     en: 'Yes',
-    zhCN: '是 Yes'
-  }
+    zhCN: '是 Yes',
+  },
 } satisfies Record<string, LocalizedText>
 
 export async function promptForCreateOptions(options: CliOptions): Promise<CliOptions> {
@@ -144,9 +144,7 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
     }
     if (!options.displayName) {
       const fallbackDisplayName = rawProjectName ?? options.name
-      const answer = await rl.question(
-        question(label(language, TEXT.displayName), fallbackDisplayName)
-      )
+      const answer = await rl.question(question(label(language, TEXT.displayName), fallbackDisplayName))
       options.displayName = answer.trim() || fallbackDisplayName
     }
     if (!options.license) {
@@ -157,12 +155,12 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
         [
           {
             value: 'AGPL-3.0-or-later',
-            label: recommendedLabel(language, 'AGPL-3.0-or-later')
+            label: recommendedLabel(language, 'AGPL-3.0-or-later'),
           },
           { value: 'MIT', label: 'MIT' },
-          { value: 'None', label: label(language, TEXT.noLicense) }
+          { value: 'None', label: label(language, TEXT.noLicense) },
         ],
-        'AGPL-3.0-or-later'
+        'AGPL-3.0-or-later',
       )
     }
     if (!options.controllers?.length) {
@@ -177,10 +175,10 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
           { value: 'pipeline', label: choice(language, 'Pipeline', '流水线 Pipeline') },
           {
             value: 'agent',
-            label: choice(language, 'Pipeline + Python Agent', '流水线 + Python Agent')
-          }
+            label: choice(language, 'Pipeline + Python Agent', '流水线 + Python Agent'),
+          },
         ],
-        'pipeline'
+        'pipeline',
       )
     }
     if (options.add.length === 0) {
@@ -191,9 +189,9 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
         [
           { value: 'all', label: recommendedLabel(language, label(language, TEXT.setupAll)) },
           { value: 'minimal', label: label(language, TEXT.minimal) },
-          { value: 'custom', label: label(language, TEXT.custom) }
+          { value: 'custom', label: label(language, TEXT.custom) },
         ],
-        'all'
+        'all',
       )
       options.add = setupAddons(setup, options.add)
       if (setup === 'custom') {
@@ -204,12 +202,7 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
     if (options.initializeGit === undefined) {
       const targetRoot = resolve(process.cwd(), options.name ?? '.')
       const parentHasGit = await isInsideGitTree(resolve(targetRoot, '..'))
-      options.initializeGit = await yesNo(
-        rl,
-        language,
-        label(language, TEXT.initializeGitRepository),
-        !parentHasGit
-      )
+      options.initializeGit = await yesNo(rl, language, label(language, TEXT.initializeGitRepository), !parentHasGit)
     }
     return options
   } finally {
@@ -217,10 +210,7 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
   }
 }
 
-async function askAsciiProjectId(
-  rl: ReturnType<typeof createInterface>,
-  language: PromptLanguage
-): Promise<string> {
+async function askAsciiProjectId(rl: ReturnType<typeof createInterface>, language: PromptLanguage): Promise<string> {
   for (;;) {
     const answer = await rl.question(question(label(language, TEXT.projectId), 'maa-project'))
     const raw = answer.trim()
@@ -236,7 +226,7 @@ async function askAsciiProjectId(
 
 async function controllerMultiChoice(
   rl: ReturnType<typeof createInterface>,
-  language: PromptLanguage
+  language: PromptLanguage,
 ): Promise<ControllerKind[]> {
   return selectMany<ControllerKind>(
     rl,
@@ -244,10 +234,10 @@ async function controllerMultiChoice(
     label(language, TEXT.controlTargets),
     CONTROLLER_KINDS.map((kind) => ({
       value: kind,
-      label: controllerChoiceLabel(kind, language)
+      label: controllerChoiceLabel(kind, language),
     })),
     DEFAULT_CONTROLLER_KINDS,
-    { requireOne: true }
+    { requireOne: true },
   )
 }
 
@@ -261,14 +251,14 @@ export function setupAddons(setup: SetupPreset, current: string[]): string[] {
       'auto-format',
       'optimize-images',
       'schema-sync',
-      'community'
+      'community',
     ])
   return current
 }
 
 async function customRepositoryFeatures(
   rl: ReturnType<typeof createInterface>,
-  language: PromptLanguage
+  language: PromptLanguage,
 ): Promise<string[]> {
   return selectMany<string>(
     rl,
@@ -281,30 +271,25 @@ async function customRepositoryFeatures(
       { value: 'auto-format', label: '    auto-format' },
       { value: 'optimize-images', label: '    optimize-images' },
       { value: 'schema-sync', label: '    schema-sync' },
-      { value: 'community', label: '    community' }
+      { value: 'community', label: '    community' },
     ],
     [
       'dev-tools',
-      'github'
-    ]
+      'github',
+    ],
   )
 }
 
 async function promptForResourcePack(
   rl: ReturnType<typeof createInterface>,
   options: CliOptions,
-  language: PromptLanguage
+  language: PromptLanguage,
 ): Promise<void> {
   if (!options.add.includes('resource-pack')) {
-    const addResourcePack = await confirm(
-      rl,
-      language,
-      label(language, TEXT.addExtraResourcePack),
-      false
-    )
+    const addResourcePack = await confirm(rl, language, label(language, TEXT.addExtraResourcePack), false)
     if (!addResourcePack) return
     options.add = addUnique(options.add, [
-      'resource-pack'
+      'resource-pack',
     ])
   }
   if (!options.resourcePackSlug) {
@@ -312,16 +297,14 @@ async function promptForResourcePack(
   }
   if (!options.label) {
     const fallback = displayNameFromFolder(options.resourcePackSlug)
-    const answer = await rl.question(
-      question(label(language, TEXT.resourcePackDisplayName), fallback)
-    )
+    const answer = await rl.question(question(label(language, TEXT.resourcePackDisplayName), fallback))
     options.label = answer.trim() || fallback
   }
 }
 
 async function askResourcePackFolder(
   rl: ReturnType<typeof createInterface>,
-  language: PromptLanguage
+  language: PromptLanguage,
 ): Promise<string> {
   for (;;) {
     const answer = await rl.question(question(label(language, TEXT.resourcePackFolder), 'extra'))
@@ -335,7 +318,7 @@ function addUnique(existing: string[], values: string[]): string[] {
   const set = new Set(existing)
   for (const value of values) set.add(value)
   return [
-    ...set
+    ...set,
   ]
 }
 
@@ -351,7 +334,7 @@ async function yesNo(
   rl: ReturnType<typeof createInterface>,
   language: PromptLanguage,
   label: string,
-  fallback: boolean
+  fallback: boolean,
 ): Promise<boolean> {
   return confirm(rl, language, label, fallback)
 }
@@ -373,7 +356,7 @@ async function confirm(
   rl: ReturnType<typeof createInterface>,
   language: PromptLanguage,
   label: string,
-  fallback: boolean
+  fallback: boolean,
 ): Promise<boolean> {
   return selectOne<BooleanChoice>(
     rl,
@@ -381,9 +364,9 @@ async function confirm(
     label,
     [
       { value: 'yes', label: labelText(language, TEXT.yes) },
-      { value: 'no', label: labelText(language, TEXT.no) }
+      { value: 'no', label: labelText(language, TEXT.no) },
     ],
-    fallback ? 'yes' : 'no'
+    fallback ? 'yes' : 'no',
   ).then((value) => value === 'yes')
 }
 
@@ -394,12 +377,12 @@ async function selectOne<T extends string>(
   language: PromptLanguage,
   label: string,
   choices: Choice<T>[],
-  fallback: T
+  fallback: T,
 ): Promise<T> {
   if (choices.length === 0) throw new Error(`${label} has no choices.`)
   let index = Math.max(
     0,
-    choices.findIndex((choice) => choice.value === fallback)
+    choices.findIndex((choice) => choice.value === fallback),
   )
   return withSelectablePrompt(rl, (render, done) => {
     const onKeypress = (_value: string, key: Keypress): void => {
@@ -432,7 +415,7 @@ async function selectMany<T extends string>(
   label: string,
   choices: Choice<T>[],
   fallback: T[],
-  options: { requireOne?: boolean } = {}
+  options: { requireOne?: boolean } = {},
 ): Promise<T[]> {
   if (choices.length === 0) throw new Error(`${label} has no choices.`)
   let index = 0
@@ -473,16 +456,12 @@ async function selectMany<T extends string>(
               index,
               selected,
               options,
-              labelText(language, TEXT.selectAtLeastOneItem)
-            )
+              labelText(language, TEXT.selectAtLeastOneItem),
+            ),
           )
           return
         }
-        done(
-          undefined,
-          values,
-          `${label}: ${values.length > 0 ? values.join(', ') : labelText(language, TEXT.none)}`
-        )
+        done(undefined, values, `${label}: ${values.length > 0 ? values.join(', ') : labelText(language, TEXT.none)}`)
       }
     }
     render(linesForSelectMany(language, label, choices, index, selected, options))
@@ -494,12 +473,12 @@ function linesForSelectOne<T extends string>(
   language: PromptLanguage,
   label: string,
   choices: Choice<T>[],
-  index: number
+  index: number,
 ): string[] {
   return [
     `${label}:`,
     ...choices.map((choice, choiceIndex) => `${choiceIndex === index ? '>' : ' '} ${choice.label}`),
-    `  ${selectOneInstruction(language)}`
+    `  ${selectOneInstruction(language)}`,
   ]
 }
 
@@ -510,7 +489,7 @@ function linesForSelectMany<T extends string>(
   index: number,
   selected: Set<T>,
   options: { requireOne?: boolean },
-  message?: string
+  message?: string,
 ): string[] {
   return [
     `${label}:`,
@@ -519,9 +498,11 @@ function linesForSelectMany<T extends string>(
       return `${choiceIndex === index ? '>' : ' '} ${checked} ${choice.label}`
     }),
     `  ${selectManyInstruction(language)}${options.requireOne ? ` ${labelText(language, TEXT.atLeastOneRequired)}` : ''}`,
-    ...(message ? [
-          `  ${message}`
-        ] : [])
+    ...(message
+      ? [
+          `  ${message}`,
+        ]
+      : []),
   ]
 }
 
@@ -546,18 +527,14 @@ function question(label: string, fallback: string): string {
 }
 
 function selectOneInstruction(language: PromptLanguage): string {
-  return choice(
-    language,
-    'Up/Down to move, Enter to select.',
-    '上/下移动 Up/Down，回车选择 Enter to select.'
-  )
+  return choice(language, 'Up/Down to move, Enter to select.', '上/下移动 Up/Down，回车选择 Enter to select.')
 }
 
 function selectManyInstruction(language: PromptLanguage): string {
   return choice(
     language,
     'Up/Down to move, Space to toggle, Enter to confirm.',
-    '上/下移动 Up/Down，空格切换 Space，回车确认 Enter to confirm.'
+    '上/下移动 Up/Down，空格切换 Space，回车确认 Enter to confirm.',
   )
 }
 
@@ -565,8 +542,8 @@ function withSelectablePrompt<T>(
   rl: ReturnType<typeof createInterface>,
   start: (
     render: (lines: string[]) => void,
-    done: (error?: Error, value?: T, summary?: string) => void
-  ) => (value: string, key: Keypress) => void
+    done: (error?: Error, value?: T, summary?: string) => void,
+  ) => (value: string, key: Keypress) => void,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let renderedLines = 0
@@ -620,11 +597,7 @@ function isCancelKey(key: Keypress): boolean {
 function controllerChoiceLabel(kind: ControllerKind, language: PromptLanguage): string {
   switch (kind) {
     case 'Adb':
-      return choice(
-        language,
-        'Android / Emulator (Adb)',
-        'Android / 模拟器 Android / Emulator (Adb)'
-      )
+      return choice(language, 'Android / Emulator (Adb)', 'Android / 模拟器 Android / Emulator (Adb)')
     case 'Win32':
       return choice(language, 'Windows app (Win32)', 'Windows 应用 Windows app (Win32)')
     case 'MacOS':

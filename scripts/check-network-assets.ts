@@ -4,7 +4,7 @@ import {
   downloadDefaultOcrZip,
   resolveOcrManifestFromEnvironment,
   resolveProductAssetManifestFromGithubRelease,
-  type ProductAssetManifest
+  type ProductAssetManifest,
 } from '../src/assets.js'
 
 const EXPECTED_RUNTIME_PLATFORMS = [
@@ -13,22 +13,22 @@ const EXPECTED_RUNTIME_PLATFORMS = [
   'osx-arm64',
   'osx-x64',
   'win-arm64',
-  'win-x64'
+  'win-x64',
 ] as const
 const EXPECTED_PYTHON_STANDALONE_PLATFORMS = [
   'osx-arm64',
-  'osx-x64'
+  'osx-x64',
 ] as const
 const EXPECTED_PYTHON_EMBED_ARCHES = [
   'amd64',
-  'arm64'
+  'arm64',
 ] as const
 
 const OCR_REQUIRED_FILES = [
   'README.md',
   'det.onnx',
   'keys.txt',
-  'rec.onnx'
+  'rec.onnx',
 ] as const
 
 type AssetLike = {
@@ -48,12 +48,12 @@ async function main(): Promise<void> {
 
 async function checkRuntimeRelease(
   product: 'MaaFramework' | 'MFAAvalonia' | 'Python',
-  expectedPlatforms: readonly string[] = EXPECTED_RUNTIME_PLATFORMS
+  expectedPlatforms: readonly string[] = EXPECTED_RUNTIME_PLATFORMS,
 ): Promise<void> {
   const manifest = await resolveProductAssetManifestFromGithubRelease({
     product,
     channel: 'latest',
-    platform: 'all'
+    platform: 'all',
   })
   assertRuntimeManifest(product, manifest, expectedPlatforms)
   const platforms = manifest.assets
@@ -61,7 +61,7 @@ async function checkRuntimeRelease(
     .filter((platform): platform is string => Boolean(platform))
     .sort()
   console.log(
-    `[OK] ${product} ${manifest.tag ?? manifest.version ?? 'latest'}: ${manifest.assets.length} assets (${platforms.join(', ')})`
+    `[OK] ${product} ${manifest.tag ?? manifest.version ?? 'latest'}: ${manifest.assets.length} assets (${platforms.join(', ')})`,
   )
 }
 
@@ -89,7 +89,7 @@ async function checkOcrAssets(): Promise<void> {
 function assertRuntimeManifest(
   product: 'MaaFramework' | 'MFAAvalonia' | 'Python',
   manifest: ProductAssetManifest | undefined,
-  expectedPlatforms: readonly string[]
+  expectedPlatforms: readonly string[],
 ): asserts manifest is ProductAssetManifest {
   if (!manifest) {
     throw new Error(`${product} latest release did not expose compatible runtime assets.`)
@@ -143,13 +143,11 @@ async function fetchUrlWithFallback(url: string): Promise<Response> {
     try {
       return await fetchWithRetry(url, {
         headers: {
-          Range: 'bytes=0-0'
-        }
+          Range: 'bytes=0-0',
+        },
       })
     } catch (fallbackError) {
-      throw new Error(
-        `Failed to reach ${url}: ${errorMessage(fallbackError)}; HEAD error: ${errorMessage(error)}`
-      )
+      throw new Error(`Failed to reach ${url}: ${errorMessage(fallbackError)}; HEAD error: ${errorMessage(error)}`)
     }
   }
 }

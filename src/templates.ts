@@ -1,13 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type {
-  ControllerKind,
-  LicenseKind,
-  MaaProjectConfig,
-  ManagedFileInput,
-  ResourcePackConfig
-} from './types.js'
+import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
 import { embeddedBinaryTemplates, embeddedTextTemplates } from './template-assets.generated.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
@@ -16,11 +10,11 @@ const UPSTREAM_MAAFW_SCHEMA_FILES = [
   'interface.schema.json',
   'interface_config.schema.json',
   'interface_import.schema.json',
-  'pipeline.schema.json'
+  'pipeline.schema.json',
 ]
 const PROJECT_CUSTOM_SCHEMA_FILES = [
   'custom.action.schema.json',
-  'custom.recognition.schema.json'
+  'custom.recognition.schema.json',
 ]
 const RELEASE_TARGETS = [
   {
@@ -29,7 +23,7 @@ const RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'zip',
     runtimeOs: 'win',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'windows-11-arm',
@@ -37,7 +31,7 @@ const RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'zip',
     runtimeOs: 'win',
-    runtimeArch: 'arm64'
+    runtimeArch: 'arm64',
   },
   {
     runner: 'ubuntu-latest',
@@ -45,7 +39,7 @@ const RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'tar.gz',
     runtimeOs: 'linux',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'ubuntu-latest',
@@ -53,7 +47,7 @@ const RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'tar.gz',
     runtimeOs: 'linux',
-    runtimeArch: 'arm64'
+    runtimeArch: 'arm64',
   },
   {
     runner: 'macos-15-intel',
@@ -61,7 +55,7 @@ const RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'tar.gz',
     runtimeOs: 'osx',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'macos-latest',
@@ -69,8 +63,8 @@ const RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'tar.gz',
     runtimeOs: 'osx',
-    runtimeArch: 'arm64'
-  }
+    runtimeArch: 'arm64',
+  },
 ] as const
 
 export type ProjectTemplateInput = {
@@ -95,12 +89,12 @@ const DEFAULT_AGENT_DEV_COMMAND = [
   'uv',
   'run',
   'python',
-  'agent/bootstrap.py'
+  'agent/bootstrap.py',
 ]
 
 export function defaultAgentDevCommand(): string[] {
   return [
-    ...DEFAULT_AGENT_DEV_COMMAND
+    ...DEFAULT_AGENT_DEV_COMMAND,
   ]
 }
 
@@ -124,8 +118,8 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
     once('LICENSE', licenseText(input)),
     once(
       'maatools.config.mts',
-      maatoolsConfig(resourcePaths(input.resources ?? defaultResources()), input.includeAgent)
-    )
+      maatoolsConfig(resourcePaths(input.resources ?? defaultResources()), input.includeAgent),
+    ),
   ]
 
   if (input.includeDevTools) {
@@ -166,15 +160,17 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     once('.prettierignore', template('base/.prettierignore')),
     once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
     once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
-    ...(input.includeAgent ? [
-          once('.vscode/launch.json', vscodeLaunch())
-        ] : []),
+    ...(input.includeAgent
+      ? [
+          once('.vscode/launch.json', vscodeLaunch()),
+        ]
+      : []),
     managed('.vscode/tasks.json', vscodeTasks(input.includeGithub)),
     managed('tools/check-project.mjs', checkProjectScript()),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
     ...schemaFiles(input.includeAgent),
     once('package.json', generatedPackageJson(input)),
-    once('pnpm-workspace.yaml', pnpmWorkspaceYaml())
+    once('pnpm-workspace.yaml', pnpmWorkspaceYaml()),
   ]
 }
 
@@ -183,13 +179,11 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     managed('.github/workflows/check.yml', checkWorkflow()),
     releaseWorkflowFile(input),
     managed('tools/build-release.mjs', buildReleaseScript(input)),
-    managed('tools/sync-runtime.mjs', syncRuntimeScript())
+    managed('tools/sync-runtime.mjs', syncRuntimeScript()),
   ]
 }
 
-export function agentFiles(
-  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>
-): ManagedFileInput[] {
+export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>): ManagedFileInput[] {
   return [
     managed('.python-version', '3.13\n'),
     managed('pyproject.toml', agentPyproject(input)),
@@ -210,7 +204,7 @@ export function agentFiles(
     managed('agent/utils/maa_types.py', agentTemplate('utils/maa_types.py')),
     managed('agent/utils/params.py', agentTemplate('utils/params.py')),
     managed('agent/utils/pienv.py', agentTemplate('utils/pienv.py')),
-    managed('agent/utils/runtime_paths.py', agentTemplate('utils/runtime_paths.py'))
+    managed('agent/utils/runtime_paths.py', agentTemplate('utils/runtime_paths.py')),
   ]
 }
 
@@ -224,20 +218,20 @@ export function maatoolsConfigFile(resources: string[], includeAgent = false): M
 
 export function gitCliffFiles(): ManagedFileInput[] {
   return [
-    managed('.github/cliff.toml', gitCliffConfig())
+    managed('.github/cliff.toml', gitCliffConfig()),
   ]
 }
 
 export function autoFormatFiles(): ManagedFileInput[] {
   return [
-    managed('.github/workflows/format.yml', autoFormatWorkflow())
+    managed('.github/workflows/format.yml', autoFormatWorkflow()),
   ]
 }
 
 export function optimizeImagesFiles(): ManagedFileInput[] {
   return [
     managed('.github/workflows/optimize-images.yml', optimizeImagesWorkflow()),
-    managed('tools/optimize-images.mjs', optimizeImagesScript())
+    managed('tools/optimize-images.mjs', optimizeImagesScript()),
   ]
 }
 
@@ -246,31 +240,26 @@ export function dependabotFile(): ManagedFileInput {
 }
 
 export function releaseWorkflowFile(
-  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>,
 ): ManagedFileInput {
   return managed('.github/workflows/release.yml', releaseWorkflow(input))
 }
 
 export function schemaSyncFiles(): ManagedFileInput[] {
   return [
-    managed(
-      '.github/workflows/schema-sync.yml',
-      template('addons/schema-sync/.github/workflows/schema-sync.yml')
-    ),
-    managed('tools/sync-schema.mjs', template('addons/schema-sync/tools/sync-schema.mjs'))
+    managed('.github/workflows/schema-sync.yml', template('addons/schema-sync/.github/workflows/schema-sync.yml')),
+    managed('tools/sync-schema.mjs', template('addons/schema-sync/tools/sync-schema.mjs')),
   ]
 }
 
-export function communityFiles(
-  input: Pick<ProjectTemplateInput, 'displayName'>
-): ManagedFileInput[] {
+export function communityFiles(input: Pick<ProjectTemplateInput, 'displayName'>): ManagedFileInput[] {
   return [
     once('CONTRIBUTING.md', generatedContributing(input)),
     once('.github/ISSUE_TEMPLATE/config.yml', generatedIssueTemplateConfig()),
     once('.github/ISSUE_TEMPLATE/bug_report.yml', generatedBugReportTemplate(input)),
     once('.github/ISSUE_TEMPLATE/feature_request.yml', generatedFeatureRequestTemplate()),
     once('.github/ISSUE_TEMPLATE/other_issue.yml', generatedOtherIssueTemplate(input)),
-    once('.github/PULL_REQUEST_TEMPLATE.md', generatedPullRequestTemplate())
+    once('.github/PULL_REQUEST_TEMPLATE.md', generatedPullRequestTemplate()),
   ]
 }
 
@@ -290,7 +279,7 @@ function interfaceJson(input: ProjectTemplateInput): string {
   const controller = interfaceController(input.controllers)
   const agentBlock = input.includeAgent
     ? `,\n    "agent": ${jsonFragment([
-        interfaceAgent(input.pythonDevCommand)
+        interfaceAgent(input.pythonDevCommand),
       ])}`
     : ''
 
@@ -301,12 +290,12 @@ function interfaceJson(input: ProjectTemplateInput): string {
     description: jsonStringContent(`${input.displayName} MaaFW project`),
     controller: jsonFragment(controller),
     resources: jsonFragment(interfaceResourceItems(input.resources ?? defaultResources())),
-    agentBlock
+    agentBlock,
   })
 }
 
 export function interfaceController(
-  kinds: ControllerKind[]
+  kinds: ControllerKind[],
 ): Array<{ name: string; label: string; type: string; display_short_side: number }> {
   return kinds.map((kind) => {
     const metadata = controllerMetadata(kind)
@@ -314,7 +303,7 @@ export function interfaceController(
       name: metadata.name,
       label: metadata.label,
       type: kind,
-      display_short_side: 720
+      display_short_side: 720,
     }
   })
 }
@@ -337,20 +326,20 @@ function controllerMetadata(kind: ControllerKind): { name: string; label: string
 }
 
 export function interfaceResourceItems(
-  resources: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
+  resources: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[],
 ): Array<{ name: string; label: string; path: string[] }> {
   return resources.map((pack) => ({
     name: pack.slug,
     label: pack.label,
     path: [
-      `./${pack.path}`
-    ]
+      `./${pack.path}`,
+    ],
   }))
 }
 
 function defaultResources(): Array<Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>> {
   return [
-    { slug: 'base', label: 'Base', path: 'resource/base' }
+    { slug: 'base', label: 'Base', path: 'resource/base' },
   ]
 }
 
@@ -368,7 +357,7 @@ export function interfaceAgent(command: string[] | undefined): {
   ] = command ?? defaultAgentDevCommand()
   return {
     child_exec: childExec,
-    ...(childArgs.length > 0 ? { child_args: childArgs } : {})
+    ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
   }
 }
 
@@ -391,17 +380,17 @@ function ocrManifestJson(): string {
 export function projectCustomSchemaFiles(includeAgent: boolean): ManagedFileInput[] {
   const customSchemaRoot = includeAgent ? 'agent/tools/schema' : 'base/tools/schema'
   return PROJECT_CUSTOM_SCHEMA_FILES.map((file) =>
-    once(`tools/schema/${file}`, template(`${customSchemaRoot}/${file}`))
+    once(`tools/schema/${file}`, template(`${customSchemaRoot}/${file}`)),
   )
 }
 
 function schemaFiles(includeAgent: boolean): ManagedFileInput[] {
   return [
     ...UPSTREAM_MAAFW_SCHEMA_FILES.map((file) =>
-      managed(`tools/schema/${file}`, template(`base/tools/schema/${file}`))
+      managed(`tools/schema/${file}`, template(`base/tools/schema/${file}`)),
     ),
     ...projectCustomSchemaFiles(includeAgent),
-    managed('tools/schema/schema-manifest.json', template('base/tools/schema/schema-manifest.json'))
+    managed('tools/schema/schema-manifest.json', template('base/tools/schema/schema-manifest.json')),
   ]
 }
 
@@ -410,15 +399,12 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
     name: jsonStringContent(input.slug),
     version: jsonStringContent(input.version),
     license: jsonStringContent(packageLicense(input.license)),
-    scripts: indentContinuation(stableJson(packageScripts(input)).trimEnd(), 4)
+    scripts: indentContinuation(stableJson(packageScripts(input)).trimEnd(), 4),
   })
 }
 
 function packageScripts(
-  input: Pick<
-    ProjectTemplateInput,
-    'includeGithub' | 'includeSchemaSync' | 'includeAgent' | 'includeOptimizeImages'
-  >
+  input: Pick<ProjectTemplateInput, 'includeGithub' | 'includeSchemaSync' | 'includeAgent' | 'includeOptimizeImages'>,
 ): Record<string, string> {
   const scripts: Record<string, string> = {
     format: 'prettier --write .',
@@ -426,7 +412,7 @@ function packageScripts(
     lint: 'node tools/check-project.mjs',
     'check:schema': 'node tools/validate-schema.mjs',
     'check:maa': 'pnpm exec maa-tools check',
-    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint'
+    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
   }
   if (input.includeGithub) {
     scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
@@ -456,7 +442,7 @@ function maatoolsConfig(resources: string[], includeAgent = false): string {
     resources: javascriptStringArray(resources),
     vscodeBlock: includeAgent
       ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}'\n    }\n  }`
-      : ''
+      : '',
   })
 }
 
@@ -464,9 +450,7 @@ function checkWorkflow(): string {
   return template('addons/github/.github/workflows/check.yml')
 }
 
-function releaseWorkflow(
-  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>
-): string {
+function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>): string {
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/release.yml', {
       slug: input.slug,
@@ -476,8 +460,8 @@ function releaseWorkflow(
       releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
       releaseNotesInput: input.includeGitCliff
         ? 'body_path: release-assets/CHANGES.md'
-        : 'generate_release_notes: true'
-    })
+        : 'generate_release_notes: true',
+    }),
   )
 }
 
@@ -518,31 +502,23 @@ function gitCliffWorkflowJob(): string {
 
 function vscodeExtensions(includeAgent: boolean): string {
   return template(
-    includeAgent
-      ? 'addons/dev-tools/.vscode/extensions.agent.json'
-      : 'addons/dev-tools/.vscode/extensions.json'
+    includeAgent ? 'addons/dev-tools/.vscode/extensions.agent.json' : 'addons/dev-tools/.vscode/extensions.json',
   )
 }
 
 function vscodeSettings(includeAgent: boolean): string {
   return template(
-    includeAgent
-      ? 'addons/dev-tools/.vscode/settings.agent.json'
-      : 'addons/dev-tools/.vscode/settings.json'
+    includeAgent ? 'addons/dev-tools/.vscode/settings.agent.json' : 'addons/dev-tools/.vscode/settings.json',
   )
 }
 
 function vscodeTasks(includeGithub: boolean): string {
-  return template(
-    includeGithub
-      ? 'addons/dev-tools/.vscode/tasks.github.json'
-      : 'addons/dev-tools/.vscode/tasks.json'
-  )
+  return template(includeGithub ? 'addons/dev-tools/.vscode/tasks.github.json' : 'addons/dev-tools/.vscode/tasks.json')
 }
 
 function vscodeLaunch(): string {
   return template('addons/dev-tools/.vscode/launch.agent.json', {
-    agentDebugSessionName: AGENT_DEBUG_SESSION_NAME
+    agentDebugSessionName: AGENT_DEBUG_SESSION_NAME,
   })
 }
 
@@ -558,13 +534,13 @@ function buildReleaseScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayN
   return template('addons/github/tools/build-release.mjs', {
     projectSlug: javascriptString(input.slug),
     releaseArtifactName: javascriptString(releaseArtifactName(input)),
-    releaseTargetArtifactTuples: releaseTargetArtifactTuples()
+    releaseTargetArtifactTuples: releaseTargetArtifactTuples(),
   })
 }
 
 function releaseArtifactName(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
   const sanitized = [
-    ...input.displayName.trim().normalize('NFKC')
+    ...input.displayName.trim().normalize('NFKC'),
   ]
     .map((char) => {
       if (/\s/u.test(char)) return '-'
@@ -583,7 +559,7 @@ function releaseTargetMatrixYaml(): string {
             arch: ${target.arch}
             runtime_os: ${target.runtimeOs}
             runtime_arch: ${target.runtimeArch}
-            ext: ${target.ext}`
+            ext: ${target.ext}`,
   ).join('\n          ')
 }
 
@@ -593,7 +569,7 @@ function releaseTargetArtifactTuples(): string {
     '${target.artifactOs}',
     '${target.arch}',
     '${target.ext}'
-  ]`
+  ]`,
   ).join(',\n')
 }
 
@@ -604,14 +580,14 @@ function syncRuntimeScript(): string {
 function generatedReadme(input: ProjectTemplateInput): string {
   return template(input.includeAgent ? 'agent/README.md' : 'base/README.md', {
     displayName: input.displayName,
-    version: input.version
+    version: input.version,
   })
 }
 
 function generatedEnglishReadme(input: ProjectTemplateInput): string {
   return template(input.includeAgent ? 'agent/README.en.md' : 'base/README.en.md', {
     displayName: input.displayName,
-    version: input.version
+    version: input.version,
   })
 }
 
@@ -641,7 +617,7 @@ function dependabotConfig(): string {
 
 function generatedContributing(input: Pick<ProjectTemplateInput, 'displayName'>): string {
   return template('addons/community/CONTRIBUTING.md', {
-    displayName: input.displayName
+    displayName: input.displayName,
   })
 }
 
@@ -651,7 +627,7 @@ function generatedIssueTemplateConfig(): string {
 
 function generatedBugReportTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
   return template('addons/community/bug_report.yml', {
-    displayName: jsonStringContent(input.displayName)
+    displayName: jsonStringContent(input.displayName),
   })
 }
 
@@ -661,7 +637,7 @@ function generatedFeatureRequestTemplate(): string {
 
 function generatedOtherIssueTemplate(input: Pick<ProjectTemplateInput, 'displayName'>): string {
   return template('addons/community/other_issue.yml', {
-    displayName: jsonStringContent(input.displayName)
+    displayName: jsonStringContent(input.displayName),
   })
 }
 
@@ -674,7 +650,7 @@ function licenseText(input: Pick<ProjectTemplateInput, 'license' | 'displayName'
   if (input.license === 'MIT') {
     return template('base/licenses/MIT.txt', {
       year: String(new Date().getFullYear()),
-      displayName: input.displayName
+      displayName: input.displayName,
     })
   }
   return template('base/licenses/AGPL-3.0-or-later.txt')
@@ -684,13 +660,11 @@ function packageLicense(license: LicenseKind): string {
   return license === 'None' ? 'UNLICENSED' : license
 }
 
-function agentPyproject(
-  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>
-): string {
+function agentPyproject(input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>): string {
   return template('agent/pyproject.toml', {
     slug: input.slug,
     version: input.version,
-    displayName: input.displayName
+    displayName: input.displayName,
   })
 }
 
@@ -718,7 +692,7 @@ function template(path: string, values: Record<string, string> = {}): string {
   let content = embeddedTextTemplates[path] ?? readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
   for (const [
     key,
-    value
+    value,
   ] of Object.entries(values)) {
     content = content.replaceAll(`{{${key}}}`, value)
   }
@@ -733,9 +707,7 @@ function templateBinary(path: string): Buffer {
 
 function resolveTemplateRoot(): string {
   const metaUrl = import.meta.url
-  return metaUrl
-    ? join(dirname(fileURLToPath(metaUrl)), '..', 'templates')
-    : join(process.cwd(), 'templates')
+  return metaUrl ? join(dirname(fileURLToPath(metaUrl)), '..', 'templates') : join(process.cwd(), 'templates')
 }
 
 function jsonFragment(value: unknown): string {
@@ -752,11 +724,7 @@ function javascriptStringArray(values: string[]): string {
 }
 
 function javascriptString(value: string): string {
-  return `'${value
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n')}'`
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '\\r').replace(/\n/g, '\\n')}'`
 }
 
 function indentContinuation(value: string, spaces: number): string {
@@ -767,6 +735,6 @@ function indentContinuation(value: string, spaces: number): string {
   ] = value.split('\n')
   return [
     first,
-    ...rest.map((line) => indent + line)
+    ...rest.map((line) => indent + line),
   ].join('\n')
 }

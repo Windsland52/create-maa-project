@@ -1,12 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DoctorReport } from './doctor.js'
-import type {
-  ChangedFileReport,
-  CliOptions,
-  GitInitResult,
-  PendingItem,
-  ScaffoldResult
-} from './types.js'
+import type { ChangedFileReport, CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
 export type CliReportCommand = 'create' | 'sync' | 'update' | 'diff' | 'doctor'
 
@@ -93,10 +87,7 @@ export function assertReportSupportedOptions(options: CliOptions): void {
   }
 }
 
-export function createScaffoldJsonReport(
-  context: ReportContext,
-  result: ScaffoldResult
-): CliJsonReport {
+export function createScaffoldJsonReport(context: ReportContext, result: ScaffoldResult): CliJsonReport {
   const report = createBaseReport({
     context,
     ok: true,
@@ -105,7 +96,7 @@ export function createScaffoldJsonReport(
     written: result.written,
     skipped: result.skipped,
     pending: result.pending,
-    suggestedCommands: suggestedCommandsFromPending(result.pending)
+    suggestedCommands: suggestedCommandsFromPending(result.pending),
   })
   if (result.git) report.git = result.git
   return report
@@ -120,7 +111,7 @@ export function createDoctorJsonReport(input: {
 }): CliJsonReport {
   const suggestedCommands = uniqueSuggestedCommands([
     ...suggestedCommandsFromPending(input.pending),
-    ...suggestedCommandsFromLines(input.doctor.lines)
+    ...suggestedCommandsFromLines(input.doctor.lines),
   ])
   const report = createBaseReport({
     context: input.context,
@@ -129,10 +120,10 @@ export function createDoctorJsonReport(input: {
     root: input.root,
     pending: input.pending,
     changedManagedFiles: input.changedManagedFiles,
-    suggestedCommands
+    suggestedCommands,
   })
   report.doctor = {
-    lines: input.doctor.lines
+    lines: input.doctor.lines,
   }
   return report
 }
@@ -149,33 +140,29 @@ export function createDiffJsonReport(input: {
     exitCode: 0,
     root: input.root,
     changedManagedFiles: input.changedManagedFiles,
-    suggestedCommands: suggestedCommandsFromLines(input.lines)
+    suggestedCommands: suggestedCommandsFromLines(input.lines),
   })
   report.diff = {
-    lines: input.lines
+    lines: input.lines,
   }
   return report
 }
 
-export function createErrorJsonReport(input: {
-  context: ReportContext
-  root: string
-  error: unknown
-}): CliJsonReport {
+export function createErrorJsonReport(input: { context: ReportContext; root: string; error: unknown }): CliJsonReport {
   const report = createBaseReport({
     context: input.context,
     ok: false,
     exitCode: 1,
-    root: input.root
+    root: input.root,
   })
   const code = errorCode(input.error)
   report.error = code
     ? {
         message: errorMessage(input.error),
-        code
+        code,
       }
     : {
-        message: errorMessage(input.error)
+        message: errorMessage(input.error),
       }
   return report
 }
@@ -212,7 +199,7 @@ function createBaseReport(input: {
     pending: input.pending ?? [],
     changedManagedFiles: input.changedManagedFiles ?? [],
     changedUserFiles: input.changedUserFiles ?? [],
-    suggestedCommands: uniqueSuggestedCommands(input.suggestedCommands ?? [])
+    suggestedCommands: uniqueSuggestedCommands(input.suggestedCommands ?? []),
   }
 }
 
@@ -220,7 +207,7 @@ function suggestedCommandsFromPending(pending: PendingItem[]): SuggestedCommand[
   return pending.map((item) => ({
     command: item.command,
     description: item.reason,
-    autoRun: false
+    autoRun: false,
   }))
 }
 
@@ -233,7 +220,7 @@ function suggestedCommandsFromLines(lines: string[]): SuggestedCommand[] {
     suggestions.push({
       command,
       description: descriptionBefore(lines, index),
-      autoRun: false
+      autoRun: false,
     })
   }
   return uniqueSuggestedCommands(suggestions)

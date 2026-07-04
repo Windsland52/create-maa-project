@@ -6,7 +6,7 @@ import type {
   MaaProjectLock,
   ManagedFileInput,
   ManagedFileState,
-  PendingItem
+  PendingItem,
 } from './types.js'
 import { exists, nowIso, readText, sha256, stableJson, writeText } from './utils.js'
 
@@ -36,19 +36,15 @@ export function emptyLock(version: string): MaaProjectLock {
     template: {
       createdBy: 'create-maa-project',
       lastUpdatedBy: 'create-maa-project',
-      templateVersion: version
+      templateVersion: version,
     },
     pending: [],
     managedFiles: {},
-    createdFiles: {}
+    createdFiles: {},
   }
 }
 
-export async function writeProjectState(
-  root: string,
-  config: MaaProjectConfig,
-  lock: MaaProjectLock
-): Promise<void> {
+export async function writeProjectState(root: string, config: MaaProjectConfig, lock: MaaProjectLock): Promise<void> {
   const configContent = stableJson(config)
   delete lock.managedFiles[CONFIG_FILE]
   delete lock.managedFiles[LOCK_FILE]
@@ -94,13 +90,16 @@ async function changedManagedPaths(root: string, lock: MaaProjectLock): Promise<
   const changed: string[] = []
   for (const [
     path,
-    state
+    state,
   ] of Object.entries(lock.managedFiles).sort(
-    ([
-        left
-      ], [
-        right
-      ]) => left.localeCompare(right)
+    (
+      [
+        left,
+      ],
+      [
+        right,
+      ],
+    ) => left.localeCompare(right),
   )) {
     const fullPath = join(root, path)
     if (!(await exists(fullPath))) continue
@@ -116,13 +115,16 @@ export async function diffManagedFiles(root: string): Promise<string[]> {
 
   for (const [
     path,
-    state
+    state,
   ] of Object.entries(lock.managedFiles).sort(
-    ([
-        left
-      ], [
-        right
-      ]) => left.localeCompare(right)
+    (
+      [
+        left,
+      ],
+      [
+        right,
+      ],
+    ) => left.localeCompare(right),
   )) {
     const currentPath = join(root, path)
     if (!(await exists(currentPath))) {
@@ -151,8 +153,10 @@ export async function diffManagedFiles(root: string): Promise<string[]> {
     lines.push(...createUnifiedDiff(path, baselineContent, currentContent.toString()))
   }
 
-  return lines.length > 0 ? lines : [
-        'No managed file changes.'
+  return lines.length > 0
+    ? lines
+    : [
+        'No managed file changes.',
       ]
 }
 
@@ -161,13 +165,16 @@ export async function listChangedManagedFiles(root: string): Promise<ChangedFile
   const changed: ChangedFileReport[] = []
   for (const [
     path,
-    state
+    state,
   ] of Object.entries(lock.managedFiles).sort(
-    ([
-        left
-      ], [
-        right
-      ]) => left.localeCompare(right)
+    (
+      [
+        left,
+      ],
+      [
+        right,
+      ],
+    ) => left.localeCompare(right),
   )) {
     const currentPath = join(root, path)
     if (!(await exists(currentPath))) {
@@ -206,7 +213,7 @@ export async function withProjectWriteLock<T>(
   root: string,
   command: string,
   action: () => Promise<T>,
-  options: { clearStale?: boolean } = {}
+  options: { clearStale?: boolean } = {},
 ): Promise<T> {
   const lockPath = join(root, LOCAL_STATE_DIR, 'run.lock')
   await mkdir(dirname(lockPath), { recursive: true })
@@ -217,27 +224,25 @@ export async function withProjectWriteLock<T>(
         stableJson({
           pid: process.pid,
           command,
-          startedAt: nowIso()
+          startedAt: nowIso(),
         }),
         {
           encoding: 'utf8',
-          flag: 'wx'
-        }
+          flag: 'wx',
+        },
       )
       break
     } catch {
       const existing = await readExistingRunLock(lockPath)
       if (existing?.pid && isProcessAlive(existing.pid)) {
-        throw new Error(
-          `Another create-maa-project command is running for this project (pid ${existing.pid}).`
-        )
+        throw new Error(`Another create-maa-project command is running for this project (pid ${existing.pid}).`)
       }
       if (options.clearStale) {
         await rm(lockPath, { force: true })
         continue
       }
       throw new Error(
-        `Stale write lock exists at ${lockPath}. Re-run with --clear-stale-lock after confirming no command is running.`
+        `Stale write lock exists at ${lockPath}. Re-run with --clear-stale-lock after confirming no command is running.`,
       )
     }
   }
@@ -249,11 +254,7 @@ export async function withProjectWriteLock<T>(
   }
 }
 
-export async function refreshManagedFileState(
-  root: string,
-  lock: MaaProjectLock,
-  paths: string[]
-): Promise<string[]> {
+export async function refreshManagedFileState(root: string, lock: MaaProjectLock, paths: string[]): Promise<string[]> {
   const refreshed: string[] = []
   for (const path of paths) {
     const state = lock.managedFiles[path]
@@ -264,7 +265,7 @@ export async function refreshManagedFileState(
     const hash = managedFileHash(path, content)
     lock.managedFiles[path] = {
       hash,
-      templateHash: state.templateHash ?? hash
+      templateHash: state.templateHash ?? hash,
     }
     await writeBaseline(root, path, content)
     refreshed.push(path)
@@ -276,7 +277,7 @@ export async function refreshManagedFileContent(
   root: string,
   lock: MaaProjectLock,
   files: Array<{ path: string; content: string | Buffer }>,
-  options: { template?: boolean } = {}
+  options: { template?: boolean } = {},
 ): Promise<string[]> {
   const refreshed: string[] = []
   for (const file of files) {
@@ -285,7 +286,7 @@ export async function refreshManagedFileContent(
     const hash = managedFileHash(file.path, file.content)
     lock.managedFiles[file.path] = {
       hash,
-      templateHash: options.template ? hash : (state.templateHash ?? hash)
+      templateHash: options.template ? hash : (state.templateHash ?? hash),
     }
     await writeBaseline(root, file.path, file.content)
     refreshed.push(file.path)
@@ -296,7 +297,7 @@ export async function refreshManagedFileContent(
 export async function writeGeneratedFiles(
   root: string,
   files: ManagedFileInput[],
-  options: { force: boolean; backup: boolean; overwriteUnmanaged?: boolean }
+  options: { force: boolean; backup: boolean; overwriteUnmanaged?: boolean },
 ): Promise<{
   written: string[]
   skipped: string[]
@@ -334,7 +335,7 @@ export async function writeGeneratedFiles(
       const hash = managedFileHash(file.path, content)
       lockEntries[file.path] = {
         hash,
-        templateHash: hash
+        templateHash: hash,
       }
       await writeBaseline(root, file.path, content)
     }
@@ -346,7 +347,7 @@ export async function writeGeneratedFiles(
 export async function backupProjectSnapshot(root: string): Promise<string | undefined> {
   if (!(await exists(root))) return undefined
   const entries = (await readdir(root, { withFileTypes: true })).filter(
-    (entry) => entry.name !== '.git' && entry.name !== LOCAL_STATE_DIR
+    (entry) => entry.name !== '.git' && entry.name !== LOCAL_STATE_DIR,
   )
   if (entries.length === 0) return undefined
 
@@ -356,7 +357,7 @@ export async function backupProjectSnapshot(root: string): Promise<string | unde
   for (const entry of entries) {
     await cp(join(root, entry.name), join(backupRoot, entry.name), {
       recursive: true,
-      force: true
+      force: true,
     })
   }
   return stamp
@@ -369,11 +370,7 @@ export function managedFileHash(path: string, content: string | Buffer): string 
   return sha256(normalizeManagedText(hashContent))
 }
 
-export function prepareManagedFileContent(
-  _path: string,
-  _current: string,
-  generated: string
-): string {
+export function prepareManagedFileContent(_path: string, _current: string, generated: string): string {
   return generated
 }
 
@@ -400,7 +397,7 @@ export function mergePending(existing: PendingItem[], next: PendingItem[]): Pend
   for (const item of existing) map.set(`${item.kind}:${item.command}`, item)
   for (const item of next) map.set(`${item.kind}:${item.command}`, item)
   return [
-    ...map.values()
+    ...map.values(),
   ]
 }
 
@@ -412,11 +409,7 @@ async function backupFile(root: string, filePath: string): Promise<void> {
   await rename(source, destination)
 }
 
-async function writeBaseline(
-  root: string,
-  filePath: string,
-  content: string | Buffer
-): Promise<void> {
+async function writeBaseline(root: string, filePath: string, content: string | Buffer): Promise<void> {
   const target = join(root, LOCAL_STATE_DIR, 'baselines', filePath)
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, content)
@@ -447,7 +440,7 @@ export function createUnifiedDiff(path: string, before: string, after: string): 
     `--- a/${path}`,
     `+++ b/${path}`,
     '@@',
-    ...operations
+    ...operations,
   ]
 }
 
@@ -459,7 +452,7 @@ function splitLines(text: string): string[] {
 
 function diffLines(before: string[], after: string[]): string[] {
   const table: number[][] = Array.from({ length: before.length + 1 }, () =>
-    Array.from({ length: after.length + 1 }, () => 0)
+    Array.from({ length: after.length + 1 }, () => 0),
   )
   for (let left = before.length - 1; left >= 0; left -= 1) {
     for (let right = after.length - 1; right >= 0; right -= 1) {
@@ -501,7 +494,7 @@ async function restoreDirectory(
   projectRoot: string,
   backupRoot: string,
   current: string,
-  restored: string[]
+  restored: string[],
 ): Promise<void> {
   const entries = await readdir(current, { withFileTypes: true })
   for (const entry of entries) {

@@ -6,11 +6,11 @@ export const CONTROLLER_KINDS: ControllerKind[] = [
   'MacOS',
   'PlayCover',
   'Gamepad',
-  'WlRoots'
+  'WlRoots',
 ]
 
 export const DEFAULT_CONTROLLER_KINDS: ControllerKind[] = [
-  'Adb'
+  'Adb',
 ]
 
 export function normalizeControllerKind(value: string): ControllerKind | undefined {
@@ -75,8 +75,9 @@ export function projectControllerKinds(config: MaaProjectConfig): ControllerKind
   if (typeof controller?.kind === 'string') {
     if (controller.kind === 'None') return []
     const kind = normalizeControllerKind(controller.kind)
-    if (kind) return [
-        kind
+    if (kind)
+      return [
+        kind,
       ]
   }
   return DEFAULT_CONTROLLER_KINDS

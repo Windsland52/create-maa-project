@@ -15,17 +15,11 @@ import {
   addGitCliff,
   addResourcePack,
   assertCanCreateTarget,
-  type GitRunner
+  type GitRunner,
 } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
 import { previewTemplateUpdate, recordUpdateRequests } from '../src/update.js'
-import {
-  acceptManagedChanges,
-  cleanCache,
-  diffManagedFiles,
-  managedFileHash,
-  restoreBackup
-} from '../src/project.js'
+import { acceptManagedChanges, cleanCache, diffManagedFiles, managedFileHash, restoreBackup } from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
@@ -34,7 +28,7 @@ import {
   downloadManifestAssets,
   downloadProjectManifestAssets,
   resolveProductAssetManifestFromGithubRelease,
-  type DownloadProgress
+  type DownloadProgress,
 } from '../src/assets.js'
 import { sha256 } from '../src/utils.js'
 
@@ -46,12 +40,12 @@ function runSchemaValidator(projectRoot: string) {
   return execFileAsync(
     process.execPath,
     [
-      'tools/validate-schema.mjs'
+      'tools/validate-schema.mjs',
     ],
     {
       cwd: projectRoot,
-      env: { ...process.env, NODE_PATH: repoNodeModules }
-    }
+      env: { ...process.env, NODE_PATH: repoNodeModules },
+    },
   )
 }
 const EXPECTED_RELEASE_TARGETS = [
@@ -61,7 +55,7 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'zip',
     runtimeOs: 'win',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'windows-11-arm',
@@ -69,7 +63,7 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'zip',
     runtimeOs: 'win',
-    runtimeArch: 'arm64'
+    runtimeArch: 'arm64',
   },
   {
     runner: 'ubuntu-latest',
@@ -77,7 +71,7 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'tar.gz',
     runtimeOs: 'linux',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'ubuntu-latest',
@@ -85,7 +79,7 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'tar.gz',
     runtimeOs: 'linux',
-    runtimeArch: 'arm64'
+    runtimeArch: 'arm64',
   },
   {
     runner: 'macos-15-intel',
@@ -93,7 +87,7 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'x86_64',
     ext: 'tar.gz',
     runtimeOs: 'osx',
-    runtimeArch: 'x64'
+    runtimeArch: 'x64',
   },
   {
     runner: 'macos-latest',
@@ -101,8 +95,8 @@ const EXPECTED_RELEASE_TARGETS = [
     arch: 'aarch64',
     ext: 'tar.gz',
     runtimeOs: 'osx',
-    runtimeArch: 'arm64'
-  }
+    runtimeArch: 'arm64',
+  },
 ] as const
 
 beforeEach(() => {
@@ -127,7 +121,7 @@ describe('scaffold', () => {
       ci: { enabled: false },
       release: { enabled: false },
       vscode: { enabled: false },
-      quality: { enabled: false }
+      quality: { enabled: false },
     })
     expect(result.config.runtime.mfa.enabled).toBe(false)
     expect(result.config.addons).toEqual({})
@@ -138,8 +132,8 @@ describe('scaffold', () => {
         'resource/base/default_pipeline.json',
         'resource/base/pipeline/tutorial.json',
         'maatools.config.mts',
-        'maa-project.json'
-      ])
+        'maa-project.json',
+      ]),
     )
     expect(result.written).not.toContain('package.json')
     expect(result.written).not.toContain('.vscode/settings.json')
@@ -160,9 +154,9 @@ describe('scaffold', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'ocr-model',
-          command: 'create-maa-project --update ocr-models'
-        })
-      ])
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
   })
@@ -185,22 +179,14 @@ describe('scaffold', () => {
     expect(result.written).toContain('resource/base/model/ocr/rec.onnx')
     expect(result.written).toContain('resource/base/model/ocr/keys.txt')
     expect(result.written).toContain('resource/base/model/ocr/README.md')
-    const tutorial = await readFile(
-      join(root, 'Maa Test', 'resource/base/pipeline/tutorial.json'),
-      'utf8'
-    )
-    const defaultPipeline = await readFile(
-      join(root, 'Maa Test', 'resource/base/default_pipeline.json'),
-      'utf8'
-    )
+    const tutorial = await readFile(join(root, 'Maa Test', 'resource/base/pipeline/tutorial.json'), 'utf8')
+    const defaultPipeline = await readFile(join(root, 'Maa Test', 'resource/base/default_pipeline.json'), 'utf8')
     const readme = await readFile(join(root, 'Maa Test', 'README.md'), 'utf8')
     const readmeEn = await readFile(join(root, 'Maa Test', 'README.en.md'), 'utf8')
     const license = await readFile(join(root, 'Maa Test', 'LICENSE'), 'utf8')
     const syncRuntime = await readFile(join(root, 'Maa Test', 'tools/sync-runtime.mjs'), 'utf8')
     const emptyImage = await readFile(join(root, 'Maa Test', 'resource/base/image/empty.png'))
-    const interfaceSchema = await readJson(
-      join(root, 'Maa Test', 'tools/schema/interface.schema.json')
-    )
+    const interfaceSchema = await readJson(join(root, 'Maa Test', 'tools/schema/interface.schema.json'))
     const vscodeSettings = await readJson(join(root, 'Maa Test', '.vscode/settings.json'))
     expect(readme).toContain('由 create-maa-project 生成')
     expect(readme).toContain('README.en.md')
@@ -210,8 +196,8 @@ describe('scaffold', () => {
     expect(license).toContain('Version 3, 19 November 2007')
     expect(license).not.toContain('Replace this placeholder')
     expect(syncRuntime).toContain('create-maa-project@latest')
-    expect(syncRuntime).toContain("'maafw'")
-    expect(syncRuntime).toContain("'runtime:mfa'")
+    expect(syncRuntime).toContain('"maafw"')
+    expect(syncRuntime).toContain('"runtime:mfa"')
     expect(emptyImage.subarray(0, 8)).toEqual(
       Buffer.from([
         0x89,
@@ -221,8 +207,8 @@ describe('scaffold', () => {
         0x0d,
         0x0a,
         0x1a,
-        0x0a
-      ])
+        0x0a,
+      ]),
     )
     expect(defaultPipeline).toContain('"rate_limit": 1000')
     expect(defaultPipeline).toContain('"recognition": "OCR"')
@@ -235,16 +221,19 @@ describe('scaffold', () => {
       label: 'Maa Test',
       icon: 'logo.ico',
       controller: [
-        { name: 'Android', label: 'Android / Emulator', type: 'Adb' }
+        { name: 'Android', label: 'Android / Emulator', type: 'Adb' },
       ],
       resource: [
-        { name: 'base', path: [
-            './resource/base'
-          ] }
+        {
+          name: 'base',
+          path: [
+            './resource/base',
+          ],
+        },
       ],
       import: [
-        './tasks/tutorial.json'
-      ]
+        './tasks/tutorial.json',
+      ],
     })
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('task')
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('$schema')
@@ -252,37 +241,39 @@ describe('scaffold', () => {
       title: 'MaaFramework Project Interface V2',
       properties: {
         interface_version: {
-          const: 2
-        }
-      }
+          const: 2,
+        },
+      },
     })
     expect(vscodeSettings).toMatchObject({
       '[json]': {
-        'editor.defaultFormatter': 'esbenp.prettier-vscode'
+        'editor.defaultFormatter': 'esbenp.prettier-vscode',
       },
       '[jsonc]': {
-        'editor.defaultFormatter': 'esbenp.prettier-vscode'
+        'editor.defaultFormatter': 'esbenp.prettier-vscode',
       },
       'files.associations': {
         '*.json': 'jsonc',
-        '*.jsonc': 'jsonc'
+        '*.jsonc': 'jsonc',
       },
       'json.schemas': expect.arrayContaining([
         expect.objectContaining({
           fileMatch: [
-            '/interface.json'
+            '/interface.json',
           ],
-          url: './tools/schema/interface.schema.json'
-        })
-      ])
+          url: './tools/schema/interface.schema.json',
+        }),
+      ]),
     })
     expect(await readJson(join(root, 'Maa Test', 'maa-project.json'))).toMatchObject({
-      controller: { kinds: [
-          'Adb'
-        ] },
+      controller: {
+        kinds: [
+          'Adb',
+        ],
+      },
       resources: [
-        { path: 'resource/base' }
-      ]
+        { path: 'resource/base' },
+      ],
     })
     const packageJson = (await readJson(join(root, 'Maa Test', 'package.json'))) as {
       license?: string
@@ -290,36 +281,32 @@ describe('scaffold', () => {
     }
     expect(packageJson.license).toBe('AGPL-3.0-or-later')
     expect(packageJson.scripts).not.toHaveProperty('sync:schema')
-    const customActionSchema = await readJson(
-      join(root, 'Maa Test', 'tools/schema/custom.action.schema.json')
-    )
+    const customActionSchema = await readJson(join(root, 'Maa Test', 'tools/schema/custom.action.schema.json'))
     const customRecognitionSchema = await readJson(
-      join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json')
+      join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json'),
     )
     expect(customActionSchema).toMatchObject({
       properties: {
         custom_action: {},
-        custom_action_param: {}
-      }
+        custom_action_param: {},
+      },
     })
     expect(customActionSchema).not.toHaveProperty('$defs')
     expect(customRecognitionSchema).toMatchObject({
       properties: {
         custom_recognition: {},
-        custom_recognition_param: {}
-      }
+        custom_recognition_param: {},
+      },
     })
     expect(customRecognitionSchema).not.toHaveProperty('$defs')
-    const schemaManifest = (await readJson(
-      join(root, 'Maa Test', 'tools/schema/schema-manifest.json')
-    )) as {
+    const schemaManifest = (await readJson(join(root, 'Maa Test', 'tools/schema/schema-manifest.json'))) as {
       files: Array<{ path: string }>
     }
     expect(schemaManifest.files.map((file: { path: string }) => file.path)).not.toEqual(
       expect.arrayContaining([
         'tools/schema/custom.action.schema.json',
-        'tools/schema/custom.recognition.schema.json'
-      ])
+        'tools/schema/custom.recognition.schema.json',
+      ]),
     )
     const lock = (await readJson(join(root, 'Maa Test', 'maa-project.lock.json'))) as {
       managedFiles: Record<string, unknown>
@@ -327,7 +314,7 @@ describe('scaffold', () => {
       pending: Array<{ kind: string; command: string }>
     }
     expect(lock).toMatchObject({
-      schemaVersion: 1
+      schemaVersion: 1,
     })
     expect(lock.pending.some((item) => item.kind === 'runtime')).toBe(false)
     for (const path of [
@@ -348,7 +335,7 @@ describe('scaffold', () => {
       'resource/base/model/ocr/keys.txt',
       'resource/base/model/ocr/README.md',
       'resource/base/pipeline/tutorial.json',
-      'tasks/tutorial.json'
+      'tasks/tutorial.json',
     ]) {
       expect(lock.managedFiles).not.toHaveProperty(path)
       expect(lock.createdFiles).toHaveProperty(path)
@@ -357,47 +344,35 @@ describe('scaffold', () => {
     expect(lock.managedFiles).not.toHaveProperty('tools/schema/custom.recognition.schema.json')
     expect(lock.createdFiles).toMatchObject({
       'tools/schema/custom.action.schema.json': { managed: false },
-      'tools/schema/custom.recognition.schema.json': { managed: false }
+      'tools/schema/custom.recognition.schema.json': { managed: false },
     })
     expect(await readJson(join(root, 'Maa Test', '.vscode/extensions.json'))).toMatchObject({
       recommendations: expect.arrayContaining([
-        'windsland52.maa-log-analyzer'
-      ])
+        'windsland52.maa-log-analyzer',
+      ]),
     })
     const editorconfig = await readFile(join(root, 'Maa Test', '.editorconfig'), 'utf8')
     expect(editorconfig).toContain('[*.{yml,yaml,json,jsonc}]')
     const gitattributes = await readFile(join(root, 'Maa Test', '.gitattributes'), 'utf8')
     expect(gitattributes).toContain('interface.json linguist-language=JSON-with-Comments')
-    expect(gitattributes).toContain(
-      'resource/**/default_pipeline.json linguist-language=JSON-with-Comments'
-    )
-    expect(gitattributes).toContain(
-      'resource/**/pipeline/**/*.json linguist-language=JSON-with-Comments'
-    )
-    expect(await pathExists(join(root, 'Maa Test', '.github/workflows/schema-sync.yml'))).toBe(
-      false
-    )
+    expect(gitattributes).toContain('resource/**/default_pipeline.json linguist-language=JSON-with-Comments')
+    expect(gitattributes).toContain('resource/**/pipeline/**/*.json linguist-language=JSON-with-Comments')
+    expect(await pathExists(join(root, 'Maa Test', '.github/workflows/schema-sync.yml'))).toBe(false)
     expect(await pathExists(join(root, 'Maa Test', 'tools/sync-schema.mjs'))).toBe(false)
-    const checkWorkflow = await readFile(
-      join(root, 'Maa Test', '.github/workflows/check.yml'),
-      'utf8'
-    )
-    const releaseWorkflow = await readFile(
-      join(root, 'Maa Test', '.github/workflows/release.yml'),
-      'utf8'
-    )
+    const checkWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/check.yml'), 'utf8')
+    const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
     expect(checkWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      checkWorkflow.indexOf('pnpm install --frozen-lockfile')
+      checkWorkflow.indexOf('pnpm install --frozen-lockfile'),
     )
     expect(releaseWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      releaseWorkflow.indexOf('pnpm install --frozen-lockfile')
+      releaseWorkflow.indexOf('pnpm install --frozen-lockfile'),
     )
     expect(releaseWorkflow).toContain('pnpm release:dry-run')
     expect(releaseWorkflow).toContain("if: github.event_name == 'workflow_dispatch'")
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).toContain(
-      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"',
     )
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
@@ -422,13 +397,13 @@ describe('scaffold', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'node-deps',
-          command: 'create-maa-project --update node-deps'
+          command: 'create-maa-project --update node-deps',
         }),
         expect.objectContaining({
           kind: 'ocr-model',
-          command: 'create-maa-project --update ocr-models'
-        })
-      ])
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
     )
     const doctorOutput = (await runDoctor(join(root, 'Maa Test'))).lines.join('\n')
     expect(doctorOutput).toContain('create-maa-project --update node-deps')
@@ -447,7 +422,7 @@ describe('scaffold', () => {
     expect(license).toContain(`Copyright (c) ${new Date().getFullYear()} maa-mit-test contributors`)
     expect(license).not.toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
     expect(await readJson(join(root, 'maa-mit-test', 'package.json'))).toMatchObject({
-      license: 'MIT'
+      license: 'MIT',
     })
   })
 
@@ -463,25 +438,27 @@ describe('scaffold', () => {
         commands.push({ root: cwd, command, args })
         await writeFile(join(cwd, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
       },
-      onProgress: (message) => progress.push(message)
+      onProgress: (message) => progress.push(message),
     })
 
     const projectRoot = join(root, 'maa-create-install')
     expect(commands).toEqual([
-      { root: projectRoot, command: 'pnpm', args: [
-          'install'
-        ] }
+      {
+        root: projectRoot,
+        command: 'pnpm',
+        args: [
+          'install',
+        ],
+      },
     ])
     expect(progress).toEqual([
       'Installing Node dependencies...',
-      'Node dependencies installed.'
+      'Node dependencies installed.',
     ])
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.written).toContain('pnpm-lock.yaml')
     expect(await pathExists(join(projectRoot, 'pnpm-lock.yaml'))).toBe(true)
-    expect((await runDoctor(projectRoot)).lines.join('\n')).not.toContain(
-      'create-maa-project --update node-deps'
-    )
+    expect((await runDoctor(projectRoot)).lines.join('\n')).not.toContain('create-maa-project --update node-deps')
   })
 
   it('keeps node dependency pending when creation install fails', async () => {
@@ -494,21 +471,21 @@ describe('scaffold', () => {
       commandRunner: async () => {
         throw new Error('offline registry')
       },
-      onProgress: (message) => progress.push(message)
+      onProgress: (message) => progress.push(message),
     })
 
     expect(progress).toEqual([
       'Installing Node dependencies...',
-      'Node dependency install failed (offline registry); continuing with a pending action.'
+      'Node dependency install failed (offline registry); continuing with a pending action.',
     ])
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'node-deps',
           reason: expect.stringContaining('offline registry'),
-          command: 'create-maa-project --update node-deps'
-        })
-      ])
+          command: 'create-maa-project --update node-deps',
+        }),
+      ]),
     )
   })
 
@@ -523,25 +500,25 @@ describe('scaffold', () => {
           0,
           1,
           2,
-          3
-        ])
+          3,
+        ]),
       ],
       [
         'https://example.test/rec.onnx',
         Buffer.from([
           4,
           5,
-          6
-        ])
+          6,
+        ]),
       ],
       [
         'https://example.test/keys.txt',
-        Buffer.from('hello\nworld\n')
+        Buffer.from('hello\nworld\n'),
       ],
       [
         'https://example.test/README.md',
-        Buffer.from('# OCR\n')
-      ]
+        Buffer.from('# OCR\n'),
+      ],
     ])
     const progress: string[] = []
     const downloadProgress: DownloadProgress[] = []
@@ -554,27 +531,27 @@ describe('scaffold', () => {
             path: 'det.onnx',
             url: 'https://example.test/det.onnx',
             sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-            size: 4
+            size: 4,
           },
           {
             path: 'rec.onnx',
             url: 'https://example.test/rec.onnx',
             sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
-            size: 3
+            size: 3,
           },
           {
             path: 'keys.txt',
             url: 'https://example.test/keys.txt',
             sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
-            size: 12
+            size: 12,
           },
           {
             path: 'README.md',
             url: 'https://example.test/README.md',
             sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
-            size: 6
-          }
-        ]
+            size: 6,
+          },
+        ],
       }),
       assetDownloader: async (url, options) => {
         const content = assets.get(url)
@@ -583,17 +560,17 @@ describe('scaffold', () => {
         options?.onProgress?.({
           url,
           downloadedBytes: firstChunk,
-          totalBytes: content.byteLength
+          totalBytes: content.byteLength,
         })
         options?.onProgress?.({
           url,
           downloadedBytes: content.byteLength,
-          totalBytes: content.byteLength
+          totalBytes: content.byteLength,
         })
         return content
       },
       onProgress: (message) => progress.push(message),
-      onDownloadProgress: (event) => downloadProgress.push(event)
+      onDownloadProgress: (event) => downloadProgress.push(event),
     })
 
     const projectRoot = join(root, 'maa-create-ocr')
@@ -603,48 +580,44 @@ describe('scaffold', () => {
         'resource/base/model/ocr/rec.onnx',
         'resource/base/model/ocr/keys.txt',
         'resource/base/model/ocr/README.md',
-        'resource/base/model/ocr/manifest.json'
-      ])
+        'resource/base/model/ocr/manifest.json',
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
     expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
-      assets.get('https://example.test/det.onnx')
+      assets.get('https://example.test/det.onnx'),
     )
-    expect(
-      await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))
-    ).toMatchObject({
+    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
       assets: expect.arrayContaining([
         expect.objectContaining({
           path: 'det.onnx',
           sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-          size: 4
-        })
-      ])
+          size: 4,
+        }),
+      ]),
     })
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
     expect(progress).toEqual([
       'Downloading OCR models...',
-      'OCR models downloaded.'
+      'OCR models downloaded.',
     ])
     expect(downloadProgress).toContainEqual(
       expect.objectContaining({
         path: 'det.onnx',
         downloadedBytes: 2,
-        totalBytes: 25
-      })
+        totalBytes: 25,
+      }),
     )
     expect(downloadProgress.at(-1)).toMatchObject({
       path: 'README.md',
       downloadedBytes: 25,
-      totalBytes: 25
+      totalBytes: 25,
     })
     const doctorOutput = (await runDoctor(projectRoot)).lines.join('\n')
     expect(doctorOutput).not.toContain('create-maa-project --update ocr-models')
-    expect(doctorOutput).not.toContain(
-      'Managed file changed since last accepted baseline: resource/base/model/ocr'
-    )
+    expect(doctorOutput).not.toContain('Managed file changed since last accepted baseline: resource/base/model/ocr')
   })
 
   it('keeps OCR pending when creation download fails', async () => {
@@ -657,21 +630,21 @@ describe('scaffold', () => {
       assetDownloader: async () => {
         throw new Error('offline OCR mirror')
       },
-      onProgress: (message) => progress.push(message)
+      onProgress: (message) => progress.push(message),
     })
 
     expect(progress).toEqual([
       'Downloading OCR models...',
-      'OCR model download failed (offline OCR mirror); continuing with a pending action.'
+      'OCR model download failed (offline OCR mirror); continuing with a pending action.',
     ])
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'ocr-model',
           reason: expect.stringContaining('offline OCR mirror'),
-          command: 'create-maa-project --update ocr-models'
-        })
-      ])
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
     )
   })
 
@@ -689,23 +662,23 @@ describe('scaffold', () => {
             path: 'asset.bin',
             url: 'https://example.test/asset.bin',
             sha256: sha256(content),
-            size: content.byteLength
-          }
-        ]
+            size: content.byteLength,
+          },
+        ],
       },
       {
         allowedPaths: [
-          'asset.bin'
-        ]
-      }
+          'asset.bin',
+        ],
+      },
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(assets).toEqual([
       expect.objectContaining({
         path: 'asset.bin',
-        content
-      })
+        content,
+      }),
     ])
   })
 
@@ -714,23 +687,20 @@ describe('scaffold', () => {
     const commands: string[] = []
     process.chdir(root)
 
-    const result = await createProject(
-      defaultOptions({ name: 'maa-create-skip-install', skipDownload: true }),
-      {
-        installNodeDeps: true,
-        commandRunner: async (_cwd, command) => {
-          commands.push(command)
-        }
-      }
-    )
+    const result = await createProject(defaultOptions({ name: 'maa-create-skip-install', skipDownload: true }), {
+      installNodeDeps: true,
+      commandRunner: async (_cwd, command) => {
+        commands.push(command)
+      },
+    })
 
     expect(commands).toEqual([])
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: 'node-deps'
-        })
-      ])
+          kind: 'node-deps',
+        }),
+      ]),
     )
   })
 
@@ -741,9 +711,11 @@ describe('scaffold', () => {
     process.chdir(join(root, 'maa-agent-test'))
 
     const result = await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
 
     expect(result.written).toContain('pyproject.toml')
@@ -757,20 +729,20 @@ describe('scaffold', () => {
         'agent/utils/params.py',
         'agent/utils/runtime_paths.py',
         'agent/utils/maa_types.py',
-        '.vscode/launch.json'
-      ])
+        '.vscode/launch.json',
+      ]),
     )
     expect(result.written).not.toContain('config/pip_config.json')
     expect(result.config.python).toMatchObject({
-      recommendedPython: '3.13'
+      recommendedPython: '3.13',
     })
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'python-deps',
-          command: 'create-maa-project --update python-deps'
-        })
-      ])
+          command: 'create-maa-project --update python-deps',
+        }),
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
     const pyproject = await readFile(join(root, 'maa-agent-test', 'pyproject.toml'), 'utf8')
@@ -784,25 +756,13 @@ describe('scaffold', () => {
     expect(await pathExists(join(root, 'maa-agent-test', 'pyrightconfig.json'))).toBe(false)
     const bootstrap = await readFile(join(root, 'maa-agent-test', 'agent/bootstrap.py'), 'utf8')
     const main = await readFile(join(root, 'maa-agent-test', 'agent/main.py'), 'utf8')
-    const agentRuntime = await readFile(
-      join(root, 'maa-agent-test', 'agent/agent_runtime.py'),
-      'utf8'
-    )
+    const agentRuntime = await readFile(join(root, 'maa-agent-test', 'agent/agent_runtime.py'), 'utf8')
     const custom = await readFile(join(root, 'maa-agent-test', 'agent/custom/__init__.py'), 'utf8')
-    const action = await readFile(
-      join(root, 'maa-agent-test', 'agent/custom/action/general.py'),
-      'utf8'
-    )
-    const reco = await readFile(
-      join(root, 'maa-agent-test', 'agent/custom/reco/general.py'),
-      'utf8'
-    )
+    const action = await readFile(join(root, 'maa-agent-test', 'agent/custom/action/general.py'), 'utf8')
+    const reco = await readFile(join(root, 'maa-agent-test', 'agent/custom/reco/general.py'), 'utf8')
     const pienv = await readFile(join(root, 'maa-agent-test', 'agent/utils/pienv.py'), 'utf8')
     const params = await readFile(join(root, 'maa-agent-test', 'agent/utils/params.py'), 'utf8')
-    const utilsInit = await readFile(
-      join(root, 'maa-agent-test', 'agent/utils/__init__.py'),
-      'utf8'
-    )
+    const utilsInit = await readFile(join(root, 'maa-agent-test', 'agent/utils/__init__.py'), 'utf8')
     const gitignore = await readFile(join(root, 'maa-agent-test', '.gitignore'), 'utf8')
     expect(bootstrap).toContain('debug')
     expect(bootstrap).toContain('agent-bootstrap.log')
@@ -834,49 +794,45 @@ describe('scaffold', () => {
       icon: 'logo.ico',
       agent: [
         {
-          child_exec: 'uv'
-        }
-      ]
+          child_exec: 'uv',
+        },
+      ],
     })
     expect(await readJson(join(root, 'maa-agent-test', 'package.json'))).toMatchObject({
       scripts: {
         'format:py': 'uv run --frozen ruff format .',
         'lint:py': 'uv run --frozen ruff check .',
         'typecheck:py': 'uv run --frozen pyright',
-        'check:py': 'pnpm lint:py && pnpm typecheck:py'
-      }
+        'check:py': 'pnpm lint:py && pnpm typecheck:py',
+      },
     })
-    expect(
-      await readJson(join(root, 'maa-agent-test', 'tools/schema/custom.action.schema.json'))
-    ).toMatchObject({
+    expect(await readJson(join(root, 'maa-agent-test', 'tools/schema/custom.action.schema.json'))).toMatchObject({
       $defs: {
         DisableNodeParam: {
           required: [
-            'node_name'
-          ]
+            'node_name',
+          ],
         },
         SubTaskParam: {
           required: [
-            'sub'
-          ]
-        }
-      }
+            'sub',
+          ],
+        },
+      },
     })
-    expect(
-      await readJson(join(root, 'maa-agent-test', 'tools/schema/custom.recognition.schema.json'))
-    ).toMatchObject({
+    expect(await readJson(join(root, 'maa-agent-test', 'tools/schema/custom.recognition.schema.json'))).toMatchObject({
       $defs: {
         ExampleRecognitionParam: {
           properties: {
             node: {
-              type: 'string'
+              type: 'string',
             },
             box: {
-              $ref: '#/$defs/Rect'
-            }
-          }
-        }
-      }
+              $ref: '#/$defs/Rect',
+            },
+          },
+        },
+      },
     })
     expect(await readJson(join(root, 'maa-agent-test', '.vscode/extensions.json'))).toMatchObject({
       recommendations: expect.arrayContaining([
@@ -884,29 +840,29 @@ describe('scaffold', () => {
         'charliermarsh.ruff',
         'ms-python.debugpy',
         'ms-python.python',
-        'ms-python.vscode-pylance'
-      ])
+        'ms-python.vscode-pylance',
+      ]),
     })
     expect(await readJson(join(root, 'maa-agent-test', '.vscode/settings.json'))).toMatchObject({
       'python.defaultInterpreterPath': '${workspaceFolder}/.venv',
       '[jsonc]': {
-        'editor.defaultFormatter': 'esbenp.prettier-vscode'
+        'editor.defaultFormatter': 'esbenp.prettier-vscode',
       },
       '[python]': {
-        'editor.defaultFormatter': 'charliermarsh.ruff'
+        'editor.defaultFormatter': 'charliermarsh.ruff',
       },
       'files.associations': {
         '*.json': 'jsonc',
-        '*.jsonc': 'jsonc'
+        '*.jsonc': 'jsonc',
       },
       'json.schemas': expect.arrayContaining([
         expect.objectContaining({
           fileMatch: [
-            '/interface.json'
+            '/interface.json',
           ],
-          url: './tools/schema/interface.schema.json'
-        })
-      ])
+          url: './tools/schema/interface.schema.json',
+        }),
+      ]),
     })
     expect(await readJson(join(root, 'maa-agent-test', '.vscode/launch.json'))).toMatchObject({
       configurations: expect.arrayContaining([
@@ -915,11 +871,11 @@ describe('scaffold', () => {
           type: 'debugpy',
           program: '${workspaceFolder}/agent/bootstrap.py',
           args: [
-            '{AGENT_ID}'
+            '{AGENT_ID}',
           ],
-          env: '{AGENT_ENV}'
-        })
-      ])
+          env: '{AGENT_ENV}',
+        }),
+      ]),
     })
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
@@ -929,21 +885,15 @@ describe('scaffold', () => {
           child_args: [
             'run',
             'python',
-            'agent/bootstrap.py'
-          ]
-        }
-      ]
+            'agent/bootstrap.py',
+          ],
+        },
+      ],
     })
-    const maatoolsConfig = await readFile(
-      join(root, 'maa-agent-test', 'maatools.config.mts'),
-      'utf8'
-    )
+    const maatoolsConfig = await readFile(join(root, 'maa-agent-test', 'maatools.config.mts'), 'utf8')
     expect(maatoolsConfig).toContain('vscode:')
     expect(maatoolsConfig).toContain("uv: 'Maa Agent: Debug'")
-    const releaseWorkflow = await readFile(
-      join(root, 'maa-agent-test', '.github/workflows/release.yml'),
-      'utf8'
-    )
+    const releaseWorkflow = await readFile(join(root, 'maa-agent-test', '.github/workflows/release.yml'), 'utf8')
     expect(releaseWorkflow).toContain('actions/setup-python@v6')
     expect(releaseWorkflow).toContain('astral-sh/setup-uv@v8.1.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
@@ -963,52 +913,61 @@ describe('scaffold', () => {
     process.chdir(join(root, 'maa-resource-test'))
 
     await addResourcePack(
-      defaultOptions({ add: [
-          'resource-pack'
-        ], resourcePackSlug: 'pack-a' })
+      defaultOptions({
+        add: [
+          'resource-pack',
+        ],
+        resourcePackSlug: 'pack-a',
+      }),
     )
     const result = await addResourcePack(
-      defaultOptions({ add: [
-          'resource-pack'
-        ], resourcePackSlug: 'pack-b', label: '  Pack B  ' })
+      defaultOptions({
+        add: [
+          'resource-pack',
+        ],
+        resourcePackSlug: 'pack-b',
+        label: '  Pack B  ',
+      }),
     )
 
     expect(result.config.resources.map((pack) => pack.path)).toEqual([
       'resource/base',
       'resource/pack-a',
-      'resource/pack-b'
+      'resource/pack-b',
     ])
     expect(result.config.resources.map((pack) => pack.label)).toEqual([
       'Base',
       'Pack A',
-      'Pack B'
+      'Pack B',
     ])
     expect(await readJson(join(root, 'maa-resource-test', 'interface.json'))).toMatchObject({
       resource: [
-        { name: 'base', path: [
-            './resource/base'
-          ] },
-        { name: 'pack-a', path: [
-            './resource/pack-a'
-          ] },
-        { name: 'pack-b', path: [
-            './resource/pack-b'
-          ] }
-      ]
+        {
+          name: 'base',
+          path: [
+            './resource/base',
+          ],
+        },
+        {
+          name: 'pack-a',
+          path: [
+            './resource/pack-a',
+          ],
+        },
+        {
+          name: 'pack-b',
+          path: [
+            './resource/pack-b',
+          ],
+        },
+      ],
     })
-    const maatoolsConfig = await readFile(
-      join(root, 'maa-resource-test', 'maatools.config.mts'),
-      'utf8'
-    )
+    const maatoolsConfig = await readFile(join(root, 'maa-resource-test', 'maatools.config.mts'), 'utf8')
     expect(maatoolsConfig).toContain("'./resource/base'")
     expect(maatoolsConfig).toContain("'./resource/pack-a'")
     expect(maatoolsConfig).toContain("'./resource/pack-b'")
-    expect(
-      await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/empty.png'))
-    ).toBe(true)
-    expect(
-      await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/.gitkeep'))
-    ).toBe(false)
+    expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/empty.png'))).toBe(true)
+    expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/.gitkeep'))).toBe(false)
   })
 
   it('adds a resource pack during project creation', async () => {
@@ -1019,38 +978,42 @@ describe('scaffold', () => {
       defaultOptions({
         name: 'maa-resource-create',
         add: [
-          'resource-pack'
+          'resource-pack',
         ],
         resourcePackSlug: 'pack-a',
-        label: 'Pack A'
-      })
+        label: 'Pack A',
+      }),
     )
 
     expect(result.config.resources.map((pack) => pack.path)).toEqual([
       'resource/base',
-      'resource/pack-a'
+      'resource/pack-a',
     ])
     expect(await readJson(join(root, 'maa-resource-create', 'interface.json'))).toMatchObject({
       resource: [
-        { name: 'base', path: [
-            './resource/base'
-          ] },
-        { name: 'pack-a', label: 'Pack A', path: [
-            './resource/pack-a'
-          ] }
-      ]
+        {
+          name: 'base',
+          path: [
+            './resource/base',
+          ],
+        },
+        {
+          name: 'pack-a',
+          label: 'Pack A',
+          path: [
+            './resource/pack-a',
+          ],
+        },
+      ],
     })
-    const maatoolsConfig = await readFile(
-      join(root, 'maa-resource-create', 'maatools.config.mts'),
-      'utf8'
-    )
+    const maatoolsConfig = await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')
     expect(maatoolsConfig).toContain("'./resource/base'")
     expect(maatoolsConfig).toContain("'./resource/pack-a'")
     expect(result.written).toEqual(
       expect.arrayContaining([
         'resource/pack-a/pipeline/.gitkeep',
-        'resource/pack-a/image/empty.png'
-      ])
+        'resource/pack-a/image/empty.png',
+      ]),
     )
   })
 
@@ -1062,10 +1025,14 @@ describe('scaffold', () => {
 
     await expect(
       addResourcePack(
-        defaultOptions({ add: [
-            'resource-pack'
-          ], resourcePackSlug: 'blank-label', label: '   ' })
-      )
+        defaultOptions({
+          add: [
+            'resource-pack',
+          ],
+          resourcePackSlug: 'blank-label',
+          label: '   ',
+        }),
+      ),
     ).rejects.toThrow('Resource pack label cannot be blank')
   })
 
@@ -1078,46 +1045,46 @@ describe('scaffold', () => {
     await writeFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), '# User Changelog\n', 'utf8')
     await writeFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), '# User Guide\n', 'utf8')
     const gitCliffResult = await addGitCliff(
-      defaultOptions({ add: [
-          'git-cliff'
-        ] })
+      defaultOptions({
+        add: [
+          'git-cliff',
+        ],
+      }),
     )
     const communityResult = await addCommunity(
-      defaultOptions({ add: [
-          'community'
-        ] })
+      defaultOptions({
+        add: [
+          'community',
+        ],
+      }),
     )
     const dependabotResult = await addDependabot(
-      defaultOptions({ add: [
-          'dependabot'
-        ] })
+      defaultOptions({
+        add: [
+          'dependabot',
+        ],
+      }),
     )
 
     expect(gitCliffResult.written).toEqual(
       expect.arrayContaining([
         '.github/cliff.toml',
-        '.github/workflows/release.yml'
-      ])
+        '.github/workflows/release.yml',
+      ]),
     )
     expect(gitCliffResult.skipped).not.toContain('CHANGELOG.md')
-    expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe(
-      '# User Changelog\n'
+    expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe('# User Changelog\n')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('新功能 | Features')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'body_path: release-assets/CHANGES.md',
     )
-    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain(
-      '[git.github]'
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'GITHUB_REPO: ${{ github.repository }}',
     )
-    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain(
-      '新功能 | Features'
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).not.toContain(
+      'orhun/git-cliff-action@v4',
     )
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('body_path: release-assets/CHANGES.md')
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('GITHUB_REPO: ${{ github.repository }}')
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')
-    ).not.toContain('orhun/git-cliff-action@v4')
     expect(communityResult.skipped).toContain('CONTRIBUTING.md')
     expect(communityResult.written).toEqual(
       expect.arrayContaining([
@@ -1125,41 +1092,39 @@ describe('scaffold', () => {
         '.github/ISSUE_TEMPLATE/bug_report.yml',
         '.github/ISSUE_TEMPLATE/feature_request.yml',
         '.github/ISSUE_TEMPLATE/other_issue.yml',
-        '.github/PULL_REQUEST_TEMPLATE.md'
-      ])
+        '.github/PULL_REQUEST_TEMPLATE.md',
+      ]),
     )
-    expect(await readFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), 'utf8')).toBe(
-      '# User Guide\n'
+    expect(await readFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), 'utf8')).toBe('# User Guide\n')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.yml'), 'utf8')).toContain(
+      'maa-addon-test 版本 / maa-addon-test Version',
     )
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.yml'), 'utf8')
-    ).toContain('maa-addon-test 版本 / maa-addon-test Version')
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
-    ).toContain('验证 / Validation')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')).toContain(
+      '验证 / Validation',
+    )
     expect(dependabotResult.written).toContain('.github/dependabot.yml')
-    expect(
-      await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')
-    ).toContain('package-ecosystem: npm')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')).toContain(
+      'package-ecosystem: npm',
+    )
     expect(await readJson(join(root, 'maa-addon-test', 'maa-project.json'))).toMatchObject({
       addons: {
         gitCliff: { enabled: true },
         community: { enabled: true },
-        dependabot: { enabled: true }
-      }
+        dependabot: { enabled: true },
+      },
     })
     expect(await readJson(join(root, 'maa-addon-test', 'maa-project.lock.json'))).toMatchObject({
       managedFiles: {
         '.github/cliff.toml': expect.any(Object),
-        '.github/dependabot.yml': expect.any(Object)
+        '.github/dependabot.yml': expect.any(Object),
       },
       createdFiles: {
         '.github/ISSUE_TEMPLATE/config.yml': expect.any(Object),
         '.github/ISSUE_TEMPLATE/bug_report.yml': expect.any(Object),
         '.github/ISSUE_TEMPLATE/feature_request.yml': expect.any(Object),
         '.github/ISSUE_TEMPLATE/other_issue.yml': expect.any(Object),
-        '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object)
-      }
+        '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object),
+      },
     })
   })
 
@@ -1171,33 +1136,32 @@ describe('scaffold', () => {
         name: 'maa-agent-github-runtime',
         template: 'agent',
         add: [
-          'dev-tools'
-        ]
-      })
+          'dev-tools',
+        ],
+      }),
     )
     process.chdir(join(root, 'maa-agent-github-runtime'))
 
     const result = await addGithub(
-      defaultOptions({ add: [
-          'github'
-        ] })
+      defaultOptions({
+        add: [
+          'github',
+        ],
+      }),
     )
 
     expect(result.config.addons.github).toMatchObject({
-      enabled: true
+      enabled: true,
     })
     expect(result.written).toEqual(
       expect.arrayContaining([
         '.github/workflows/release.yml',
-        'tools/sync-runtime.mjs'
-      ])
+        'tools/sync-runtime.mjs',
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
 
-    const syncRuntime = await readFile(
-      join(root, 'maa-agent-github-runtime', 'tools/sync-runtime.mjs'),
-      'utf8'
-    )
+    const syncRuntime = await readFile(join(root, 'maa-agent-github-runtime', 'tools/sync-runtime.mjs'), 'utf8')
     expect(syncRuntime).toContain('async function syncPythonRuntime')
     expect(syncRuntime).not.toContain('python-runtime')
 
@@ -1207,33 +1171,31 @@ describe('scaffold', () => {
       `import { writeFileSync } from 'node:fs'
 writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 `,
-      'utf8'
+      'utf8',
     )
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/sync-runtime.mjs'
+          'tools/sync-runtime.mjs',
         ],
         {
           cwd: join(root, 'maa-agent-github-runtime'),
           env: {
             ...process.env,
             CREATE_MAA_PROJECT_BIN: `${JSON.stringify(process.execPath)} ${JSON.stringify(fakeBin)}`,
-            CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'all'
-          }
-        }
-      )
+            CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'all',
+          },
+        },
+      ),
     ).resolves.toBeDefined()
     expect(
-      JSON.parse(
-        await readFile(join(root, 'maa-agent-github-runtime', 'sync-runtime-args.json'), 'utf8')
-      )
+      JSON.parse(await readFile(join(root, 'maa-agent-github-runtime', 'sync-runtime-args.json'), 'utf8')),
     ).toEqual([
       '--update',
       'maafw',
       '--update',
-      'runtime:mfa'
+      'runtime:mfa',
     ])
   })
 
@@ -1247,9 +1209,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         add: [
           'git-cliff',
           'community',
-          'dependabot'
-        ]
-      })
+          'dependabot',
+        ],
+      }),
     )
 
     expect(result.written).toEqual(
@@ -1261,51 +1223,41 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         '.github/ISSUE_TEMPLATE/feature_request.yml',
         '.github/ISSUE_TEMPLATE/other_issue.yml',
         '.github/PULL_REQUEST_TEMPLATE.md',
-        '.github/dependabot.yml'
-      ])
+        '.github/dependabot.yml',
+      ]),
     )
+    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
     expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
-      '[git.github]'
+      '问题修复 | Bug Fixes',
     )
-    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
-      '问题修复 | Bug Fixes'
+    expect(await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'body_path: release-assets/CHANGES.md',
     )
-    expect(
-      await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('body_path: release-assets/CHANGES.md')
-    expect(
-      await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('GITHUB_REPO: ${{ github.repository }}')
-    expect(
-      await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')
-    ).not.toContain('orhun/git-cliff-action@v4')
-    expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
-      'Contributing to maa-create-addons'
+    expect(await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'GITHUB_REPO: ${{ github.repository }}',
+    )
+    expect(await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')).not.toContain(
+      'orhun/git-cliff-action@v4',
     )
     expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain(
-      '开发 / Development'
+      'Contributing to maa-create-addons',
+    )
+    expect(await readFile(join(root, 'maa-create-addons', 'CONTRIBUTING.md'), 'utf8')).toContain('开发 / Development')
+    expect(await readFile(join(root, 'maa-create-addons', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')).toContain(
+      '检查清单 / Checklist',
     )
     expect(
-      await readFile(join(root, 'maa-create-addons', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
-    ).toContain('检查清单 / Checklist')
-    expect(
-      await readFile(
-        join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/feature_request.yml'),
-        'utf8'
-      )
+      await readFile(join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/feature_request.yml'), 'utf8'),
     ).toContain('需求建议 / Feature Request')
-    expect(
-      await readFile(
-        join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/other_issue.yml'),
-        'utf8'
-      )
-    ).toContain('maa-create-addons 版本 / maa-create-addons Version')
+    expect(await readFile(join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/other_issue.yml'), 'utf8')).toContain(
+      'maa-create-addons 版本 / maa-create-addons Version',
+    )
     expect(await readJson(join(root, 'maa-create-addons', 'maa-project.json'))).toMatchObject({
       addons: {
         gitCliff: { enabled: true },
         community: { enabled: true },
-        dependabot: { enabled: true }
-      }
+        dependabot: { enabled: true },
+      },
     })
   })
 
@@ -1315,26 +1267,33 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 
     await expect(
       createProject(
-        defaultOptions({ name: 'maa-reserved-addon', add: [
-            'mirrorchyan'
-          ] })
-      )
-    ).rejects.toThrow(
-      '--add mirrorchyan is reserved for v1.x and is not implemented in this version'
-    )
+        defaultOptions({
+          name: 'maa-reserved-addon',
+          add: [
+            'mirrorchyan',
+          ],
+        }),
+      ),
+    ).rejects.toThrow('--add mirrorchyan is reserved for v1.x and is not implemented in this version')
     await expect(
       createProject(
-        defaultOptions({ name: 'maa-old-changelog-addon', add: [
-            'changelog'
-          ] })
-      )
+        defaultOptions({
+          name: 'maa-old-changelog-addon',
+          add: [
+            'changelog',
+          ],
+        }),
+      ),
     ).rejects.toThrow('Unsupported add-on: changelog')
     await expect(
       createProject(
-        defaultOptions({ name: 'maa-unknown-addon', add: [
-            'unknown-addon'
-          ] })
-      )
+        defaultOptions({
+          name: 'maa-unknown-addon',
+          add: [
+            'unknown-addon',
+          ],
+        }),
+      ),
     ).rejects.toThrow('Unsupported add-on: unknown-addon')
   })
 
@@ -1343,9 +1302,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(root)
 
     const result = await createProject(
-      defaultOptions({ name: 'maa-git-cliff-addon', add: [
-          'git-cliff'
-        ] })
+      defaultOptions({
+        name: 'maa-git-cliff-addon',
+        add: [
+          'git-cliff',
+        ],
+      }),
     )
 
     expect(result.written).toEqual(
@@ -1353,25 +1315,25 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         '.github/cliff.toml',
         '.github/workflows/check.yml',
         '.github/workflows/release.yml',
-        'package.json'
-      ])
+        'package.json',
+      ]),
     )
     expect(await readJson(join(root, 'maa-git-cliff-addon', 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        gitCliff: { enabled: true }
-      }
+        gitCliff: { enabled: true },
+      },
     })
-    expect(
-      await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('body_path: release-assets/CHANGES.md')
-    expect(
-      await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
-    ).toContain('GITHUB_REPO: ${{ github.repository }}')
-    expect(
-      await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')
-    ).not.toContain('orhun/git-cliff-action@v4')
+    expect(await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'body_path: release-assets/CHANGES.md',
+    )
+    expect(await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'GITHUB_REPO: ${{ github.repository }}',
+    )
+    expect(await readFile(join(root, 'maa-git-cliff-addon', '.github/workflows/release.yml'), 'utf8')).not.toContain(
+      'orhun/git-cliff-action@v4',
+    )
   })
 
   it('supports auto-format during project creation', async () => {
@@ -1379,9 +1341,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(root)
 
     const result = await createProject(
-      defaultOptions({ name: 'maa-auto-format-create', add: [
-          'auto-format'
-        ] })
+      defaultOptions({
+        name: 'maa-auto-format-create',
+        add: [
+          'auto-format',
+        ],
+      }),
     )
 
     expect(result.written).toEqual(
@@ -1389,20 +1354,17 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         '.github/workflows/check.yml',
         '.github/workflows/release.yml',
         '.github/workflows/format.yml',
-        'package.json'
-      ])
+        'package.json',
+      ]),
     )
     expect(await readJson(join(root, 'maa-auto-format-create', 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        autoFormat: { enabled: true }
-      }
+        autoFormat: { enabled: true },
+      },
     })
-    const formatWorkflow = await readFile(
-      join(root, 'maa-auto-format-create', '.github/workflows/format.yml'),
-      'utf8'
-    )
+    const formatWorkflow = await readFile(join(root, 'maa-auto-format-create', '.github/workflows/format.yml'), 'utf8')
     expect(formatWorkflow).toContain('pnpm format')
     expect(formatWorkflow).toContain('pnpm format:py')
     expect(formatWorkflow).toContain('[skip changelog]')
@@ -1417,29 +1379,31 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(projectRoot)
 
     const result = await applyIncrementalAddons(
-      defaultOptions({ add: [
-          'auto-format'
-        ] })
+      defaultOptions({
+        add: [
+          'auto-format',
+        ],
+      }),
     )
 
     expect(result?.written).toEqual(
       expect.arrayContaining([
-        '.github/workflows/format.yml'
-      ])
+        '.github/workflows/format.yml',
+      ]),
     )
     expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        autoFormat: { enabled: true }
-      }
+        autoFormat: { enabled: true },
+      },
     })
     await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/format.yml'))).resolves.toBe(true)
     expect(await readFile(join(projectRoot, '.github/workflows/format.yml'), 'utf8')).toContain(
-      'git commit -m "style: auto format code [skip changelog]"'
+      'git commit -m "style: auto format code [skip changelog]"',
     )
   })
 
@@ -1448,9 +1412,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(root)
 
     const result = await createProject(
-      defaultOptions({ name: 'maa-optimize-images-create', add: [
-          'optimize-images'
-        ] })
+      defaultOptions({
+        name: 'maa-optimize-images-create',
+        add: [
+          'optimize-images',
+        ],
+      }),
     )
 
     expect(result.written).toEqual(
@@ -1459,39 +1426,34 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         '.github/workflows/release.yml',
         '.github/workflows/optimize-images.yml',
         'tools/optimize-images.mjs',
-        'package.json'
-      ])
+        'package.json',
+      ]),
     )
-    expect(
-      await readJson(join(root, 'maa-optimize-images-create', 'maa-project.json'))
-    ).toMatchObject({
+    expect(await readJson(join(root, 'maa-optimize-images-create', 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        optimizeImages: { enabled: true }
-      }
+        optimizeImages: { enabled: true },
+      },
     })
     expect(await readJson(join(root, 'maa-optimize-images-create', 'package.json'))).toMatchObject({
       scripts: {
-        'optimize:images': 'node tools/optimize-images.mjs'
-      }
+        'optimize:images': 'node tools/optimize-images.mjs',
+      },
     })
     const optimizeWorkflow = await readFile(
       join(root, 'maa-optimize-images-create', '.github/workflows/optimize-images.yml'),
-      'utf8'
+      'utf8',
     )
     expect(optimizeWorkflow).toContain('baptiste0928/cargo-install@v3')
     expect(optimizeWorkflow).toContain("github.actor != 'github-actions[bot]'")
     expect(optimizeWorkflow).toContain('[skip changelog]')
     expect(optimizeWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"')
     expect(optimizeWorkflow).not.toContain('actions-js/push')
-    const optimizeScript = await readFile(
-      join(root, 'maa-optimize-images-create', 'tools/optimize-images.mjs'),
-      'utf8'
-    )
+    const optimizeScript = await readFile(join(root, 'maa-optimize-images-create', 'tools/optimize-images.mjs'), 'utf8')
     expect(optimizeScript).toContain('function runOxipng(args)')
-    expect(optimizeScript).toContain("'--fast'")
-    expect(optimizeScript).toContain("'-Z'")
+    expect(optimizeScript).toContain('"--fast"')
+    expect(optimizeScript).toContain('"-Z"')
   })
 
   it('adds optimize-images files to an existing project', async () => {
@@ -1502,39 +1464,39 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(projectRoot)
 
     const result = await applyIncrementalAddons(
-      defaultOptions({ add: [
-          'optimize-images'
-        ] })
+      defaultOptions({
+        add: [
+          'optimize-images',
+        ],
+      }),
     )
 
     expect(result?.written).toEqual(
       expect.arrayContaining([
         '.github/workflows/optimize-images.yml',
         'tools/optimize-images.mjs',
-        'package.json'
-      ])
+        'package.json',
+      ]),
     )
     expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        optimizeImages: { enabled: true }
-      }
+        optimizeImages: { enabled: true },
+      },
     })
     expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
       scripts: {
-        'optimize:images': 'node tools/optimize-images.mjs'
-      }
+        'optimize:images': 'node tools/optimize-images.mjs',
+      },
     })
     await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
-    await expect(
-      pathExists(join(projectRoot, '.github/workflows/optimize-images.yml'))
-    ).resolves.toBe(true)
-    expect(
-      await readFile(join(projectRoot, '.github/workflows/optimize-images.yml'), 'utf8')
-    ).toContain('node tools/optimize-images.mjs')
+    await expect(pathExists(join(projectRoot, '.github/workflows/optimize-images.yml'))).resolves.toBe(true)
+    expect(await readFile(join(projectRoot, '.github/workflows/optimize-images.yml'), 'utf8')).toContain(
+      'node tools/optimize-images.mjs',
+    )
   })
 
   it('records schema-sync add-on state during project creation', async () => {
@@ -1542,37 +1504,38 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(root)
 
     const result = await createProject(
-      defaultOptions({ name: 'maa-schema-sync-create', add: [
-          'schema-sync'
-        ] })
+      defaultOptions({
+        name: 'maa-schema-sync-create',
+        add: [
+          'schema-sync',
+        ],
+      }),
     )
 
     expect(result.written).toEqual(
       expect.arrayContaining([
         '.github/workflows/schema-sync.yml',
-        'tools/sync-schema.mjs'
-      ])
+        'tools/sync-schema.mjs',
+      ]),
     )
     expect(await readJson(join(root, 'maa-schema-sync-create', 'maa-project.json'))).toMatchObject({
       addons: {
-        schemaSync: { enabled: true }
-      }
+        schemaSync: { enabled: true },
+      },
     })
     expect(await readJson(join(root, 'maa-schema-sync-create', 'package.json'))).toMatchObject({
       scripts: {
-        'sync:schema': 'node tools/sync-schema.mjs'
-      }
+        'sync:schema': 'node tools/sync-schema.mjs',
+      },
     })
     const schemaSyncWorkflow = await readFile(
       join(root, 'maa-schema-sync-create', '.github/workflows/schema-sync.yml'),
-      'utf8'
+      'utf8',
     )
     expect(schemaSyncWorkflow).toContain('if: github.event.repository.fork == false')
     expect(schemaSyncWorkflow).toContain('git push')
     expect(schemaSyncWorkflow).toContain('git add tools/schema')
-    expect(schemaSyncWorkflow).toContain(
-      'git commit -m "chore: sync MaaFW schema [skip changelog]"'
-    )
+    expect(schemaSyncWorkflow).toContain('git commit -m "chore: sync MaaFW schema [skip changelog]"')
     expect(schemaSyncWorkflow).not.toContain('create-pull-request')
     expect(schemaSyncWorkflow).not.toContain('pull-requests: write')
   })
@@ -1580,17 +1543,21 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
   it('uses shared add-on semantics from the incremental entrypoint', async () => {
     await expect(
       applyIncrementalAddons(
-        defaultOptions({ add: [
-            'ci'
-          ] })
-      )
+        defaultOptions({
+          add: [
+            'ci',
+          ],
+        }),
+      ),
     ).rejects.toThrow('Unsupported add-on: ci')
     await expect(
       applyIncrementalAddons(
-        defaultOptions({ add: [
-            'schema-sync'
-          ] })
-      )
+        defaultOptions({
+          add: [
+            'schema-sync',
+          ],
+        }),
+      ),
     ).rejects.toThrow('No maa-project.json found')
   })
 
@@ -1602,31 +1569,33 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(projectRoot)
 
     const result = await applyIncrementalAddons(
-      defaultOptions({ add: [
-          'schema-sync'
-        ] })
+      defaultOptions({
+        add: [
+          'schema-sync',
+        ],
+      }),
     )
 
     expect(result?.written).toEqual(
       expect.arrayContaining([
         '.github/workflows/schema-sync.yml',
-        'tools/sync-schema.mjs'
-      ])
+        'tools/sync-schema.mjs',
+      ]),
     )
     expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
       addons: {
         devTools: { enabled: true },
         github: { enabled: true },
-        schemaSync: { enabled: true }
-      }
+        schemaSync: { enabled: true },
+      },
     })
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(true)
     expect(await pathExists(join(projectRoot, '.github/workflows/release.yml'))).toBe(true)
     expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(true)
     expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
       scripts: {
-        'sync:schema': 'node tools/sync-schema.mjs'
-      }
+        'sync:schema': 'node tools/sync-schema.mjs',
+      },
     })
   })
 
@@ -1642,9 +1611,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(projectRoot)
 
     await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
-    const result = await syncProject(
-      defaultOptions({ sync: 'display-name', displayName: 'Maa Sync' })
-    )
+    const result = await syncProject(defaultOptions({ sync: 'display-name', displayName: 'Maa Sync' }))
 
     expect(result.config.project.version).toBe('0.2.0')
     expect(result.config.project.displayName).toBe('Maa Sync')
@@ -1652,12 +1619,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       name: 'maasync',
       label: 'Maa Sync',
       version: 'v0.2.0',
-      icon: 'logo.ico'
+      icon: 'logo.ico',
     })
     expect(await readJson(join(root, 'MaaSync', 'package.json'))).toMatchObject({
       name: 'maasync',
       version: '0.2.0',
-      license: 'AGPL-3.0-or-later'
+      license: 'AGPL-3.0-or-later',
     })
   })
 
@@ -1667,9 +1634,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     await createProject(defaultOptions({ name: 'maa-blank-name-test' }))
     process.chdir(join(root, 'maa-blank-name-test'))
 
-    await expect(
-      syncProject(defaultOptions({ sync: 'display-name', displayName: '   ' }))
-    ).rejects.toThrow('--sync display-name requires --name <display-name>')
+    await expect(syncProject(defaultOptions({ sync: 'display-name', displayName: '   ' }))).rejects.toThrow(
+      '--sync display-name requires --name <display-name>',
+    )
   })
 
   it('syncs agent pyproject version metadata', async () => {
@@ -1678,15 +1645,17 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
     process.chdir(join(root, 'maa-pyproject-sync'))
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
 
     await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
 
     expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
-      'name = "maa-pyproject-sync"\nversion = "0.2.0"'
+      'name = "maa-pyproject-sync"\nversion = "0.2.0"',
     )
   })
 
@@ -1700,10 +1669,10 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 
     expect(result.config.license.spdx).toBe('MIT')
     expect(await readJson(join(root, 'maa-license-test', 'maa-project.json'))).toMatchObject({
-      license: { spdx: 'MIT' }
+      license: { spdx: 'MIT' },
     })
     expect(await readJson(join(root, 'maa-license-test', 'package.json'))).toMatchObject({
-      license: 'MIT'
+      license: 'MIT',
     })
   })
 
@@ -1714,15 +1683,15 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(join(root, 'maa-github-test'))
 
     const result = await syncProject(
-      defaultOptions({ sync: 'github-url', syncValue: 'https://github.com/MaaXYZ/MaaTest/' })
+      defaultOptions({ sync: 'github-url', syncValue: 'https://github.com/MaaXYZ/MaaTest/' }),
     )
 
     expect(result.config.project.github).toBe('https://github.com/MaaXYZ/MaaTest')
     expect(await readJson(join(root, 'maa-github-test', 'interface.json'))).toMatchObject({
-      github: 'https://github.com/MaaXYZ/MaaTest'
+      github: 'https://github.com/MaaXYZ/MaaTest',
     })
     expect((await runDoctor(join(root, 'maa-github-test'))).lines.join('\n')).toContain(
-      'Interface metadata matches project config'
+      'Interface metadata matches project config',
     )
   })
 
@@ -1737,10 +1706,10 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       'https://example.com/MaaXYZ/MaaTest',
       'https://github.com/MaaXYZ',
       'https://github.com/MaaXYZ/MaaTest/issues/1',
-      'https://github.com/MaaXYZ/MaaTest?tab=readme'
+      'https://github.com/MaaXYZ/MaaTest?tab=readme',
     ]) {
       await expect(syncProject(defaultOptions({ sync: 'github-url', syncValue }))).rejects.toThrow(
-        'Use an HTTPS GitHub repository URL'
+        'Use an HTTPS GitHub repository URL',
       )
     }
   })
@@ -1755,7 +1724,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 
     expect(result.config.network.mode).toBe('official')
     expect(await readJson(join(root, 'maa-network-test', 'maa-project.json'))).toMatchObject({
-      network: { mode: 'official' }
+      network: { mode: 'official' },
     })
   })
 
@@ -1763,9 +1732,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(
-      defaultOptions({ name: 'maa-controller-test', controllers: [
-          'Win32'
-        ] })
+      defaultOptions({
+        name: 'maa-controller-test',
+        controllers: [
+          'Win32',
+        ],
+      }),
     )
     const projectRoot = join(root, 'maa-controller-test')
     const interfacePath = join(projectRoot, 'interface.json')
@@ -1783,8 +1755,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 
     expect(await readJson(interfacePath)).toMatchObject({
       controller: [
-        { name: 'Windows', label: 'Windows app', type: 'Win32' }
-      ]
+        { name: 'Windows', label: 'Windows app', type: 'Win32' },
+      ],
     })
     expect(report.lines.join('\n')).toContain('Interface metadata matches project config')
   })
@@ -1793,18 +1765,14 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
 
-    await expect(createProject(defaultOptions({ name: '测试项目' }))).rejects.toThrow(
-      'Project ID cannot be inferred'
-    )
+    await expect(createProject(defaultOptions({ name: '测试项目' }))).rejects.toThrow('Project ID cannot be inferred')
   })
 
   it('supports Chinese display name with an ASCII project slug', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
 
-    const result = await createProject(
-      defaultOptions({ name: 'maa-helper', displayName: '  明日方舟助手  ' })
-    )
+    const result = await createProject(defaultOptions({ name: 'maa-helper', displayName: '  明日方舟助手  ' }))
 
     expect(result.config.project.slug).toBe('maa-helper')
     expect(result.config.project.displayName).toBe('明日方舟助手')
@@ -1814,18 +1782,16 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
 
-    await expect(
-      createProject(defaultOptions({ name: 'maa-blank-display', displayName: '   ' }))
-    ).rejects.toThrow('Project display name cannot be blank')
+    await expect(createProject(defaultOptions({ name: 'maa-blank-display', displayName: '   ' }))).rejects.toThrow(
+      'Project display name cannot be blank',
+    )
   })
 
   it('supports Chinese directory names when slug is provided', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
 
-    const result = await createProject(
-      defaultOptions({ name: '明日方舟助手', slug: 'arknights-helper' })
-    )
+    const result = await createProject(defaultOptions({ name: '明日方舟助手', slug: 'arknights-helper' }))
 
     expect(result.root).toBe(join(root, '明日方舟助手'))
     expect(result.config.project.slug).toBe('arknights-helper')
@@ -1844,10 +1810,10 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(await readJson(join(root, 'MaaXX', 'interface.json'))).toMatchObject({
       name: 'maaxx',
       label: 'MaaXX',
-      icon: 'logo.ico'
+      icon: 'logo.ico',
     })
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"'
+      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"',
     )
     expect(await readFile(join(root, 'MaaXX', 'README.md'), 'utf8')).toContain('# MaaXX')
   })
@@ -1878,9 +1844,11 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const projectRoot = join(root, 'maa-interface-agent-test')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
@@ -1889,9 +1857,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       {
         child_exec: [
           'python',
-          'wrong.py'
-        ]
-      }
+          'wrong.py',
+        ],
+      },
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
 
@@ -1941,12 +1909,12 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     packageJson.devDependencies = {
       ...(packageJson.devDependencies ?? {}),
       '@nekosu/maa-tools': '^0.4.0',
-      prettier: '^3.8.4'
+      prettier: '^3.8.4',
     }
     packageJson.scripts = {
       ...(packageJson.scripts ?? {}),
       'format:check': 'prettier . --check',
-      'check:maa': 'maa-tools check'
+      'check:maa': 'maa-tools check',
     }
     await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
 
@@ -1959,9 +1927,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(output).toContain('package.json @nekosu/maa-tools must be pinned to 1.0.24')
     expect(output).toContain('package.json devDependencies.prettier must be pinned to 3.8.4')
     expect(output).toContain('package.json scripts.format:check must be prettier --check .')
-    expect(output).toContain(
-      'package.json scripts.check:maa must use local pnpm exec maa-tools check'
-    )
+    expect(output).toContain('package.json scripts.check:maa must use local pnpm exec maa-tools check')
     expect(output).toContain('create-maa-project --update template')
   })
 
@@ -1972,9 +1938,11 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const projectRoot = join(root, 'maa-agent-package-tooling-test')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     const packagePath = join(projectRoot, 'package.json')
     const packageJson = (await readJson(packagePath)) as {
@@ -1987,9 +1955,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const output = report.lines.join('\n')
 
     expect(report.ok).toBe(false)
-    expect(output).toContain(
-      'package.json scripts.check:py must be pnpm lint:py && pnpm typecheck:py'
-    )
+    expect(output).toContain('package.json scripts.check:py must be pnpm lint:py && pnpm typecheck:py')
     expect(output).toContain('create-maa-project --update template')
   })
 
@@ -2009,7 +1975,7 @@ jobs:
         with:
           node-version: 22
 `,
-      'utf8'
+      'utf8',
     )
 
     const report = await runDoctor(projectRoot)
@@ -2038,11 +2004,9 @@ jobs:
 
     expect(report.ok).toBe(false)
     expect(output).toContain('.vscode/settings.json editor.formatOnSave must be true')
+    expect(output).toContain('.vscode/settings.json [jsonc] editor.defaultFormatter must be esbenp.prettier-vscode')
     expect(output).toContain(
-      '.vscode/settings.json [jsonc] editor.defaultFormatter must be esbenp.prettier-vscode'
-    )
-    expect(output).toContain(
-      '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json'
+      '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
     expect(output).toContain('create-maa-project --update template')
   })
@@ -2054,9 +2018,11 @@ jobs:
     const projectRoot = join(root, 'maa-pyproject-doctor')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     await writeFile(
       join(projectRoot, 'pyproject.toml'),
@@ -2068,7 +2034,7 @@ version = "9.9.9"
 name = "ignored"
 version = "ignored"
 `,
-      'utf8'
+      'utf8',
     )
 
     const report = await runDoctor(projectRoot)
@@ -2090,13 +2056,13 @@ version = "ignored"
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.import = [
-      './tasks/missing.json'
+      './tasks/missing.json',
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
     await writeFile(
       join(projectRoot, 'tasks/tutorial.json'),
       JSON.stringify({ path: 'resource\\base' }, null, 4),
-      'utf8'
+      'utf8',
     )
     await writeFile(
       join(projectRoot, 'maatools.config.mts'),
@@ -2107,7 +2073,7 @@ version = "ignored"
   check: {}
 }
 `,
-      'utf8'
+      'utf8',
     )
 
     const report = await runDoctor(projectRoot)
@@ -2126,12 +2092,12 @@ export default defineConfig({
   resource: ['./resource/base']
 })
 `,
-      'utf8'
+      'utf8',
     )
     const defineConfigReport = await runDoctor(projectRoot)
     expect(defineConfigReport.ok).toBe(false)
     expect(defineConfigReport.lines.join('\n')).toContain(
-      'maatools.config.mts must not use @nekosu/maa-tools defineConfig'
+      'maatools.config.mts must not use @nekosu/maa-tools defineConfig',
     )
     expect(defineConfigReport.lines.join('\n')).toContain('create-maa-project --sync metadata')
   })
@@ -2146,10 +2112,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('project has pending actions')
 
     await clearPending(projectRoot, { writePnpmLock: false })
@@ -2158,10 +2124,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('pnpm-lock.yaml is missing; run pnpm install')
 
     await clearPending(projectRoot)
@@ -2170,10 +2136,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).resolves.toBeDefined()
 
     const packagePath = join(projectRoot, 'package.json')
@@ -2185,10 +2151,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('package.json name must match')
   })
 
@@ -2208,21 +2174,19 @@ export default defineConfig({
 
     async function expectPackageToolingError(
       patch: (packageJson: typeof originalPackageJson) => void,
-      message: string
+      message: string,
     ): Promise<void> {
-      const packageJson = JSON.parse(
-        JSON.stringify(originalPackageJson)
-      ) as typeof originalPackageJson
+      const packageJson = JSON.parse(JSON.stringify(originalPackageJson)) as typeof originalPackageJson
       patch(packageJson)
       await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
       await expect(
         execFileAsync(
           process.execPath,
           [
-            'tools/check-project.mjs'
+            'tools/check-project.mjs',
           ],
-          { cwd: projectRoot }
-        )
+          { cwd: projectRoot },
+        ),
       ).rejects.toThrow(message)
     }
 
@@ -2235,19 +2199,19 @@ export default defineConfig({
     await expectPackageToolingError((packageJson) => {
       packageJson.devDependencies = {
         ...(packageJson.devDependencies ?? {}),
-        '@nekosu/maa-tools': '^0.4.0'
+        '@nekosu/maa-tools': '^0.4.0',
       }
     }, 'package.json @nekosu/maa-tools must be pinned to 1.0.24')
     await expectPackageToolingError((packageJson) => {
       packageJson.devDependencies = {
         ...(packageJson.devDependencies ?? {}),
-        prettier: '^3.8.4'
+        prettier: '^3.8.4',
       }
     }, 'package.json devDependencies.prettier must be pinned to 3.8.4')
     await expectPackageToolingError((packageJson) => {
       packageJson.scripts = {
         ...(packageJson.scripts ?? {}),
-        'format:check': 'prettier . --check'
+        'format:check': 'prettier . --check',
       }
     }, 'package.json scripts.format:check must be prettier --check .')
     await expectPackageToolingError((packageJson) => {
@@ -2262,9 +2226,11 @@ export default defineConfig({
     const projectRoot = join(root, 'maa-agent-package-tooling-lint')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     await clearPending(projectRoot)
     const packagePath = join(projectRoot, 'package.json')
@@ -2278,10 +2244,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('package.json scripts.check:py must be pnpm lint:py && pnpm typecheck:py')
   })
 
@@ -2297,10 +2263,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('.node-version must pin Node 24')
 
     await writeFile(join(projectRoot, '.node-version'), '24\n', 'utf8')
@@ -2314,16 +2280,16 @@ jobs:
         with:
           node-version: 22
 `,
-      'utf8'
+      'utf8',
     )
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('.github/workflows/release.yml must use Node 24')
   })
 
@@ -2342,13 +2308,11 @@ jobs:
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
-    ).rejects.toThrow(
-      '.vscode/settings.json [jsonc] editor.defaultFormatter must be esbenp.prettier-vscode'
-    )
+        { cwd: projectRoot },
+      ),
+    ).rejects.toThrow('.vscode/settings.json [jsonc] editor.defaultFormatter must be esbenp.prettier-vscode')
 
     settings['[jsonc]'] = { 'editor.defaultFormatter': 'esbenp.prettier-vscode' }
     settings['json.schemas'] = []
@@ -2358,12 +2322,12 @@ jobs:
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow(
-      '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json'
+      '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
   })
 
@@ -2382,17 +2346,17 @@ jobs:
   check: {}
 }
 `,
-      'utf8'
+      'utf8',
     )
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('maatools.config.mts resource order differs')
 
     await writeFile(
@@ -2403,17 +2367,17 @@ export default defineConfig({
   resource: ['./resource/base']
 })
 `,
-      'utf8'
+      'utf8',
     )
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('maatools.config.mts must not use @nekosu/maa-tools defineConfig')
   })
 
@@ -2424,9 +2388,11 @@ export default defineConfig({
     const projectRoot = join(root, 'maa-interface-agent-lint')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     await clearPending(projectRoot)
 
@@ -2439,10 +2405,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('interface.json version must match')
 
     interfaceJson.version = 'v0.1.0'
@@ -2453,17 +2419,17 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('interface.json icon must be logo.ico')
 
     interfaceJson.icon = 'logo.ico'
     interfaceJson.agent = [
       {
-        child_exec: []
-      }
+        child_exec: [],
+      },
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
@@ -2471,10 +2437,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('interface.json agent must match')
   })
 
@@ -2485,9 +2451,11 @@ export default defineConfig({
     const projectRoot = join(root, 'maa-pyproject-lint')
     process.chdir(projectRoot)
     await addAgent(
-      defaultOptions({ add: [
-          'agent'
-        ] })
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
     )
     await clearPending(projectRoot)
 
@@ -2495,10 +2463,10 @@ export default defineConfig({
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).resolves.toBeDefined()
 
     await writeFile(
@@ -2507,17 +2475,17 @@ export default defineConfig({
 name = "wrong-agent"
 version = "0.1.0"
 `,
-      'utf8'
+      'utf8',
     )
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('pyproject.toml project.name must match')
 
     await writeFile(
@@ -2526,17 +2494,17 @@ version = "0.1.0"
 name = "maa-pyproject-lint"
 version = "0.1.0"
 `,
-      'utf8'
+      'utf8',
     )
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('pyproject.toml hatch wheel packages must include agent')
   })
 
@@ -2557,7 +2525,7 @@ version = "0.1.0"
 
     interfaceJson.interface_version = 2
     interfaceJson.resource = [
-      { name: 'base', path: './resource/base' }
+      { name: 'base', path: './resource/base' },
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
@@ -2574,18 +2542,16 @@ version = "0.1.0"
 
     const report = await runDoctor(projectRoot)
     expect(report.ok).toBe(false)
-    expect(report.lines.join('\n')).toContain(
-      'Managed file is missing: tools/schema/interface.schema.json'
-    )
+    expect(report.lines.join('\n')).toContain('Managed file is missing: tools/schema/interface.schema.json')
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('managed file is missing: tools/schema/interface.schema.json')
 
     await expect(runSchemaValidator(projectRoot)).rejects.toThrow('interface.schema.json')
@@ -2611,12 +2577,12 @@ version = "0.1.0"
         process.execPath,
         [
           'tools/build-release.mjs',
-          '--dry-run'
+          '--dry-run',
         ],
         {
-          cwd: projectRoot
-        }
-      )
+          cwd: projectRoot,
+        },
+      ),
     ).rejects.toThrow('release cannot run while project has pending actions')
 
     await clearPending(projectRoot)
@@ -2626,12 +2592,12 @@ version = "0.1.0"
         process.execPath,
         [
           'tools/build-release.mjs',
-          '--dry-run'
+          '--dry-run',
         ],
         {
-          cwd: projectRoot
-        }
-      )
+          cwd: projectRoot,
+        },
+      ),
     ).resolves.toBeDefined()
     expectReleaseScriptTargets(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8'))
 
@@ -2639,13 +2605,13 @@ version = "0.1.0"
       execFileAsync(
         process.execPath,
         [
-          'tools/build-release.mjs'
+          'tools/build-release.mjs',
         ],
         {
           cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF: '', GITHUB_REF_NAME: '' }
-        }
-      )
+          env: { ...process.env, GITHUB_REF: '', GITHUB_REF_NAME: '' },
+        },
+      ),
     ).rejects.toThrow('release build requires a SemVer Git tag')
 
     await expect(
@@ -2653,26 +2619,26 @@ version = "0.1.0"
         process.execPath,
         [
           'tools/build-release.mjs',
-          '--dry-run'
+          '--dry-run',
         ],
         {
           cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF: 'refs/tags/nightly', GITHUB_REF_NAME: '' }
-        }
-      )
+          env: { ...process.env, GITHUB_REF: 'refs/tags/nightly', GITHUB_REF_NAME: '' },
+        },
+      ),
     ).rejects.toThrow('release tag must be a SemVer tag')
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/build-release.mjs'
+          'tools/build-release.mjs',
         ],
         {
           cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' }
-        }
-      )
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
     ).rejects.toThrow('release package path is missing: .create-maa-project')
 
     const runtimePlatform = currentRuntimePlatformForTest()
@@ -2682,55 +2648,45 @@ version = "0.1.0"
     await writeFile(
       join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
       'gui',
-      'utf8'
+      'utf8',
     )
-    await writeFile(
-      join(guiRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'),
-      'gui-fw',
-      'utf8'
-    )
+    await writeFile(join(guiRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'gui-fw', 'utf8')
 
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/build-release.mjs'
+          'tools/build-release.mjs',
         ],
         {
           cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' }
-        }
-      )
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
     ).rejects.toThrow('release package path is missing: runtimes')
 
     await mkdir(join(projectRoot, 'runtimes', runtimePlatform, 'native'), { recursive: true })
     await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
     await mkdir(join(projectRoot, 'plugins'), { recursive: true })
-    await writeFile(
-      join(projectRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'),
-      'maafw-fw',
-      'utf8'
-    )
+    await writeFile(join(projectRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'maafw-fw', 'utf8')
     await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/build-release.mjs'
+          'tools/build-release.mjs',
         ],
         {
           cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' }
-        }
-      )
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
     ).resolves.toBeDefined()
-    const packageInterface = (await readJson(
-      join(projectRoot, 'dist/package/interface.json')
-    )) as Record<string, unknown>
-    const sourceInterface = (await readJson(join(projectRoot, 'interface.json'))) as Record<
+    const packageInterface = (await readJson(join(projectRoot, 'dist/package/interface.json'))) as Record<
       string,
       unknown
     >
+    const sourceInterface = (await readJson(join(projectRoot, 'interface.json'))) as Record<string, unknown>
     expect(packageInterface.version).toBe('v1.2.3')
     expect(packageInterface.icon).toBe('logo.ico')
     expect(packageInterface.$schema).toBeUndefined()
@@ -2745,8 +2701,8 @@ version = "0.1.0"
         'plugins',
         'resource',
         'runtimes',
-        'tasks'
-      ].sort()
+        'tasks',
+      ].sort(),
     )
     for (const devPath of [
       '.github',
@@ -2755,46 +2711,23 @@ version = "0.1.0"
       'pnpm-lock.yaml',
       'maa-project.json',
       'maa-project.lock.json',
-      'tools/schema'
+      'tools/schema',
     ]) {
       expect(await pathExists(join(projectRoot, 'dist/package', devPath))).toBe(false)
     }
-    expect(await readFile(join(projectRoot, 'dist/package/tasks/tutorial.json'), 'utf8')).toContain(
-      'Tutorial'
-    )
+    expect(await readFile(join(projectRoot, 'dist/package/tasks/tutorial.json'), 'utf8')).toContain('Tutorial')
     expect(await readFile(join(projectRoot, 'dist/package', guiEntrypoint), 'utf8')).toBe('gui')
     expect(
-      await readFile(
-        join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/libMaaCore.so'),
-        'utf8'
-      )
+      await readFile(join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/libMaaCore.so'), 'utf8'),
     ).toBe('maafw-fw')
     expect(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')).toContain(
-      'const version = releaseTag ?? sourceVersion'
+      'const version = releaseTag ?? sourceVersion',
     )
 
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.import = [
-      './README.md'
-    ]
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs'
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' }
-        }
-      )
-    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./README.md')
-
-    interfaceJson.import = [
-      './tasks/missing.json'
+      './README.md',
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
@@ -2803,10 +2736,28 @@ version = "0.1.0"
         process.execPath,
         [
           'tools/build-release.mjs',
-          '--dry-run'
         ],
-        { cwd: projectRoot }
-      )
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
+    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./README.md')
+
+    interfaceJson.import = [
+      './tasks/missing.json',
+    ]
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+          '--dry-run',
+        ],
+        { cwd: projectRoot },
+      ),
     ).rejects.toThrow('release referenced path does not exist')
   })
 
@@ -2829,32 +2780,22 @@ version = "0.1.0"
     for (const runtimePlatform of [
       'win-x64',
       'osx-arm64',
-      'linux-x64'
+      'linux-x64',
     ]) {
       const nativeRuntimeRoot = join(projectRoot, 'runtimes', runtimePlatform, 'native')
       await mkdir(nativeRuntimeRoot, { recursive: true })
       await writeFile(join(nativeRuntimeRoot, 'MaaPiCli'), 'cli', { mode: 0o666 })
       const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
       await mkdir(guiRoot, { recursive: true })
-      await writeFile(
-        join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
-        'gui',
-        { mode: 0o666 }
-      )
+      await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'), 'gui', {
+        mode: 0o666,
+      })
       if (runtimePlatform.startsWith('linux-')) {
-        const depsRoot = join(
-          projectRoot,
-          '.create-maa-project/runtime/python-deps',
-          runtimePlatform
-        )
+        const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps', runtimePlatform)
         await mkdir(depsRoot, { recursive: true })
         await writeFile(join(depsRoot, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
       } else {
-        const pythonRuntimeRoot = join(
-          projectRoot,
-          '.create-maa-project/runtime/python',
-          runtimePlatform
-        )
+        const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
         if (runtimePlatform.startsWith('win-')) {
           await mkdir(pythonRuntimeRoot, { recursive: true })
           await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
@@ -2868,22 +2809,20 @@ version = "0.1.0"
         execFileAsync(
           process.execPath,
           [
-            'tools/build-release.mjs'
+            'tools/build-release.mjs',
           ],
           {
             cwd: projectRoot,
             env: {
               ...process.env,
               GITHUB_REF_NAME: 'v2.0.0',
-              CREATE_MAA_PROJECT_RUNTIME_PLATFORM: runtimePlatform
-            }
-          }
-        )
+              CREATE_MAA_PROJECT_RUNTIME_PLATFORM: runtimePlatform,
+            },
+          },
+        ),
       ).resolves.toBeDefined()
 
-      const packageInterface = (await readJson(
-        join(projectRoot, 'dist/package/interface.json')
-      )) as {
+      const packageInterface = (await readJson(join(projectRoot, 'dist/package/interface.json'))) as {
         $schema?: unknown
         version?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
@@ -2899,22 +2838,15 @@ version = "0.1.0"
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
       expect(packageInterface.agent?.[0]?.child_args).toEqual([
         '-u',
-        'agent/bootstrap.py'
+        'agent/bootstrap.py',
       ])
-      expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(
-        packageInterface.agent?.[0]?.child_args
-      )
-      const packagedBootstrap = await readFile(
-        join(projectRoot, 'dist/package/agent/bootstrap.py'),
-        'utf8'
-      )
+      expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(packageInterface.agent?.[0]?.child_args)
+      const packagedBootstrap = await readFile(join(projectRoot, 'dist/package/agent/bootstrap.py'), 'utf8')
       expect(packagedBootstrap).toContain('Python >=3.13,<3.14 is required')
       expect(packagedBootstrap).toContain('agent-bootstrap.log')
       if (runtimePlatform.startsWith('linux-')) {
         expect(await pathExists(join(projectRoot, 'dist/package/python'))).toBe(false)
-        expect(
-          await pathExists(join(projectRoot, 'dist/package/deps/maafw-0.0.0-py3-none-any.whl'))
-        ).toBe(true)
+        expect(await pathExists(join(projectRoot, 'dist/package/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
       } else {
         expect(await pathExists(join(projectRoot, 'dist/package', expectedChildExec))).toBe(true)
       }
@@ -2922,20 +2854,12 @@ version = "0.1.0"
         expect(
           (
             await stat(
-              join(
-                projectRoot,
-                'dist/package',
-                mfaaEntrypointForTest('maa-agent-release-test', runtimePlatform)
-              )
+              join(projectRoot, 'dist/package', mfaaEntrypointForTest('maa-agent-release-test', runtimePlatform)),
             )
-          ).mode & 0o111
+          ).mode & 0o111,
         ).not.toBe(0)
         expect(
-          (
-            await stat(
-              join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/MaaPiCli')
-            )
-          ).mode & 0o111
+          (await stat(join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/MaaPiCli'))).mode & 0o111,
         ).not.toBe(0)
       }
     }
@@ -2950,29 +2874,23 @@ version = "0.1.0"
     await createProject(defaultOptions({ name: 'maa-diff-test' }))
     const projectRoot = join(root, 'maa-diff-test')
     const toolPath = join(projectRoot, 'tools/check-project.mjs')
-    await writeFile(
-      toolPath,
-      `${await readFile(toolPath, 'utf8')}\nconsole.log('local check')\n`,
-      'utf8'
-    )
+    await writeFile(toolPath, `${await readFile(toolPath, 'utf8')}\nconsole.log('local check')\n`, 'utf8')
 
     const diff = await diffManagedFiles(projectRoot)
     expect(diff.join('\n')).toContain('--- a/tools/check-project.mjs')
     expect(diff.join('\n')).toContain("+console.log('local check')")
 
     const accepted = await acceptManagedChanges(projectRoot, [
-      'tools/check-project.mjs'
+      'tools/check-project.mjs',
     ])
     const report = await runDoctor(projectRoot)
 
     expect(accepted).toEqual([
-      'tools/check-project.mjs'
+      'tools/check-project.mjs',
     ])
-    expect(report.lines.join('\n')).toContain(
-      'Managed file has accepted local changes: tools/check-project.mjs'
-    )
+    expect(report.lines.join('\n')).toContain('Managed file has accepted local changes: tools/check-project.mjs')
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
 
     const lock = (await readJson(join(projectRoot, 'maa-project.lock.json'))) as {
@@ -2999,12 +2917,12 @@ version = "0.1.0"
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
     await expect(
       acceptManagedChanges(projectRoot, [
-        'package.json'
-      ])
+        'package.json',
+      ]),
     ).rejects.toThrow('Not a managed file: package.json')
   })
 
@@ -3045,25 +2963,17 @@ version = "0.1.0"
     const projectRoot = join(root, 'maa-accept-all-test')
     const checkPath = join(projectRoot, 'tools/check-project.mjs')
     const validatePath = join(projectRoot, 'tools/validate-schema.mjs')
-    await writeFile(
-      checkPath,
-      `${await readFile(checkPath, 'utf8')}\nconsole.log('check')\n`,
-      'utf8'
-    )
-    await writeFile(
-      validatePath,
-      `${await readFile(validatePath, 'utf8')}\nconsole.log('schema')\n`,
-      'utf8'
-    )
+    await writeFile(checkPath, `${await readFile(checkPath, 'utf8')}\nconsole.log('check')\n`, 'utf8')
+    await writeFile(validatePath, `${await readFile(validatePath, 'utf8')}\nconsole.log('schema')\n`, 'utf8')
 
     const accepted = await acceptManagedChanges(projectRoot, [])
 
     expect(accepted).toEqual([
       'tools/check-project.mjs',
-      'tools/validate-schema.mjs'
+      'tools/validate-schema.mjs',
     ])
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
   })
 
@@ -3076,15 +2986,8 @@ version = "0.1.0"
 
     await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
 
-    expect(
-      await findBackedUpFile(
-        join(projectRoot, '.create-maa-project/backups'),
-        'maa-project.lock.json'
-      )
-    ).toBe(true)
-    expect(
-      await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.json')
-    ).toBe(true)
+    expect(await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.lock.json')).toBe(true)
+    expect(await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.json')).toBe(true)
   })
 
   it('records remote asset update requests as pending and rejects update all', async () => {
@@ -3094,33 +2997,37 @@ version = "0.1.0"
     process.chdir(join(root, 'maa-update-test'))
 
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
+      defaultOptions({
+        update: [
           'maafw',
-          'runtime:mfa'
-        ] }),
+          'runtime:mfa',
+        ],
+      }),
       {
-        productManifestResolver: async () => undefined
-      }
+        productManifestResolver: async () => undefined,
+      },
     )
 
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'runtime',
-          command: 'create-maa-project --update runtime:mfa'
+          command: 'create-maa-project --update runtime:mfa',
         }),
         expect.objectContaining({
           kind: 'maafw',
-          command: 'create-maa-project --update maafw'
-        })
-      ])
+          command: 'create-maa-project --update maafw',
+        }),
+      ]),
     )
     await expect(
       recordUpdateRequests(
-        defaultOptions({ update: [
-            'all'
-          ] })
-      )
+        defaultOptions({
+          update: [
+            'all',
+          ],
+        }),
+      ),
     ).rejects.toThrow('--update all is not supported')
   })
 
@@ -3139,18 +3046,18 @@ version = "0.1.0"
                 browser_download_url:
                   'https://github.com/MaaXYZ/MFAAvalonia/releases/download/v2.12.1/MFAAvalonia-v2.12.1-win-x64.zip',
                 digest: `sha256:${'a'.repeat(64)}`,
-                size: 94025878
+                size: 94025878,
               },
               {
                 name: 'MFAAvalonia-v2.12.1-android-arm64.zip',
                 browser_download_url: 'https://example.test/android.zip',
                 digest: `sha256:${'b'.repeat(64)}`,
-                size: 1
-              }
-            ]
+                size: 1,
+              },
+            ],
           }
-        }
-      }
+        },
+      },
     )
 
     expect(mfa).toMatchObject({
@@ -3164,10 +3071,10 @@ version = "0.1.0"
           extract: {
             product: 'MFAAvalonia',
             platform: 'win-x64',
-            format: 'zip'
-          }
-        }
-      ]
+            format: 'zip',
+          },
+        },
+      ],
     })
 
     const maafw = await resolveProductAssetManifestFromGithubRelease(
@@ -3183,12 +3090,12 @@ version = "0.1.0"
                 browser_download_url:
                   'https://github.com/MaaXYZ/MaaFramework/releases/download/v5.10.5/MAA-linux-x86_64-v5.10.5.zip',
                 digest: `sha256:${'c'.repeat(64)}`,
-                size: 70450783
-              }
-            ]
+                size: 70450783,
+              },
+            ],
           }
-        }
-      }
+        },
+      },
     )
 
     expect(maafw).toMatchObject({
@@ -3202,19 +3109,17 @@ version = "0.1.0"
           extract: {
             product: 'MaaFramework',
             platform: 'linux-x64',
-            format: 'zip'
-          }
-        }
-      ]
+            format: 'zip',
+          },
+        },
+      ],
     })
 
     const python = await resolveProductAssetManifestFromGithubRelease(
       { product: 'Python', channel: '20260610', platform: 'osx-arm64' },
       {
         fetchJson: async (url) => {
-          expect(url).toBe(
-            'https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20260610'
-          )
+          expect(url).toBe('https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20260610')
           return {
             tag_name: '20260610',
             assets: [
@@ -3223,24 +3128,24 @@ version = "0.1.0"
                 browser_download_url:
                   'https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
                 digest: `sha256:${'d'.repeat(64)}`,
-                size: 25135839
+                size: 25135839,
               },
               {
                 name: 'cpython-3.13.14+20260610-aarch64-apple-darwin-freethreaded-install_only_stripped.tar.gz',
                 browser_download_url: 'https://example.test/freethreaded.tar.gz',
                 digest: `sha256:${'e'.repeat(64)}`,
-                size: 1
+                size: 1,
               },
               {
                 name: 'cpython-3.12.20+20260610-aarch64-apple-darwin-install_only_stripped.tar.gz',
                 browser_download_url: 'https://example.test/py312.tar.gz',
                 digest: `sha256:${'f'.repeat(64)}`,
-                size: 1
-              }
-            ]
+                size: 1,
+              },
+            ],
           }
-        }
-      }
+        },
+      },
     )
 
     expect(python).toMatchObject({
@@ -3254,17 +3159,17 @@ version = "0.1.0"
           extract: {
             product: 'Python',
             platform: 'osx-arm64',
-            format: 'tar.gz'
-          }
-        }
-      ]
+            format: 'tar.gz',
+          },
+        },
+      ],
     })
 
     await withEnvironment(
       {
         GITHUB_ACTIONS: 'true',
         CREATE_MAA_PROJECT_RUNTIME_PLATFORM: undefined,
-        CREATE_MAA_PROJECT_PLATFORM: undefined
+        CREATE_MAA_PROJECT_PLATFORM: undefined,
       },
       async () => {
         await expect(
@@ -3273,11 +3178,11 @@ version = "0.1.0"
             {
               fetchJson: async () => {
                 throw new Error('should not fetch without explicit platform')
-              }
-            }
-          )
+              },
+            },
+          ),
         ).rejects.toThrow('Runtime platform must be explicit in GitHub Actions')
-      }
+      },
     )
   })
 
@@ -3292,19 +3197,21 @@ version = "0.1.0"
       {
         path: 'MFAAvalonia-v1/MFAAvalonia',
         content: Buffer.from('runner'),
-        mode: 0o755
+        mode: 0o755,
       },
       {
         path: 'MFAAvalonia-v1/libhostfxr.so',
         content: Buffer.from('library'),
-        mode: 0o644
-      }
+        mode: 0o644,
+      },
     ])
 
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'runtime:mfa'
-        ] }),
+      defaultOptions({
+        update: [
+          'runtime:mfa',
+        ],
+      }),
       {
         productManifestResolver: async () => ({
           schemaVersion: 1,
@@ -3319,31 +3226,27 @@ version = "0.1.0"
               extract: {
                 product: 'MFAAvalonia',
                 platform: 'linux-x64',
-                format: 'tar.gz'
-              }
-            }
-          ]
+                format: 'tar.gz',
+              },
+            },
+          ],
         }),
-        assetDownloader: async () => archive
-      }
+        assetDownloader: async () => archive,
+      },
     )
 
     expect(result.pending.some((item) => item.kind === 'runtime')).toBe(false)
     expect(result.written).toEqual(
       expect.arrayContaining([
         '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia',
-        '.create-maa-project/runtime/mfaa/linux-x64/libhostfxr.so'
-      ])
+        '.create-maa-project/runtime/mfaa/linux-x64/libhostfxr.so',
+      ]),
+    )
+    expect(await readFile(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'), 'utf8')).toBe(
+      'runner',
     )
     expect(
-      await readFile(
-        join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'),
-        'utf8'
-      )
-    ).toBe('runner')
-    expect(
-      (await stat(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia')))
-        .mode & 0o111
+      (await stat(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'))).mode & 0o111,
     ).not.toBe(0)
   })
 
@@ -3352,23 +3255,23 @@ version = "0.1.0"
       {
         path: 'MAA/bin/MaaAgentBinary',
         content: Buffer.from('agent'),
-        mode: 0o755
+        mode: 0o755,
       },
       {
         path: 'MAA/bin/libMaaCore.so',
         content: Buffer.from('core'),
-        mode: 0o755
+        mode: 0o755,
       },
       {
         path: 'MAA/share/MaaAgentBinary/MaaAgentServer',
         content: Buffer.from('server'),
-        mode: 0o755
+        mode: 0o755,
       },
       {
         path: 'MAA/bin/plugins/libMaaPlugin.so',
         content: Buffer.from('plugin'),
-        mode: 0o644
-      }
+        mode: 0o644,
+      },
     ])
 
     const assets = await downloadProjectManifestAssets(
@@ -3384,10 +3287,10 @@ version = "0.1.0"
             extract: {
               product: 'MaaFramework',
               platform: 'linux-x64',
-              format: 'tar.gz'
-            }
-          }
-        ]
+              format: 'tar.gz',
+            },
+          },
+        ],
       },
       {
         downloader: async () => archive,
@@ -3395,16 +3298,16 @@ version = "0.1.0"
           '.create-maa-project/runtime/',
           'runtimes/',
           'libs/',
-          'plugins/'
-        ]
-      }
+          'plugins/',
+        ],
+      },
     )
 
     expect(assets.map((asset) => asset.path).sort()).toEqual([
       'libs/MaaAgentBinary/MaaAgentServer',
       'plugins/linux-x64/libMaaPlugin.so',
       'runtimes/linux-x64/native/MaaAgentBinary',
-      'runtimes/linux-x64/native/libMaaCore.so'
+      'runtimes/linux-x64/native/libMaaCore.so',
     ])
   })
 
@@ -3418,23 +3321,25 @@ version = "0.1.0"
     const assets = new Map([
       [
         'https://example.test/MFAAvalonia.exe',
-        Buffer.from('runtime')
+        Buffer.from('runtime'),
       ],
       [
         'https://example.test/MaaAgentBinary',
-        Buffer.from('agent')
+        Buffer.from('agent'),
       ],
       [
         'https://example.test/plugin.dll',
-        Buffer.from('plugin')
-      ]
+        Buffer.from('plugin'),
+      ],
     ])
     const progress: string[] = []
     const requests: Array<{ product: string; channel?: string }> = []
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'runtime:mfa'
-        ] }),
+      defaultOptions({
+        update: [
+          'runtime:mfa',
+        ],
+      }),
       {
         productManifestResolver: async (request) => {
           requests.push(request)
@@ -3447,21 +3352,21 @@ version = "0.1.0"
                 path: '.create-maa-project/runtime/mfaa/win-x64/MFAAvalonia.exe',
                 url: 'https://example.test/MFAAvalonia.exe',
                 sha256: sha256(assets.get('https://example.test/MFAAvalonia.exe') as Buffer),
-                size: 7
+                size: 7,
               },
               {
                 path: 'libs/MaaAgentBinary/MaaAgentBinary',
                 url: 'https://example.test/MaaAgentBinary',
                 sha256: sha256(assets.get('https://example.test/MaaAgentBinary') as Buffer),
-                size: 5
+                size: 5,
               },
               {
                 path: 'plugins/win-x64/plugin.dll',
                 url: 'https://example.test/plugin.dll',
                 sha256: sha256(assets.get('https://example.test/plugin.dll') as Buffer),
-                size: 6
-              }
-            ]
+                size: 6,
+              },
+            ],
           }
         },
         assetDownloader: async (url) => {
@@ -3469,27 +3374,27 @@ version = "0.1.0"
           if (!content) throw new Error(`unexpected URL: ${url}`)
           return content
         },
-        onProgress: (message) => progress.push(message)
-      }
+        onProgress: (message) => progress.push(message),
+      },
     )
 
     expect(requests).toEqual([
-      { product: 'MFAAvalonia', channel: 'latest' }
+      { product: 'MFAAvalonia', channel: 'latest' },
     ])
     expect(result.written).toEqual(
       expect.arrayContaining([
         '.create-maa-project/runtime/mfaa/win-x64/MFAAvalonia.exe',
         'libs/MaaAgentBinary/MaaAgentBinary',
-        'plugins/win-x64/plugin.dll'
-      ])
+        'plugins/win-x64/plugin.dll',
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'runtime')).toBe(false)
-    expect(
-      await readFile(join(projectRoot, '.create-maa-project/runtime/mfaa/win-x64/MFAAvalonia.exe'))
-    ).toEqual(assets.get('https://example.test/MFAAvalonia.exe'))
+    expect(await readFile(join(projectRoot, '.create-maa-project/runtime/mfaa/win-x64/MFAAvalonia.exe'))).toEqual(
+      assets.get('https://example.test/MFAAvalonia.exe'),
+    )
     expect(progress).toEqual([
       'Resolving MFAAvalonia runtime assets...',
-      'MFAAvalonia runtime assets downloaded.'
+      'MFAAvalonia runtime assets downloaded.',
     ])
   })
 
@@ -3504,13 +3409,13 @@ version = "0.1.0"
       {
         path: 'python/install/bin/python3.13',
         content: Buffer.from('python'),
-        mode: 0o755
+        mode: 0o755,
       },
       {
         path: 'python/install/lib/python3.13/site-packages/README.txt',
         content: Buffer.from('site'),
-        mode: 0o644
-      }
+        mode: 0o644,
+      },
     ])
     const commands: Array<{ root: string; command: string; args: string[] }> = []
     const progress: string[] = []
@@ -3519,15 +3424,15 @@ version = "0.1.0"
       const result = await recordUpdateRequests(
         defaultOptions({
           update: [
-            'python-runtime'
-          ]
+            'python-runtime',
+          ],
         }),
         {
           productManifestResolver: async (request) => {
             expect(request).toEqual({
               product: 'Python',
               channel: 'latest',
-              platform: 'osx-arm64'
+              platform: 'osx-arm64',
             })
             return {
               schemaVersion: 1,
@@ -3542,42 +3447,35 @@ version = "0.1.0"
                   extract: {
                     product: 'Python',
                     platform: 'osx-arm64',
-                    format: 'tar.gz'
-                  }
-                }
-              ]
+                    format: 'tar.gz',
+                  },
+                },
+              ],
             }
           },
           assetDownloader: async () => archive,
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
           },
-          onProgress: (message) => progress.push(message)
-        }
+          onProgress: (message) => progress.push(message),
+        },
       )
 
       expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
       expect(result.written).toEqual(
         expect.arrayContaining([
           '.create-maa-project/runtime/python/osx-arm64/bin/python3',
-          '.create-maa-project/runtime/python/osx-arm64/lib/python3.13/site-packages/README.txt'
-        ])
+          '.create-maa-project/runtime/python/osx-arm64/lib/python3.13/site-packages/README.txt',
+        ]),
       )
       expect(
-        await readFile(
-          join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'),
-          'utf8'
-        )
+        await readFile(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'), 'utf8'),
       ).toBe('python')
       expect(
-        await readFile(
-          join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3.13'),
-          'utf8'
-        )
+        await readFile(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3.13'), 'utf8'),
       ).toBe('python')
       expect(
-        (await stat(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3')))
-          .mode & 0o111
+        (await stat(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'))).mode & 0o111,
       ).not.toBe(0)
     })
 
@@ -3592,13 +3490,13 @@ version = "0.1.0"
           '.create-maa-project/runtime/python/osx-arm64/bin/python3',
           '--system',
           '--requirement',
-          'requirements.txt'
-        ]
-      }
+          'requirements.txt',
+        ],
+      },
     ])
     expect(progress).toEqual([
       'Synchronizing Python release runtime assets...',
-      'Python release runtime synchronized.'
+      'Python release runtime synchronized.',
     ])
   })
 
@@ -3612,16 +3510,16 @@ version = "0.1.0"
     const archive = createZipArchive([
       {
         path: 'python.exe',
-        content: Buffer.from('python')
+        content: Buffer.from('python'),
       },
       {
         path: 'python313._pth',
-        content: Buffer.from('python313.zip\n.\n#import site\n')
+        content: Buffer.from('python313.zip\n.\n#import site\n'),
       },
       {
         path: 'Lib/site-packages/README.txt',
-        content: Buffer.from('site')
-      }
+        content: Buffer.from('site'),
+      },
     ])
     const commands: Array<{ root: string; command: string; args: string[] }> = []
     const progress: string[] = []
@@ -3631,8 +3529,8 @@ version = "0.1.0"
       const result = await recordUpdateRequests(
         defaultOptions({
           update: [
-            'python-runtime'
-          ]
+            'python-runtime',
+          ],
         }),
         {
           productManifestResolver: async () => {
@@ -3645,8 +3543,8 @@ version = "0.1.0"
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
           },
-          onProgress: (message) => progress.push(message)
-        }
+          onProgress: (message) => progress.push(message),
+        },
       )
 
       expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
@@ -3654,19 +3552,16 @@ version = "0.1.0"
         expect.arrayContaining([
           '.create-maa-project/runtime/python/win-arm64/python.exe',
           '.create-maa-project/runtime/python/win-arm64/python313._pth',
-          '.create-maa-project/runtime/python/win-arm64/Lib/site-packages/README.txt'
-        ])
+          '.create-maa-project/runtime/python/win-arm64/Lib/site-packages/README.txt',
+        ]),
       )
     })
 
     expect(urls).toEqual([
-      `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-arm64.zip`
+      `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-arm64.zip`,
     ])
     expect(
-      await readFile(
-        join(projectRoot, '.create-maa-project/runtime/python/win-arm64/python313._pth'),
-        'utf8'
-      )
+      await readFile(join(projectRoot, '.create-maa-project/runtime/python/win-arm64/python313._pth'), 'utf8'),
     ).toContain('import site\nLib\nLib\\site-packages\nDLLs\n')
     expect(commands).toEqual([
       {
@@ -3679,13 +3574,13 @@ version = "0.1.0"
           '.create-maa-project/runtime/python/win-arm64/python.exe',
           '--system',
           '--requirement',
-          'requirements.txt'
-        ]
-      }
+          'requirements.txt',
+        ],
+      },
     ])
     expect(progress).toEqual([
       'Synchronizing Python release runtime assets...',
-      'Python release runtime synchronized.'
+      'Python release runtime synchronized.',
     ])
   })
 
@@ -3703,8 +3598,8 @@ version = "0.1.0"
       const result = await recordUpdateRequests(
         defaultOptions({
           update: [
-            'python-runtime'
-          ]
+            'python-runtime',
+          ],
         }),
         {
           productManifestResolver: async () => {
@@ -3716,30 +3611,25 @@ version = "0.1.0"
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
             await mkdir(join(cwd, '.create-maa-project/runtime/python-deps/linux-arm64'), {
-              recursive: true
+              recursive: true,
             })
             await writeFile(
-              join(
-                cwd,
-                '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'
-              ),
+              join(cwd, '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'),
               'wheel',
-              'utf8'
+              'utf8',
             )
           },
-          onProgress: (message) => progress.push(message)
-        }
+          onProgress: (message) => progress.push(message),
+        },
       )
 
       expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
       expect(result.written).toEqual(
         expect.arrayContaining([
-          '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'
-        ])
+          '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl',
+        ]),
       )
-      expect(
-        await pathExists(join(projectRoot, '.create-maa-project/runtime/python/linux-arm64'))
-      ).toBe(false)
+      expect(await pathExists(join(projectRoot, '.create-maa-project/runtime/python/linux-arm64'))).toBe(false)
     })
 
     expect(commands).toEqual([
@@ -3756,13 +3646,13 @@ version = "0.1.0"
           '.create-maa-project/runtime/python-deps/linux-arm64',
           '--only-binary=:all:',
           '--platform',
-          'manylinux_2_28_aarch64'
-        ])
-      }
+          'manylinux_2_28_aarch64',
+        ]),
+      },
     ])
     expect(progress).toEqual([
       'Synchronizing Python release runtime assets...',
-      'Python release runtime synchronized.'
+      'Python release runtime synchronized.',
     ])
   })
 
@@ -3777,24 +3667,24 @@ version = "0.1.0"
       {
         GITHUB_ACTIONS: 'true',
         CREATE_MAA_PROJECT_RUNTIME_PLATFORM: undefined,
-        CREATE_MAA_PROJECT_PLATFORM: undefined
+        CREATE_MAA_PROJECT_PLATFORM: undefined,
       },
       async () => {
         await expect(
           recordUpdateRequests(
             defaultOptions({
               update: [
-                'python-runtime'
-              ]
+                'python-runtime',
+              ],
             }),
             {
               commandRunner: async () => {
                 throw new Error('should not run')
-              }
-            }
-          )
+              },
+            },
+          ),
         ).rejects.toThrow('Runtime platform must be explicit in GitHub Actions')
-      }
+      },
     )
   })
 
@@ -3812,31 +3702,33 @@ version = "0.1.0"
           0,
           1,
           2,
-          3
-        ])
+          3,
+        ]),
       ],
       [
         'https://example.test/rec.onnx',
         Buffer.from([
           4,
           5,
-          6
-        ])
+          6,
+        ]),
       ],
       [
         'https://example.test/keys.txt',
-        Buffer.from('hello\nworld\n')
+        Buffer.from('hello\nworld\n'),
       ],
       [
         'https://example.test/README.md',
-        Buffer.from('# OCR\n')
-      ]
+        Buffer.from('# OCR\n'),
+      ],
     ])
     const progress: string[] = []
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'ocr-models'
-        ] }),
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
       {
         ocrManifestResolver: async () => ({
           schemaVersion: 1,
@@ -3845,35 +3737,35 @@ version = "0.1.0"
               path: 'det.onnx',
               url: 'https://example.test/det.onnx',
               sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-              size: 4
+              size: 4,
             },
             {
               path: 'rec.onnx',
               url: 'https://example.test/rec.onnx',
               sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
-              size: 3
+              size: 3,
             },
             {
               path: 'keys.txt',
               url: 'https://example.test/keys.txt',
               sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
-              size: 12
+              size: 12,
             },
             {
               path: 'README.md',
               url: 'https://example.test/README.md',
               sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
-              size: 6
-            }
-          ]
+              size: 6,
+            },
+          ],
         }),
         assetDownloader: async (url) => {
           const content = assets.get(url)
           if (!content) throw new Error(`unexpected URL: ${url}`)
           return content
         },
-        onProgress: (message) => progress.push(message)
-      }
+        onProgress: (message) => progress.push(message),
+      },
     )
 
     expect(result.written).toEqual(
@@ -3882,30 +3774,28 @@ version = "0.1.0"
         'resource/base/model/ocr/rec.onnx',
         'resource/base/model/ocr/keys.txt',
         'resource/base/model/ocr/README.md',
-        'resource/base/model/ocr/manifest.json'
-      ])
+        'resource/base/model/ocr/manifest.json',
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
     expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
-      assets.get('https://example.test/det.onnx')
+      assets.get('https://example.test/det.onnx'),
     )
-    expect(
-      await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))
-    ).toMatchObject({
+    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
       assets: expect.arrayContaining([
         expect.objectContaining({
           path: 'det.onnx',
           sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-          size: 4
-        })
-      ])
+          size: 4,
+        }),
+      ]),
     })
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
     expect(progress).toEqual([
       'Downloading OCR models...',
-      'OCR models downloaded.'
+      'OCR models downloaded.',
     ])
   })
 
@@ -3923,23 +3813,25 @@ version = "0.1.0"
       {
         kind: 'schema',
         reason: 'Schema baseline update is pending.',
-        command: 'create-maa-project --update schema'
-      }
+        command: 'create-maa-project --update schema',
+      },
     ]
     await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
     await rm(join(projectRoot, 'tools/schema/interface.schema.json'))
     process.chdir(projectRoot)
 
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'schema'
-        ] })
+      defaultOptions({
+        update: [
+          'schema',
+        ],
+      }),
     )
 
     expect(result.written).toContain('tools/schema/interface.schema.json')
     expect(result.pending.some((item) => item.kind === 'schema')).toBe(false)
     expect(await readJson(join(projectRoot, 'tools/schema/interface.schema.json'))).toMatchObject({
-      title: 'MaaFramework Project Interface V2'
+      title: 'MaaFramework Project Interface V2',
     })
   })
 
@@ -3953,9 +3845,12 @@ version = "0.1.0"
     process.chdir(projectRoot)
 
     const preview = await previewTemplateUpdate(
-      defaultOptions({ update: [
-          'schema'
-        ], force: true })
+      defaultOptions({
+        update: [
+          'schema',
+        ],
+        force: true,
+      }),
     )
 
     expect(preview.join('\n')).toContain('--- a/tools/schema/interface.schema.json')
@@ -3972,10 +3867,12 @@ version = "0.1.0"
     process.chdir(projectRoot)
 
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
+      defaultOptions({
+        update: [
           'node-deps',
-          'python-deps'
-        ] }),
+          'python-deps',
+        ],
+      }),
       {
         commandRunner: async (cwd, command, args) => {
           commands.push({ root: cwd, command, args })
@@ -3988,17 +3885,25 @@ version = "0.1.0"
           if (command === 'uv' && args[0] === 'export') {
             await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\r\n', 'utf8')
           }
-        }
-      }
+        },
+      },
     )
 
     expect(commands).toEqual([
-      { root: projectRoot, command: 'pnpm', args: [
-          'install'
-        ] },
-      { root: projectRoot, command: 'uv', args: [
-          'lock'
-        ] },
+      {
+        root: projectRoot,
+        command: 'pnpm',
+        args: [
+          'install',
+        ],
+      },
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'lock',
+        ],
+      },
       {
         root: projectRoot,
         command: 'uv',
@@ -4009,9 +3914,9 @@ version = "0.1.0"
           '--no-hashes',
           '--no-emit-project',
           '--output-file',
-          'requirements.txt'
-        ]
-      }
+          'requirements.txt',
+        ],
+      },
     ])
     expect(result.written).toEqual(
       expect.arrayContaining([
@@ -4019,21 +3924,23 @@ version = "0.1.0"
         'uv.lock',
         'requirements.txt',
         'maa-project.json',
-        'maa-project.lock.json'
-      ])
+        'maa-project.lock.json',
+      ]),
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
     await writeFile(join(projectRoot, 'requirements.txt'), 'maa-fw==0.0.0\n', 'utf8')
     await clearPending(projectRoot)
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
 
     const templateUpdate = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'template'
-        ] })
+      defaultOptions({
+        update: [
+          'template',
+        ],
+      }),
     )
     expect(templateUpdate.written).not.toContain('uv.lock')
     expect(templateUpdate.written).not.toContain('requirements.txt')
@@ -4044,10 +3951,10 @@ version = "0.1.0"
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: projectRoot }
-      )
+        { cwd: projectRoot },
+      ),
     ).resolves.toBeDefined()
   })
 
@@ -4059,15 +3966,17 @@ version = "0.1.0"
 
     await expect(
       recordUpdateRequests(
-        defaultOptions({ update: [
-            'python-deps'
-          ] }),
+        defaultOptions({
+          update: [
+            'python-deps',
+          ],
+        }),
         {
           commandRunner: async () => {
             throw new Error('should not run')
-          }
-        }
-      )
+          },
+        },
+      ),
     ).rejects.toThrow('--update python-deps requires an Agent project')
   })
 
@@ -4081,10 +3990,10 @@ version = "0.1.0"
       recordUpdateRequests(
         defaultOptions({
           update: [
-            'python-runtime'
-          ]
-        })
-      )
+            'python-runtime',
+          ],
+        }),
+      ),
     ).rejects.toThrow('--update python-runtime requires an Agent project')
   })
 
@@ -4097,13 +4006,16 @@ version = "0.1.0"
     const toolPath = join(projectRoot, 'tools/check-project.mjs')
     await writeFile(toolPath, "console.log('old template')\n", 'utf8')
     await acceptManagedChanges(projectRoot, [
-      'tools/check-project.mjs'
+      'tools/check-project.mjs',
     ])
 
     const preview = await previewTemplateUpdate(
-      defaultOptions({ update: [
-          'template'
-        ], force: true })
+      defaultOptions({
+        update: [
+          'template',
+        ],
+        force: true,
+      }),
     )
 
     expect(preview.join('\n')).toContain('--- a/tools/check-project.mjs')
@@ -4114,23 +4026,23 @@ version = "0.1.0"
   it('rejects unsupported template diff target combinations before writing', async () => {
     await expect(
       previewTemplateUpdate(
-        defaultOptions({ update: [
+        defaultOptions({
+          update: [
             'template',
-            'schema'
-          ] })
-      )
-    ).rejects.toThrow(
-      '--update <target> --diff is only supported for --update template or --update schema'
-    )
+            'schema',
+          ],
+        }),
+      ),
+    ).rejects.toThrow('--update <target> --diff is only supported for --update template or --update schema')
     await expect(
       previewTemplateUpdate(
-        defaultOptions({ update: [
-            'maafw'
-          ] })
-      )
-    ).rejects.toThrow(
-      '--update <target> --diff is only supported for --update template or --update schema'
-    )
+        defaultOptions({
+          update: [
+            'maafw',
+          ],
+        }),
+      ),
+    ).rejects.toThrow('--update <target> --diff is only supported for --update template or --update schema')
   })
 
   it('skips local template changes unless force is used', async () => {
@@ -4143,9 +4055,11 @@ version = "0.1.0"
     await writeFile(toolPath, "console.log('local change')\n", 'utf8')
 
     const skipped = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'template'
-        ] })
+      defaultOptions({
+        update: [
+          'template',
+        ],
+      }),
     )
 
     expect(skipped.written).not.toContain('tools/check-project.mjs')
@@ -4153,15 +4067,18 @@ version = "0.1.0"
     expect(await readFile(toolPath, 'utf8')).toBe("console.log('local change')\n")
 
     const forced = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'template'
-        ], force: true })
+      defaultOptions({
+        update: [
+          'template',
+        ],
+        force: true,
+      }),
     )
 
     expect(forced.written).toContain('tools/check-project.mjs')
     expect(await readFile(toolPath, 'utf8')).toContain('project structure looks valid')
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
   })
 
@@ -4178,37 +4095,38 @@ version = "0.1.0"
     }
     lock.managedFiles[releasePath] = {
       hash: '0'.repeat(64),
-      templateHash: '0'.repeat(64)
+      templateHash: '0'.repeat(64),
     }
     await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
 
     expect(
       await previewTemplateUpdate(
-        defaultOptions({ update: [
-            'template'
-          ] })
-      )
+        defaultOptions({
+          update: [
+            'template',
+          ],
+        }),
+      ),
     ).toContain(`[REFRESH] ${releasePath}`)
 
     const result = await recordUpdateRequests(
-      defaultOptions({ update: [
-          'template'
-        ] })
+      defaultOptions({
+        update: [
+          'template',
+        ],
+      }),
     )
     const nextLock = (await readJson(lockPath)) as {
       managedFiles: Record<string, { hash: string; templateHash?: string }>
     }
-    const currentHash = managedFileHash(
-      releasePath,
-      await readFile(join(projectRoot, releasePath), 'utf8')
-    )
+    const currentHash = managedFileHash(releasePath, await readFile(join(projectRoot, releasePath), 'utf8'))
 
     expect(result.skipped.join('\n')).not.toContain(`${releasePath}: local changes`)
     expect(result.written).toContain(releasePath)
     expect(nextLock.managedFiles[releasePath]?.hash).toBe(currentHash)
     expect(nextLock.managedFiles[releasePath]?.templateHash).toBe(currentHash)
     expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
   })
 
@@ -4219,9 +4137,7 @@ version = "0.1.0"
     await writeFile(join(target, 'note.txt'), 'important', 'utf8')
     process.chdir(root)
 
-    await expect(createProject(defaultOptions({ name: 'existing' }))).rejects.toThrow(
-      'Target directory is not empty'
-    )
+    await expect(createProject(defaultOptions({ name: 'existing' }))).rejects.toThrow('Target directory is not empty')
   })
 
   it('requires explicit non-git allowance for forced non-empty directories', async () => {
@@ -4231,29 +4147,21 @@ version = "0.1.0"
     await writeFile(join(target, 'note.txt'), 'important', 'utf8')
     process.chdir(root)
 
+    await expect(assertCanCreateTarget(target, defaultOptions({ force: true }), async () => false)).rejects.toThrow(
+      'without Git protection',
+    )
     await expect(
-      assertCanCreateTarget(target, defaultOptions({ force: true }), async () => false)
-    ).rejects.toThrow('without Git protection')
-    await expect(
-      assertCanCreateTarget(target, defaultOptions({ force: true }), async () => true)
+      assertCanCreateTarget(target, defaultOptions({ force: true }), async () => true),
     ).resolves.toBeUndefined()
     await expect(
-      assertCanCreateTarget(
-        target,
-        defaultOptions({ force: true, allowNonGitDir: true }),
-        async () => false
-      )
+      assertCanCreateTarget(target, defaultOptions({ force: true, allowNonGitDir: true }), async () => false),
     ).resolves.toBeUndefined()
 
-    const result = await createProject(
-      defaultOptions({ name: 'existing-non-git', force: true, allowNonGitDir: true })
-    )
+    const result = await createProject(defaultOptions({ name: 'existing-non-git', force: true, allowNonGitDir: true }))
 
     expect(result.written).toContain('interface.json')
     expect(await readFile(join(target, 'note.txt'), 'utf8')).toBe('important')
-    expect(await findBackedUpFile(join(target, '.create-maa-project/backups'), 'note.txt')).toBe(
-      true
-    )
+    expect(await findBackedUpFile(join(target, '.create-maa-project/backups'), 'note.txt')).toBe(true)
   })
 
   it('preserves one-time files in existing git directories', async () => {
@@ -4271,30 +4179,30 @@ version = "0.1.0"
     expect(result.skipped).toEqual(
       expect.arrayContaining([
         'README.md',
-        'LICENSE'
-      ])
+        'LICENSE',
+      ]),
     )
     expect(await readFile(join(target, 'README.md'), 'utf8')).toBe('# User README\n')
     expect(await readFile(join(target, 'LICENSE'), 'utf8')).toBe('User license\n')
     expect(gitignore).toBe('custom-cache/\n')
     expect(await diffManagedFiles(target)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
 
     await writeFile(join(target, '.gitignore'), `${gitignore}local-only/\n`, 'utf8')
     await clearPending(target)
 
     expect(await diffManagedFiles(target)).toEqual([
-      'No managed file changes.'
+      'No managed file changes.',
     ])
     await expect(
       execFileAsync(
         process.execPath,
         [
-          'tools/check-project.mjs'
+          'tools/check-project.mjs',
         ],
-        { cwd: target }
-      )
+        { cwd: target },
+      ),
     ).resolves.toBeDefined()
   })
 
@@ -4306,23 +4214,23 @@ version = "0.1.0"
     }
     process.chdir(root)
 
-    const result = await createProject(
-      defaultOptions({ name: 'maa-git-pending', initializeGit: true }),
-      {
-        gitRunner,
-        detectGitTree: async () => false
-      }
-    )
+    const result = await createProject(defaultOptions({ name: 'maa-git-pending', initializeGit: true }), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
 
     expect(result.git).toEqual({
       initialized: true,
       committed: false,
-      reason: 'project has pending actions'
+      reason: 'project has pending actions',
     })
     expect(commands).toEqual([
-      { root: join(root, 'maa-git-pending'), args: [
-          'init'
-        ] }
+      {
+        root: join(root, 'maa-git-pending'),
+        args: [
+          'init',
+        ],
+      },
     ])
   })
 
@@ -4338,31 +4246,31 @@ version = "0.1.0"
       defaultOptions({
         name: 'maa-git-commit',
         initializeGit: true,
-        allowPendingCommit: true
+        allowPendingCommit: true,
       }),
       {
         gitRunner,
-        detectGitTree: async () => false
-      }
+        detectGitTree: async () => false,
+      },
     )
 
     expect(result.git).toEqual({
       initialized: true,
-      committed: true
+      committed: true,
     })
     expect(commands).toEqual([
       [
-        'init'
+        'init',
       ],
       [
         'add',
-        '.'
+        '.',
       ],
       [
         'commit',
         '-m',
-        'chore: scaffold MaaFW project'
-      ]
+        'chore: scaffold MaaFW project',
+      ],
     ])
   })
 
@@ -4375,18 +4283,15 @@ version = "0.1.0"
     await mkdir(join(root, '.git'), { recursive: true })
     process.chdir(root)
 
-    const result = await createProject(
-      defaultOptions({ name: 'maa-git-parent', initializeGit: true }),
-      {
-        gitRunner,
-        detectGitTree: async () => true
-      }
-    )
+    const result = await createProject(defaultOptions({ name: 'maa-git-parent', initializeGit: true }), {
+      gitRunner,
+      detectGitTree: async () => true,
+    })
 
     expect(result.git).toEqual({
       initialized: false,
       committed: false,
-      reason: 'target is inside an existing Git repository'
+      reason: 'target is inside an existing Git repository',
     })
     expect(commands).toEqual([])
   })
@@ -4401,24 +4306,22 @@ version = "0.1.0"
     await writeFile(
       join(projectRoot, '.create-maa-project/run.lock'),
       JSON.stringify({ pid: process.pid, command: 'test', startedAt: new Date().toISOString() }),
-      'utf8'
+      'utf8',
     )
-    await expect(
-      syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
-    ).rejects.toThrow('Another create-maa-project command is running')
+    await expect(syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))).rejects.toThrow(
+      'Another create-maa-project command is running',
+    )
 
     await writeFile(
       join(projectRoot, '.create-maa-project/run.lock'),
       JSON.stringify({ pid: 99999999, command: 'test', startedAt: new Date().toISOString() }),
-      'utf8'
+      'utf8',
     )
-    await expect(
-      syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
-    ).rejects.toThrow('Stale write lock exists')
+    await expect(syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))).rejects.toThrow(
+      'Stale write lock exists',
+    )
 
-    const result = await syncProject(
-      defaultOptions({ sync: 'version', version: '0.2.0', clearStaleLock: true })
-    )
+    const result = await syncProject(defaultOptions({ sync: 'version', version: '0.2.0', clearStaleLock: true }))
 
     expect(result.config.project.version).toBe('0.2.0')
     expect(await pathExists(join(projectRoot, '.create-maa-project/run.lock'))).toBe(false)
@@ -4434,17 +4337,13 @@ version = "0.1.0"
     await mkdir(join(projectRoot, '.create-maa-project/cache'), { recursive: true })
     await writeFile(join(projectRoot, '.create-maa-project/cache/temp.txt'), 'cache', 'utf8')
     await mkdir(join(projectRoot, '.create-maa-project/backups/backup-1'), { recursive: true })
-    await writeFile(
-      join(projectRoot, '.create-maa-project/backups/backup-1/README.md'),
-      '# Restored\n',
-      'utf8'
-    )
+    await writeFile(join(projectRoot, '.create-maa-project/backups/backup-1/README.md'), '# Restored\n', 'utf8')
 
     expect(await cleanCache(projectRoot)).toBe(join(projectRoot, '.create-maa-project/cache'))
     const restored = await restoreBackup(projectRoot, 'backup-1')
 
     expect(restored).toEqual([
-      'README.md'
+      'README.md',
     ])
     expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe('# Restored\n')
   })
@@ -4496,7 +4395,7 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     template: 'pipeline',
     add: [
       'dev-tools',
-      'github'
+      'github',
     ],
     update: [],
     doctor: false,
@@ -4518,7 +4417,7 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     report: false,
     mcp: false,
     explicitTemplate: false,
-    ...overrides
+    ...overrides,
   }
 }
 
@@ -4531,7 +4430,7 @@ function createTarGzArchive(
     path: string
     content: Buffer
     mode: number
-  }>
+  }>,
 ): Buffer {
   const chunks: Buffer[] = []
   for (const file of files) {
@@ -4562,7 +4461,7 @@ function createZipArchive(
     path: string
     content: Buffer
     mode?: number
-  }>
+  }>,
 ): Buffer {
   const localChunks: Buffer[] = []
   const centralChunks: Buffer[] = []
@@ -4616,7 +4515,7 @@ function createZipArchive(
   return Buffer.concat([
     ...localChunks,
     centralDirectory,
-    end
+    end,
   ])
 }
 
@@ -4645,10 +4544,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function clearPending(
-  root: string,
-  options: { writePnpmLock?: boolean } = {}
-): Promise<void> {
+async function clearPending(root: string, options: { writePnpmLock?: boolean } = {}): Promise<void> {
   const lockPath = join(root, 'maa-project.lock.json')
   const lock = (await readJson(lockPath)) as { pending?: unknown[] }
   lock.pending = []
@@ -4671,10 +4567,7 @@ async function findBackedUpFile(root: string, target: string): Promise<boolean> 
   return false
 }
 
-async function withEnvironment(
-  values: Record<string, string | undefined>,
-  action: () => Promise<void>
-): Promise<void> {
+async function withEnvironment(values: Record<string, string | undefined>, action: () => Promise<void>): Promise<void> {
   const previous = new Map<string, string | undefined>()
   for (const name of Object.keys(values)) {
     previous.set(name, process.env[name])
@@ -4690,7 +4583,7 @@ async function withEnvironment(
   } finally {
     for (const [
       name,
-      value
+      value,
     ] of previous) {
       if (value === undefined) {
         delete process.env[name]

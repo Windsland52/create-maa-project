@@ -9,7 +9,7 @@ import {
   refreshManagedFileState,
   withProjectWriteLock,
   writeGeneratedFiles,
-  writeProjectState
+  writeProjectState,
 } from './project.js'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -30,16 +30,10 @@ import {
   type DownloadProgressReporter,
   PYTHON_EMBED_VERSION,
   type ProductAssetManifestRequest,
-  type ProductAssetManifestResolver
+  type ProductAssetManifestResolver,
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
-import type {
-  CliOptions,
-  MaaProjectConfig,
-  ManagedFileInput,
-  PendingItem,
-  ScaffoldResult
-} from './types.js'
+import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
 import { exists, readText, sha256 } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
@@ -49,45 +43,44 @@ const CLI_VERSION = '0.1.0'
 const UPDATE_PENDING: Record<string, PendingItem> = {
   schema: {
     kind: 'schema',
-    reason:
-      'Schema baseline update is pending because schema downloads are not implemented locally yet.',
-    command: 'create-maa-project --update schema'
+    reason: 'Schema baseline update is pending because schema downloads are not implemented locally yet.',
+    command: 'create-maa-project --update schema',
   },
   maafw: {
     kind: 'maafw',
     reason: 'MaaFramework asset resolution is pending.',
-    command: 'create-maa-project --update maafw'
+    command: 'create-maa-project --update maafw',
   },
   'runtime:mfa': {
     kind: 'runtime',
     reason: 'MFAAvalonia runtime asset resolution is pending.',
-    command: 'create-maa-project --update runtime:mfa'
+    command: 'create-maa-project --update runtime:mfa',
   },
   'ocr-models': {
     kind: 'ocr-model',
     reason: 'OCR model download is pending.',
-    command: 'create-maa-project --update ocr-models'
+    command: 'create-maa-project --update ocr-models',
   },
   'node-deps': {
     kind: 'node-deps',
     reason: 'Node dependencies need to be installed or refreshed locally.',
-    command: 'create-maa-project --update node-deps'
+    command: 'create-maa-project --update node-deps',
   },
   'python-deps': {
     kind: 'python-deps',
     reason: 'Python dependencies need to be synchronized locally.',
-    command: 'create-maa-project --update python-deps'
+    command: 'create-maa-project --update python-deps',
   },
   'python-runtime': {
     kind: 'python-runtime',
     reason: 'Python release runtime and Agent release dependencies are pending.',
-    command: 'create-maa-project --update python-runtime'
+    command: 'create-maa-project --update python-runtime',
   },
   template: {
     kind: 'template',
     reason: 'Template update is pending.',
-    command: 'create-maa-project --update template'
-  }
+    command: 'create-maa-project --update template',
+  },
 }
 
 export type UpdateCommandRunner = (root: string, command: string, args: string[]) => Promise<void>
@@ -102,7 +95,7 @@ export async function recordUpdateRequests(
     assetDownloader?: AssetDownloader
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
-  } = {}
+  } = {},
 ): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
@@ -122,12 +115,12 @@ export async function recordUpdateRequests(
         const plan = await planTemplateUpdate(root, config, lock, options.force)
         const result = await writeGeneratedFiles(root, plan.files, {
           force: true,
-          backup: true
+          backup: true,
         })
         Object.assign(lock.managedFiles, result.lockEntries)
         for (const path of result.written) written.add(path)
         for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
-          template: true
+          template: true,
         })) {
           written.add(path)
         }
@@ -141,12 +134,12 @@ export async function recordUpdateRequests(
           const plan = await planSchemaUpdate(root, config, lock, options.force)
           const result = await writeGeneratedFiles(root, plan.files, {
             force: true,
-            backup: true
+            backup: true,
           })
           Object.assign(lock.managedFiles, result.lockEntries)
           for (const path of result.written) written.add(path)
           for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
-            template: true
+            template: true,
           })) {
             written.add(path)
           }
@@ -165,7 +158,7 @@ export async function recordUpdateRequests(
           lock.pending = removePending(lock.pending, 'python-deps')
           for (const path of await refreshManagedFileState(root, lock, [
             'uv.lock',
-            'requirements.txt'
+            'requirements.txt',
           ])) {
             written.add(path)
           }
@@ -177,11 +170,11 @@ export async function recordUpdateRequests(
             ...createProjectAssetUpdateOptions(
               {
                 product: 'Python',
-                channel: 'latest'
+                channel: 'latest',
               },
-              environment
+              environment,
             ),
-            commandRunner
+            commandRunner,
           })
           if (!result) {
             pendingToAdd.push(remoteAssetPending(target))
@@ -199,10 +192,10 @@ export async function recordUpdateRequests(
             createProjectAssetUpdateOptions(
               {
                 product: 'MaaFramework',
-                channel: config.maafw.channel
+                channel: config.maafw.channel,
               },
-              environment
-            )
+              environment,
+            ),
           )
           if (!result) {
             pendingToAdd.push(remoteAssetPending(target))
@@ -220,10 +213,10 @@ export async function recordUpdateRequests(
             createProjectAssetUpdateOptions(
               {
                 product: 'MFAAvalonia',
-                channel: config.runtime.mfa.channel
+                channel: config.runtime.mfa.channel,
               },
-              environment
-            )
+              environment,
+            ),
           )
           if (!result) {
             pendingToAdd.push(remoteAssetPending(target))
@@ -263,13 +256,13 @@ export async function recordUpdateRequests(
         config,
         lock,
         written: [
-          ...written
+          ...written,
         ],
         skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
 }
 
@@ -277,7 +270,7 @@ export async function previewTemplateUpdate(options: CliOptions): Promise<string
   const target = options.update[0]
   if (options.update.length !== 1 || (target !== 'template' && target !== 'schema')) {
     throw new Error(
-      '--update <target> --diff is only supported for --update template or --update schema in this version.'
+      '--update <target> --diff is only supported for --update template or --update schema in this version.',
     )
   }
   const root = process.cwd()
@@ -300,8 +293,10 @@ export async function previewTemplateUpdate(options: CliOptions): Promise<string
   for (const skipped of plan.skipped) {
     lines.push(`[SKIP] ${skipped}`)
   }
-  return lines.length > 0 ? lines : [
-        'No template updates.'
+  return lines.length > 0
+    ? lines
+    : [
+        'No template updates.',
       ]
 }
 
@@ -319,7 +314,7 @@ const RUNTIME_ASSET_PATH_PREFIXES = [
   '.create-maa-project/runtime/',
   'runtimes/',
   'libs/',
-  'plugins/'
+  'plugins/',
 ]
 
 function embeddedPythonExecutable(platform: string): string {
@@ -340,13 +335,13 @@ function remoteAssetPending(target: string): PendingItem {
   const pending = toPendingUpdate(target)
   return {
     ...pending,
-    reason: `${pending.reason} No compatible GitHub release asset or explicit manifest was found.`
+    reason: `${pending.reason} No compatible GitHub release asset or explicit manifest was found.`,
   }
 }
 
 async function updateNodeDeps(root: string, commandRunner: UpdateCommandRunner): Promise<void> {
   await commandRunner(root, 'pnpm', [
-    'install'
+    'install',
   ])
 }
 
@@ -355,7 +350,7 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
     throw new Error('--update python-deps requires an Agent project with pyproject.toml.')
   }
   await commandRunner(root, 'uv', [
-    'lock'
+    'lock',
   ])
   await commandRunner(root, 'uv', [
     'export',
@@ -364,7 +359,7 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
     '--no-hashes',
     '--no-emit-project',
     '--output-file',
-    'requirements.txt'
+    'requirements.txt',
   ])
 }
 
@@ -377,21 +372,19 @@ async function updatePythonRuntime(
     commandRunner: UpdateCommandRunner
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
-  }
+  },
 ): Promise<{ written: string[] } | undefined> {
   if (!(await exists(join(root, 'pyproject.toml')))) {
     throw new Error('--update python-runtime requires an Agent project with pyproject.toml.')
   }
   if (!(await exists(join(root, 'requirements.txt')))) {
-    throw new Error(
-      '--update python-runtime requires requirements.txt. Run --update python-deps first.'
-    )
+    throw new Error('--update python-runtime requires requirements.txt. Run --update python-deps first.')
   }
 
   const platform = resolveRuntimePlatform(options.request.platform)
   if (!platform || platform === 'all') {
     throw new Error(
-      '--update python-runtime requires exactly one runtime platform because Agent dependencies are installed into a platform-specific Python runtime. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>.'
+      '--update python-runtime requires exactly one runtime platform because Agent dependencies are installed into a platform-specific Python runtime. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>.',
     )
   }
   if (platform.startsWith('linux-')) {
@@ -405,7 +398,7 @@ async function updatePythonRuntime(
   if (!manifest) return undefined
   await rm(join(root, '.create-maa-project/runtime/python', platform), {
     recursive: true,
-    force: true
+    force: true,
   })
   const assets = await downloadProjectManifestAssets(
     manifest,
@@ -413,12 +406,12 @@ async function updatePythonRuntime(
       ? {
           downloader: options.downloader,
           allowedPathPrefixes: options.allowedPathPrefixes,
-          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         }
       : {
           allowedPathPrefixes: options.allowedPathPrefixes,
-          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
-        }
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+        },
   )
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
@@ -429,13 +422,13 @@ async function updatePythonRuntime(
     python,
     '--system',
     '--requirement',
-    'requirements.txt'
+    'requirements.txt',
   ])
   return {
     written: [
       ...written,
-      python
-    ]
+      python,
+    ],
   }
 }
 
@@ -446,11 +439,11 @@ async function updateWindowsEmbeddedPythonRuntime(
     commandRunner: UpdateCommandRunner
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
-  }
+  },
 ): Promise<{ written: string[] }> {
   await rm(join(root, '.create-maa-project/runtime/python', platform), {
     recursive: true,
-    force: true
+    force: true,
   })
   const arch = platform.endsWith('-arm64') ? 'arm64' : 'amd64'
   const filename = `python-${PYTHON_EMBED_VERSION}-embed-${arch}.zip`
@@ -466,9 +459,9 @@ async function updateWindowsEmbeddedPythonRuntime(
       extract: {
         product: 'Python',
         platform,
-        format: 'zip'
-      }
-    })
+        format: 'zip',
+      },
+    }),
   )
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
@@ -479,13 +472,13 @@ async function updateWindowsEmbeddedPythonRuntime(
     python,
     '--system',
     '--requirement',
-    'requirements.txt'
+    'requirements.txt',
   ])
   return {
     written: [
       ...written,
-      python
-    ]
+      python,
+    ],
   }
 }
 
@@ -509,15 +502,12 @@ async function ensureEmbeddedPythonExecutable(root: string, platform: string): P
   return python
 }
 
-async function findPythonExecutableCandidate(
-  root: string,
-  binPath: string
-): Promise<string | undefined> {
+async function findPythonExecutableCandidate(root: string, binPath: string): Promise<string | undefined> {
   if (!(await exists(join(root, binPath)))) return undefined
   for (const name of [
     'python3.13',
     'python3.13t',
-    'python'
+    'python',
   ]) {
     if (await exists(join(root, binPath, name))) return name
   }
@@ -527,12 +517,12 @@ async function findPythonExecutableCandidate(
 async function updateLinuxPythonRuntime(
   root: string,
   platform: string,
-  commandRunner: UpdateCommandRunner
+  commandRunner: UpdateCommandRunner,
 ): Promise<{ written: string[] }> {
   const depsPath = `.create-maa-project/runtime/python-deps/${platform}`
   await rm(join(root, depsPath), {
     recursive: true,
-    force: true
+    force: true,
   })
   await mkdir(join(root, depsPath), { recursive: true })
   await commandRunner(root, 'python3', [
@@ -544,21 +534,21 @@ async function updateLinuxPythonRuntime(
     '--dest',
     depsPath,
     '--only-binary=:all:',
-    ...linuxWheelPlatformArgs(platform)
+    ...linuxWheelPlatformArgs(platform),
   ])
   return {
-    written: await listRelativeFiles(root, depsPath)
+    written: await listRelativeFiles(root, depsPath),
   }
 }
 
 async function downloadRuntimeArchive(
   url: string,
   downloader?: AssetDownloader,
-  onDownloadProgress?: DownloadProgressReporter
+  onDownloadProgress?: DownloadProgressReporter,
 ): Promise<Buffer> {
   const options = onDownloadProgress
     ? {
-        onProgress: onDownloadProgress
+        onProgress: onDownloadProgress,
       }
     : undefined
   return downloader ? downloader(url, options) : downloadUrl(url, options)
@@ -566,13 +556,11 @@ async function downloadRuntimeArchive(
 
 function patchWindowsEmbeddedPythonAssets(
   platform: string,
-  assets: ReturnType<typeof extractProjectArchiveAssets>
+  assets: ReturnType<typeof extractProjectArchiveAssets>,
 ): ReturnType<typeof extractProjectArchiveAssets> {
   const pthPath = `.create-maa-project/runtime/python/${platform}/`
   const index = assets.findIndex(
-    (asset) =>
-      asset.path.startsWith(pthPath) &&
-      /^python\d*\._pth$/i.test(asset.path.split('/').at(-1) ?? '')
+    (asset) => asset.path.startsWith(pthPath) && /^python\d*\._pth$/i.test(asset.path.split('/').at(-1) ?? ''),
   )
   if (index < 0) {
     throw new Error(`Windows embedded Python archive is missing python*._pth for ${platform}.`)
@@ -585,7 +573,7 @@ function patchWindowsEmbeddedPythonAssets(
     ...asset,
     content: nextContent,
     sha256: sha256(nextContent),
-    size: nextContent.byteLength
+    size: nextContent.byteLength,
   }
   return assets
 }
@@ -604,7 +592,7 @@ function patchWindowsPythonPth(content: string): string {
     '.',
     'Lib',
     'Lib\\site-packages',
-    'DLLs'
+    'DLLs',
   ]) {
     if (!next.some((line) => line.trim() === path)) next.push(path)
   }
@@ -612,20 +600,23 @@ function patchWindowsPythonPth(content: string): string {
 }
 
 function linuxWheelPlatformArgs(platform: string): string[] {
-  const tags = platform === 'linux-arm64' ? [
+  const tags =
+    platform === 'linux-arm64'
+      ? [
           'manylinux_2_28_aarch64',
           'manylinux_2_17_aarch64',
           'manylinux2014_aarch64',
-          'linux_aarch64'
-        ] : [
+          'linux_aarch64',
+        ]
+      : [
           'manylinux_2_28_x86_64',
           'manylinux_2_17_x86_64',
           'manylinux2014_x86_64',
-          'linux_x86_64'
+          'linux_x86_64',
         ]
   return tags.flatMap((tag) => [
     '--platform',
-    tag
+    tag,
   ])
 }
 
@@ -637,11 +628,7 @@ async function listRelativeFiles(root: string, basePath: string): Promise<string
   return written
 }
 
-async function collectRelativeFiles(
-  path: string,
-  relativePath: string,
-  output: string[]
-): Promise<void> {
+async function collectRelativeFiles(path: string, relativePath: string, output: string[]): Promise<void> {
   const entries = await readdir(path, { withFileTypes: true })
   for (const entry of entries) {
     const childRelativePath = `${relativePath}/${entry.name}`
@@ -660,17 +647,15 @@ export async function updateOcrModels(
     manifestResolver: AssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
-  }
-): Promise<
-  { written: string[]; files: Array<{ path: string; content: string | Buffer }> } | undefined
-> {
+  },
+): Promise<{ written: string[]; files: Array<{ path: string; content: string | Buffer }> } | undefined> {
   const manifest = await options.manifestResolver()
   const basePath = 'resource/base/model/ocr'
   const allowedPaths = [
     'det.onnx',
     'rec.onnx',
     'keys.txt',
-    'README.md'
+    'README.md',
   ]
   const assets = manifest
     ? await downloadManifestAssets(
@@ -679,12 +664,12 @@ export async function updateOcrModels(
           ? {
               downloader: options.downloader,
               allowedPaths,
-              ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
+              ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
             }
           : {
               allowedPaths,
-              ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
-            }
+              ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+            },
       )
     : await downloadDefaultOcrZip(createDefaultOcrZipDownloadOptions(options))
   const { written, manifestContent } = await writeDownloadedAssets(root, basePath, assets)
@@ -693,13 +678,13 @@ export async function updateOcrModels(
     files: [
       ...assets.map((asset) => ({
         path: join(basePath, asset.path),
-        content: asset.content
+        content: asset.content,
       })),
       {
         path: join(basePath, 'manifest.json'),
-        content: manifestContent
-      }
-    ]
+        content: manifestContent,
+      },
+    ],
   }
 }
 
@@ -711,7 +696,7 @@ export async function updateProjectAssets(
     manifestResolver: ProductAssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
-  }
+  },
 ): Promise<{ written: string[] } | undefined> {
   const manifest = await options.manifestResolver(options.request)
   if (!manifest) return undefined
@@ -721,15 +706,15 @@ export async function updateProjectAssets(
       ? {
           downloader: options.downloader,
           allowedPathPrefixes: options.allowedPathPrefixes,
-          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         }
       : {
           allowedPathPrefixes: options.allowedPathPrefixes,
-          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {})
-        }
+          ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+        },
   )
   return {
-    written: await writeDownloadedProjectAssets(root, assets)
+    written: await writeDownloadedProjectAssets(root, assets),
   }
 }
 
@@ -739,7 +724,7 @@ function createProjectAssetUpdateOptions(
     productManifestResolver?: ProductAssetManifestResolver
     assetDownloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
-  }
+  },
 ): {
   request: ProductAssetManifestRequest
   allowedPathPrefixes: string[]
@@ -756,7 +741,7 @@ function createProjectAssetUpdateOptions(
   } = {
     request,
     allowedPathPrefixes: RUNTIME_ASSET_PATH_PREFIXES,
-    manifestResolver: environment.productManifestResolver ?? resolveProductAssetManifest
+    manifestResolver: environment.productManifestResolver ?? resolveProductAssetManifest,
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
@@ -777,7 +762,7 @@ function createOcrUpdateOptions(environment: {
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
   } = {
-    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment
+    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment,
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
@@ -788,8 +773,7 @@ function createDefaultOcrZipDownloadOptions(options: {
   downloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
 }): { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter } {
-  const downloadOptions: { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter } =
-    {}
+  const downloadOptions: { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter } = {}
   if (options.downloader) downloadOptions.downloader = options.downloader
   if (options.onDownloadProgress) downloadOptions.onProgress = options.onDownloadProgress
   return downloadOptions
@@ -804,16 +788,16 @@ async function runCommand(root: string, command: string, args: string[]): Promis
     const child = spawn(command, args, {
       cwd: root,
       shell: process.platform === 'win32',
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
     child.on('error', (error) => {
       reject(
         new Error(
           `Failed to run ${[
             command,
-            ...args
-          ].join(' ')}. ${error.message}`
-        )
+            ...args,
+          ].join(' ')}. ${error.message}`,
+        ),
       )
     })
     child.on('exit', (code, signal) => {
@@ -826,9 +810,9 @@ async function runCommand(root: string, command: string, args: string[]): Promis
         new Error(
           `Command failed: ${[
             command,
-            ...args
-          ].join(' ')} (${suffix})`
-        )
+            ...args,
+          ].join(' ')} (${suffix})`,
+        ),
       )
     })
   })
@@ -838,7 +822,7 @@ async function planTemplateUpdate(
   root: string,
   config: MaaProjectConfig,
   lock: Awaited<ReturnType<typeof readProjectLock>>,
-  force: boolean
+  force: boolean,
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
@@ -856,7 +840,7 @@ async function planSchemaUpdate(
   root: string,
   config: MaaProjectConfig,
   lock: Awaited<ReturnType<typeof readProjectLock>>,
-  force: boolean
+  force: boolean,
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
@@ -871,7 +855,7 @@ async function planSchemaUpdate(
     root,
     lock,
     force,
-    templateFilesForConfig(config).filter((file) => file.path.startsWith('tools/schema/'))
+    templateFilesForConfig(config).filter((file) => file.path.startsWith('tools/schema/')),
   )
 }
 
@@ -879,7 +863,7 @@ async function planManagedTemplateFiles(
   root: string,
   lock: Awaited<ReturnType<typeof readProjectLock>>,
   force: boolean,
-  templateFiles: ManagedFileInput[]
+  templateFiles: ManagedFileInput[],
 ): Promise<{
   files: ManagedFileInput[]
   skipped: string[]
@@ -907,9 +891,7 @@ async function planManagedTemplateFiles(
     const targetExists = await exists(targetPath)
     const currentContent = targetExists ? await readText(targetPath) : undefined
     const nextContent =
-      currentContent === undefined
-        ? file.content
-        : prepareManagedFileContent(file.path, currentContent, file.content)
+      currentContent === undefined ? file.content : prepareManagedFileContent(file.path, currentContent, file.content)
     const nextHash = managedFileHash(file.path, nextContent)
 
     if (!state) {
@@ -922,7 +904,7 @@ async function planManagedTemplateFiles(
         kind: targetExists ? 'diff' : 'add',
         path: file.path,
         current: currentContent ?? '',
-        next: nextContent
+        next: nextContent,
       })
       continue
     }
@@ -970,7 +952,7 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     includeOptimizeImages: Boolean(config.addons.optimizeImages),
     includeSchemaSync: Boolean(config.addons.schemaSync),
     pythonDevCommand: config.python?.devCommand,
-    resources: config.resources
+    resources: config.resources,
   })
     .filter((file) => file.managed && file.path !== 'maa-project.json')
     .filter((file) => file.path !== 'uv.lock' && file.path !== 'requirements.txt')

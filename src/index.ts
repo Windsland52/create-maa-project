@@ -8,7 +8,7 @@ import {
   resolveOcrManifestFromEnvironment,
   resolveProductAssetManifest,
   type DownloadProgress,
-  type DownloadProgressReporter
+  type DownloadProgressReporter,
 } from './assets.js'
 import {
   acceptManagedChanges,
@@ -17,7 +17,7 @@ import {
   listChangedManagedFiles,
   readProjectLock,
   restoreBackup,
-  withProjectWriteLock
+  withProjectWriteLock,
 } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
@@ -32,7 +32,7 @@ import {
   reportRequested,
   type CliReportCommand,
   type ReportContext,
-  writeJsonReport
+  writeJsonReport,
 } from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
@@ -59,11 +59,7 @@ async function main(): Promise<void> {
     if (options.report) options.noInteractive = true
     command = reportCommandFromOptions(options)
     logFile = options.logFile
-    logger = await createLogger(
-      process.cwd(),
-      options.logFile,
-      options.report ? executionId : undefined
-    )
+    logger = await createLogger(process.cwd(), options.logFile, options.report ? executionId : undefined)
     if (options.report) {
       assertReportSupportedOptions(options)
     }
@@ -71,14 +67,10 @@ async function main(): Promise<void> {
       await logger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
     }
     if (options.assist || options.from) {
-      throw new Error(
-        'Agent-assisted creation is reserved for a future version and is not supported in v1.'
-      )
+      throw new Error('Agent-assisted creation is reserved for a future version and is not supported in v1.')
     }
     if (options.migrate || options.target || options.dryRun) {
-      throw new Error(
-        'Legacy migration is reserved for a future version and is not supported in v1.'
-      )
+      throw new Error('Legacy migration is reserved for a future version and is not supported in v1.')
     }
 
     if (options.report) {
@@ -91,7 +83,7 @@ async function main(): Promise<void> {
           root,
           doctor,
           pending: lock.pending,
-          changedManagedFiles: await listChangedManagedFiles(root)
+          changedManagedFiles: await listChangedManagedFiles(root),
         })
         writeJsonReport(report)
         process.exitCode = report.exitCode
@@ -104,7 +96,7 @@ async function main(): Promise<void> {
           context: createReportContext(command, startTimeMs, executionId, logger),
           root: process.cwd(),
           lines,
-          changedManagedFiles: []
+          changedManagedFiles: [],
         })
         writeJsonReport(report)
         process.exitCode = report.exitCode
@@ -118,7 +110,7 @@ async function main(): Promise<void> {
           context: createReportContext(command, startTimeMs, executionId, logger),
           root,
           lines,
-          changedManagedFiles: await listChangedManagedFiles(root)
+          changedManagedFiles: await listChangedManagedFiles(root),
         })
         writeJsonReport(report)
         process.exitCode = report.exitCode
@@ -127,10 +119,7 @@ async function main(): Promise<void> {
 
       if (options.sync) {
         const result = await syncProject(options)
-        const report = createScaffoldJsonReport(
-          createReportContext(command, startTimeMs, executionId, logger),
-          result
-        )
+        const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
         writeJsonReport(report)
         process.exitCode = report.exitCode
         return
@@ -144,14 +133,11 @@ async function main(): Promise<void> {
           productManifestResolver: (request) => resolveProductAssetManifest(request),
           ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
           onProgress: progress.onProgress,
-          onDownloadProgress: progress.onDownloadProgress
+          onDownloadProgress: progress.onDownloadProgress,
         })
         progress.clear()
         clearActiveProgress = (): void => {}
-        const report = createScaffoldJsonReport(
-          createReportContext(command, startTimeMs, executionId, logger),
-          result
-        )
+        const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
         writeJsonReport(report)
         process.exitCode = report.exitCode
         return
@@ -166,17 +152,14 @@ async function main(): Promise<void> {
         commandRunner: runReportChildCommand,
         ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
         onProgress: progress.onProgress,
-        onDownloadProgress: progress.onDownloadProgress
+        onDownloadProgress: progress.onDownloadProgress,
       })
       progress.clear()
       clearActiveProgress = (): void => {}
       const projectLogger = await createLogger(result.root, options.logFile, executionId)
       logger = projectLogger
       await projectLogger.info(`created=${result.root}`)
-      const report = createScaffoldJsonReport(
-        createReportContext(command, startTimeMs, executionId, logger),
-        result
-      )
+      const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
       writeJsonReport(report)
       process.exitCode = report.exitCode
       return
@@ -194,7 +177,7 @@ async function main(): Promise<void> {
         process.cwd(),
         process.argv.join(' '),
         () => restoreBackup(process.cwd(), options.restore as string),
-        { clearStale: options.clearStaleLock }
+        { clearStale: options.clearStaleLock },
       )
       console.log(`Restored files: ${restored.join(', ')}`)
       console.log(`Log: ${logger.path}`)
@@ -206,7 +189,7 @@ async function main(): Promise<void> {
         process.cwd(),
         process.argv.join(' '),
         () => acceptManagedChanges(process.cwd(), options.acceptChanges),
-        { clearStale: options.clearStaleLock }
+        { clearStale: options.clearStaleLock },
       )
       console.log(`Accepted managed changes: ${accepted.join(', ')}`)
       console.log(`Log: ${logger.path}`)
@@ -249,7 +232,7 @@ async function main(): Promise<void> {
         productManifestResolver: (request) => resolveProductAssetManifest(request),
         ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
         onProgress: progress.onProgress,
-        onDownloadProgress: progress.onDownloadProgress
+        onDownloadProgress: progress.onDownloadProgress,
       })
       progress.clear()
       clearActiveProgress = (): void => {}
@@ -273,7 +256,7 @@ async function main(): Promise<void> {
       downloadOcrModels: true,
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
       onProgress: progress.onProgress,
-      onDownloadProgress: progress.onDownloadProgress
+      onDownloadProgress: progress.onDownloadProgress,
     })
     progress.clear()
     clearActiveProgress = (): void => {}
@@ -283,15 +266,13 @@ async function main(): Promise<void> {
     console.log(`Log: ${projectLogger.path}`)
   } catch (error) {
     clearActiveProgress()
-    logger =
-      logger ??
-      (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
+    logger = logger ?? (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
     await safeLogError(logger, error)
     if (wantsReport) {
       const report = createErrorJsonReport({
         context: createReportContext(command, startTimeMs, executionId, logger),
         root: process.cwd(),
-        error
+        error,
       })
       writeJsonReport(report)
       process.exitCode = report.exitCode
@@ -307,20 +288,20 @@ function createReportContext(
   command: CliReportCommand,
   startTimeMs: number,
   executionId: string,
-  logger: Logger | undefined
+  logger: Logger | undefined,
 ): ReportContext {
   return {
     command,
     startTimeMs,
     executionId,
-    logPath: logger?.path ?? null
+    logPath: logger?.path ?? null,
   }
 }
 
 async function tryCreateLogger(
   root: string,
   logFile: string | undefined,
-  executionId: string | undefined
+  executionId: string | undefined,
 ): Promise<Logger | undefined> {
   try {
     return await createLogger(root, logFile, executionId)
@@ -349,7 +330,7 @@ function createReportProgressHandlers(label: string): {
       process.stderr.write(`${message}\n`)
     },
     onDownloadProgress: (progress) => bar.update(progress),
-    clear: () => bar.clear()
+    clear: () => bar.clear(),
   }
 }
 
@@ -361,8 +342,8 @@ async function runReportChildCommand(root: string, command: string, args: string
       stdio: [
         'ignore',
         'pipe',
-        'pipe'
-      ]
+        'pipe',
+      ],
     })
     child.stdout?.on('data', (chunk: Buffer) => {
       process.stderr.write(chunk)
@@ -387,7 +368,7 @@ async function runReportChildCommand(root: string, command: string, args: string
 function formatCommand(command: string, args: string[]): string {
   return [
     command,
-    ...args
+    ...args,
   ].join(' ')
 }
 
@@ -403,20 +384,19 @@ function createDownloadProgressHandlers(label: string): {
       console.log(message)
     },
     onDownloadProgress: (progress) => bar.update(progress),
-    clear: () => bar.clear()
+    clear: () => bar.clear(),
   }
 }
 
 function updateProgressLabel(targets: string[]): string {
-  if (targets.some((target) => target === 'maafw' || target === 'runtime:mfa'))
-    return 'Runtime assets'
+  if (targets.some((target) => target === 'maafw' || target === 'runtime:mfa')) return 'Runtime assets'
   if (targets.includes('ocr-models')) return 'OCR models'
   return 'Downloads'
 }
 
 function createDownloadProgressBar(
   label: string,
-  stream: NodeJS.WriteStream = process.stdout
+  stream: NodeJS.WriteStream = process.stdout,
 ): {
   update: (progress: DownloadProgress) => void
   clear: () => void
@@ -426,8 +406,7 @@ function createDownloadProgressBar(
     update: (progress) => {
       if (!stream.isTTY) return
       const line = formatDownloadProgress(label, progress, stream.columns ?? 80)
-      const padding =
-        renderedLine.length > line.length ? ' '.repeat(renderedLine.length - line.length) : ''
+      const padding = renderedLine.length > line.length ? ' '.repeat(renderedLine.length - line.length) : ''
       stream.write(`\r${line}${padding}`)
       renderedLine = line
     },
@@ -435,20 +414,14 @@ function createDownloadProgressBar(
       if (!stream.isTTY || renderedLine.length === 0) return
       stream.write(`\r${' '.repeat(renderedLine.length)}\r`)
       renderedLine = ''
-    }
+    },
   }
 }
 
-function formatDownloadProgress(
-  label: string,
-  progress: DownloadProgress,
-  columns: number
-): string {
+function formatDownloadProgress(label: string, progress: DownloadProgress, columns: number): string {
   const totalBytes = progress.totalBytes
   const ratio =
-    totalBytes !== undefined && totalBytes > 0
-      ? Math.min(1, progress.downloadedBytes / totalBytes)
-      : undefined
+    totalBytes !== undefined && totalBytes > 0 ? Math.min(1, progress.downloadedBytes / totalBytes) : undefined
   const suffix =
     totalBytes === undefined || ratio === undefined
       ? formatBytes(progress.downloadedBytes)
@@ -471,7 +444,7 @@ function formatBytes(bytes: number): string {
     'B',
     'KB',
     'MB',
-    'GB'
+    'GB',
   ]
   let value = bytes
   let unit = units[0] as string
@@ -499,9 +472,7 @@ function printScaffoldResult(title: string, result: ScaffoldResult): void {
     if (!result.git.initialized) {
       console.log(`Git: skipped (${result.git.reason ?? 'not initialized'})`)
     } else if (!result.git.committed) {
-      console.log(
-        `Git: initialized; initial commit skipped (${result.git.reason ?? 'not committed'})`
-      )
+      console.log(`Git: initialized; initial commit skipped (${result.git.reason ?? 'not committed'})`)
     } else {
       console.log('Git: initialized and committed.')
     }

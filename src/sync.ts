@@ -5,14 +5,9 @@ import {
   readProjectLock,
   withProjectWriteLock,
   writeGeneratedFiles,
-  writeProjectState
+  writeProjectState,
 } from './project.js'
-import {
-  interfaceAgent,
-  interfaceController,
-  interfaceResourceItems,
-  maatoolsConfigFile
-} from './templates.js'
+import { interfaceAgent, interfaceController, interfaceResourceItems, maatoolsConfigFile } from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
@@ -28,10 +23,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
   if (!sync) throw new Error('Missing --sync target')
   normalizeConfig(config)
 
-  const interfaceJson = JSON.parse(await readText(join(root, 'interface.json'))) as Record<
-    string,
-    unknown
-  >
+  const interfaceJson = JSON.parse(await readText(join(root, 'interface.json'))) as Record<string, unknown>
   const packagePath = join(root, 'package.json')
   const packageJson = (await exists(packagePath))
     ? (JSON.parse(await readText(packagePath)) as Record<string, unknown>)
@@ -44,7 +36,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     case 'display-name': {
       config.project.displayName = requiredNonBlank(
         options.displayName ?? options.syncValue,
-        '--sync display-name requires --name <display-name>'
+        '--sync display-name requires --name <display-name>',
       )
       break
     }
@@ -87,7 +79,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
   files.push(
     { path: 'interface.json', content: prettyJson(interfaceJson), managed: false },
     maatoolsConfigFile(config.resources.map((pack) => `./${pack.path}`)),
-    { path: CONFIG_FILE, content: stableJson(config), managed: false }
+    { path: CONFIG_FILE, content: stableJson(config), managed: false },
   )
   if (packageJson && hasDevTools(config)) {
     files.splice(2, 0, { path: 'package.json', content: stableJson(packageJson), managed: false })
@@ -101,7 +93,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
-        overwriteUnmanaged: true
+        overwriteUnmanaged: true,
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
@@ -114,34 +106,30 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
         lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
 }
 
 function recordCreatedFiles(
   lock: Awaited<ReturnType<typeof readProjectLock>>,
   files: ManagedFileInput[],
-  written: string[]
+  written: string[],
 ): void {
   for (const file of files) {
     if (!file.managed && written.includes(file.path) && !lock.createdFiles[file.path]) {
       lock.createdFiles[file.path] = {
         createdAt: nowIso(),
-        managed: false
+        managed: false,
       }
     }
   }
 }
 
 function assertSemver(version: string): void {
-  if (
-    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-      version
-    )
-  ) {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`Invalid version "${version}". Use a SemVer version such as 0.1.0.`)
   }
 }
@@ -179,7 +167,7 @@ function normalizeGithubRepoUrl(value: string | undefined): string {
 
 function applyPackageMetadata(
   packageJson: Record<string, unknown>,
-  config: Awaited<ReturnType<typeof readProjectConfig>>
+  config: Awaited<ReturnType<typeof readProjectConfig>>,
 ): void {
   packageJson.name = config.project.slug
   packageJson.version = config.project.version
@@ -188,7 +176,7 @@ function applyPackageMetadata(
 
 function applyInterfaceMetadata(
   interfaceJson: Record<string, unknown>,
-  config: Awaited<ReturnType<typeof readProjectConfig>>
+  config: Awaited<ReturnType<typeof readProjectConfig>>,
 ): void {
   interfaceJson.name = config.project.slug
   interfaceJson.label = config.project.displayName
@@ -203,7 +191,7 @@ function applyInterfaceMetadata(
   }
   if (config.python) {
     interfaceJson.agent = [
-      interfaceAgent(config.python.devCommand)
+      interfaceAgent(config.python.devCommand),
     ]
   } else {
     delete interfaceJson.agent
@@ -212,7 +200,7 @@ function applyInterfaceMetadata(
 
 async function syncedPyproject(
   root: string,
-  config: Awaited<ReturnType<typeof readProjectConfig>>
+  config: Awaited<ReturnType<typeof readProjectConfig>>,
 ): Promise<ManagedFileInput | undefined> {
   if (!config.python) return undefined
   const path = 'pyproject.toml'
@@ -222,7 +210,7 @@ async function syncedPyproject(
   return {
     path,
     content: syncTomlProjectMetadata(content, config.project.slug, config.project.version),
-    managed: true
+    managed: true,
   }
 }
 
@@ -235,8 +223,7 @@ function syncTomlProjectField(content: string, key: 'name' | 'version', value: s
   if (projectStart < 0) return content
   const afterProject = content.slice(projectStart + '[project]'.length)
   const nextSection = afterProject.search(/^\[[^\]]+\]\s*$/m)
-  const sectionEnd =
-    nextSection < 0 ? content.length : projectStart + '[project]'.length + nextSection
+  const sectionEnd = nextSection < 0 ? content.length : projectStart + '[project]'.length + nextSection
   const before = content.slice(0, projectStart)
   const section = content.slice(projectStart, sectionEnd)
   const after = content.slice(sectionEnd)

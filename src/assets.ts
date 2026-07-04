@@ -5,8 +5,7 @@ import { gunzipSync, inflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { sha256, stableJson } from './utils.js'
 
-export const DEFAULT_OCR_ZIP_URL =
-  'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip'
+export const DEFAULT_OCR_ZIP_URL = 'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip'
 
 export type AssetManifest = {
   schemaVersion?: number
@@ -29,7 +28,7 @@ export type ProductAssetManifestRequest = {
 }
 
 export type ProductAssetManifestResolver = (
-  request: ProductAssetManifestRequest
+  request: ProductAssetManifestRequest,
 ) => Promise<ProductAssetManifest | undefined>
 
 export type ProductAssetManifestResolveOptions = {
@@ -79,7 +78,7 @@ export type GithubReleaseJsonFetcher = (
   url: string,
   options: {
     headers: Record<string, string>
-  }
+  },
 ) => Promise<unknown>
 
 type ProductReleaseConfig = {
@@ -92,25 +91,25 @@ const PRODUCT_RELEASES: ProductReleaseConfig[] = [
   {
     product: 'MaaFramework',
     owner: 'MaaXYZ',
-    repo: 'MaaFramework'
+    repo: 'MaaFramework',
   },
   {
     product: 'MFAAvalonia',
     owner: 'MaaXYZ',
-    repo: 'MFAAvalonia'
+    repo: 'MFAAvalonia',
   },
   {
     product: 'Python',
     owner: 'astral-sh',
-    repo: 'python-build-standalone'
-  }
+    repo: 'python-build-standalone',
+  },
 ]
 const DEFAULT_DOWNLOAD_ATTEMPTS = 3
 export const PYTHON_EMBED_VERSION = '3.13.14'
 const PYTHON_STANDALONE_MINOR = '3.13'
 
 export async function resolveOcrManifestFromEnvironment(
-  options: ProductAssetManifestResolveOptions = {}
+  options: ProductAssetManifestResolveOptions = {},
 ): Promise<AssetManifest | undefined> {
   return resolveProductAssetManifestFromEnvironment(
     { product: 'OCR', channel: 'latest' },
@@ -118,19 +117,19 @@ export async function resolveOcrManifestFromEnvironment(
       ...options,
       explicitEnvNames: [
         'CREATE_MAA_PROJECT_OCR_MANIFEST_URL',
-        ...(options.explicitEnvNames ?? [])
-      ]
-    }
+        ...(options.explicitEnvNames ?? []),
+      ],
+    },
   )
 }
 
 export async function resolveProductAssetManifestFromEnvironment(
   request: ProductAssetManifestRequest,
-  options: ProductAssetManifestResolveOptions = {}
+  options: ProductAssetManifestResolveOptions = {},
 ): Promise<ProductAssetManifest | undefined> {
   const explicitUrl = firstEnvironmentValue([
     ...(options.explicitEnvNames ?? []),
-    ...productManifestEnvironmentNames(request.product)
+    ...productManifestEnvironmentNames(request.product),
   ])
   if (explicitUrl) {
     return loadProductAssetManifest(explicitUrl, true)
@@ -141,7 +140,7 @@ export async function resolveProductAssetManifestFromEnvironment(
 
 export async function resolveProductAssetManifest(
   request: ProductAssetManifestRequest,
-  options: ProductAssetManifestResolveOptions = {}
+  options: ProductAssetManifestResolveOptions = {},
 ): Promise<ProductAssetManifest | undefined> {
   return (
     (await resolveProductAssetManifestFromEnvironment(request, options)) ??
@@ -151,7 +150,7 @@ export async function resolveProductAssetManifest(
 
 export async function resolveProductAssetManifestFromGithubRelease(
   request: ProductAssetManifestRequest,
-  options: ProductAssetManifestResolveOptions = {}
+  options: ProductAssetManifestResolveOptions = {},
 ): Promise<ProductAssetManifest | undefined> {
   const config = productReleaseConfig(request.product)
   if (!config) return undefined
@@ -169,7 +168,7 @@ export async function downloadManifestAssets(
     downloader?: AssetDownloader
     allowedPaths: string[]
     onProgress?: DownloadProgressReporter
-  }
+  },
 ): Promise<DownloadedAsset[]> {
   const downloader = options.downloader ?? defaultDownload
   const allowedPaths = new Set(options.allowedPaths)
@@ -199,36 +198,32 @@ export async function downloadManifestAssets(
                 url: progress.url,
                 path: asset.path,
                 downloadedBytes: completedBytes + progress.downloadedBytes,
-                ...(totalBytes !== undefined ? { totalBytes } : {})
+                ...(totalBytes !== undefined ? { totalBytes } : {}),
               })
-            }
+            },
           }
-        : undefined
+        : undefined,
     )
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
-      throw new Error(
-        `Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`
-      )
+      throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
     }
     if (asset.size !== undefined && content.byteLength !== asset.size) {
-      throw new Error(
-        `Size mismatch for ${asset.path}: expected ${asset.size}, got ${content.byteLength}`
-      )
+      throw new Error(`Size mismatch for ${asset.path}: expected ${asset.size}, got ${content.byteLength}`)
     }
     completedBytes += content.byteLength
     options.onProgress?.({
       url: asset.url,
       path: asset.path,
       downloadedBytes: completedBytes,
-      ...(totalBytes !== undefined ? { totalBytes } : {})
+      ...(totalBytes !== undefined ? { totalBytes } : {}),
     })
     downloaded.push({
       path: asset.path,
       content,
       sha256: actualSha256,
       size: content.byteLength,
-      url: asset.url
+      url: asset.url,
     })
   }
   return downloaded
@@ -240,12 +235,12 @@ export async function downloadProjectManifestAssets(
     downloader?: AssetDownloader
     allowedPathPrefixes: string[]
     onProgress?: DownloadProgressReporter
-  }
+  },
 ): Promise<DownloadedAsset[]> {
   const downloader = options.downloader ?? defaultDownload
   const assets = manifest.assets.map(validateProductAssetEntry)
   const unexpected = assets.find(
-    (asset) => !options.allowedPathPrefixes.some((prefix) => asset.path.startsWith(prefix))
+    (asset) => !options.allowedPathPrefixes.some((prefix) => asset.path.startsWith(prefix)),
   )
   if (unexpected) {
     throw new Error(`Asset manifest contains unsupported path: ${unexpected.path}`)
@@ -269,29 +264,25 @@ export async function downloadProjectManifestAssets(
                 url: progress.url,
                 path: asset.path,
                 downloadedBytes: completedBytes + progress.downloadedBytes,
-                ...(totalBytes !== undefined ? { totalBytes } : {})
+                ...(totalBytes !== undefined ? { totalBytes } : {}),
               })
-            }
+            },
           }
-        : undefined
+        : undefined,
     )
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
-      throw new Error(
-        `Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`
-      )
+      throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
     }
     if (asset.size !== undefined && content.byteLength !== asset.size) {
-      throw new Error(
-        `Size mismatch for ${asset.path}: expected ${asset.size}, got ${content.byteLength}`
-      )
+      throw new Error(`Size mismatch for ${asset.path}: expected ${asset.size}, got ${content.byteLength}`)
     }
     completedBytes += content.byteLength
     options.onProgress?.({
       url: asset.url,
       path: asset.path,
       downloadedBytes: completedBytes,
-      ...(totalBytes !== undefined ? { totalBytes } : {})
+      ...(totalBytes !== undefined ? { totalBytes } : {}),
     })
     if (asset.extract) {
       downloaded.push(...extractProjectArchiveAsset(content, asset))
@@ -301,24 +292,18 @@ export async function downloadProjectManifestAssets(
         content,
         sha256: actualSha256,
         size: content.byteLength,
-        url: asset.url
+        url: asset.url,
       })
     }
   }
   return downloaded
 }
 
-export async function downloadUrl(
-  url: string,
-  options: AssetDownloaderOptions = {}
-): Promise<Buffer> {
+export async function downloadUrl(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
   return defaultDownload(url, options)
 }
 
-export function extractProjectArchiveAssets(
-  archive: Buffer,
-  asset: ProductAssetEntry
-): DownloadedAsset[] {
+export function extractProjectArchiveAssets(archive: Buffer, asset: ProductAssetEntry): DownloadedAsset[] {
   return extractProjectArchiveAsset(archive, validateProductAssetEntry(asset))
 }
 
@@ -329,7 +314,7 @@ export function resolveRuntimePlatform(value?: string): string | undefined {
 export async function writeDownloadedAssets(
   root: string,
   basePath: string,
-  assets: DownloadedAsset[]
+  assets: DownloadedAsset[],
 ): Promise<{ written: string[]; manifestContent: string }> {
   const written: string[] = []
   for (const asset of assets) {
@@ -345,18 +330,15 @@ export async function writeDownloadedAssets(
       path: asset.path,
       sha256: asset.sha256,
       size: asset.size,
-      source: asset.url
-    }))
+      source: asset.url,
+    })),
   })
   await writeFile(join(root, basePath, 'manifest.json'), manifestContent, 'utf8')
   written.push(join(basePath, 'manifest.json'))
   return { written, manifestContent }
 }
 
-export async function writeDownloadedProjectAssets(
-  root: string,
-  assets: DownloadedAsset[]
-): Promise<string[]> {
+export async function writeDownloadedProjectAssets(root: string, assets: DownloadedAsset[]): Promise<string[]> {
   const written: string[] = []
   for (const asset of assets) {
     const target = join(root, asset.path)
@@ -375,7 +357,7 @@ export async function downloadDefaultOcrZip(
     downloader?: AssetDownloader
     url?: string
     onProgress?: DownloadProgressReporter
-  } = {}
+  } = {},
 ): Promise<DownloadedAsset[]> {
   const url = options.url ?? DEFAULT_OCR_ZIP_URL
   const zip = options.downloader
@@ -383,17 +365,17 @@ export async function downloadDefaultOcrZip(
         url,
         options.onProgress
           ? {
-              onProgress: options.onProgress
+              onProgress: options.onProgress,
             }
-          : undefined
+          : undefined,
       )
     : await downloadDefaultOcrZipContent(
         url,
         options.onProgress
           ? {
-              onProgress: options.onProgress
+              onProgress: options.onProgress,
             }
-          : undefined
+          : undefined,
       )
   return extractOcrZipAssets(zip, url)
 }
@@ -416,7 +398,7 @@ export function extractOcrZipAssets(zip: Buffer, sourceUrl: string): DownloadedA
     'det.onnx',
     'rec.onnx',
     'keys.txt',
-    'README.md'
+    'README.md',
   ]
   const missing = required.find((path) => !selected.has(path))
   if (missing) {
@@ -431,7 +413,7 @@ export function extractOcrZipAssets(zip: Buffer, sourceUrl: string): DownloadedA
       content: entry.content,
       sha256: sha256(entry.content),
       size: entry.content.byteLength,
-      url: `${sourceUrl}#${entry.sourcePath}`
+      url: `${sourceUrl}#${entry.sourcePath}`,
     }
   })
 }
@@ -443,7 +425,7 @@ function extractProjectArchiveAsset(archive: Buffer, asset: ProductAssetEntry): 
   }
   const entries = stripArchiveRoot(
     extraction.product,
-    extraction.format === 'zip' ? readZipEntries(archive) : readTarGzipEntries(archive)
+    extraction.format === 'zip' ? readZipEntries(archive) : readTarGzipEntries(archive),
   )
   const selected = new Map<string, DownloadedAsset>()
   for (const entry of entries) {
@@ -455,7 +437,7 @@ function extractProjectArchiveAsset(archive: Buffer, asset: ProductAssetEntry): 
         sha256: sha256(entry.content),
         size: entry.content.byteLength,
         url: `${asset.url}#${entry.sourcePath}`,
-        ...(entry.mode !== undefined ? { mode: entry.mode } : {})
+        ...(entry.mode !== undefined ? { mode: entry.mode } : {}),
       }
       const existing = selected.get(targetPath)
       if (existing && existing.sha256 !== downloaded.sha256) {
@@ -468,18 +450,15 @@ function extractProjectArchiveAsset(archive: Buffer, asset: ProductAssetEntry): 
     throw new Error(`Project archive did not contain usable runtime files: ${asset.path}`)
   }
   return [
-    ...selected.values()
+    ...selected.values(),
   ]
 }
 
-function mapProjectArchiveEntry(
-  extraction: ProjectArchiveExtraction,
-  relativePath: string
-): string[] {
+function mapProjectArchiveEntry(extraction: ProjectArchiveExtraction, relativePath: string): string[] {
   let mapped: string[]
   if (extraction.product === 'MFAAvalonia') {
     mapped = [
-      `.create-maa-project/runtime/mfaa/${extraction.platform}/${relativePath}`
+      `.create-maa-project/runtime/mfaa/${extraction.platform}/${relativePath}`,
     ]
   } else if (extraction.product === 'Python') {
     mapped = mapPythonArchiveEntry(extraction.platform, relativePath)
@@ -502,71 +481,70 @@ function mapMaaFrameworkArchiveEntry(platform: string, relativePath: string): st
   if (first === 'bin' && rest) {
     if (parts[1]?.toLowerCase() === 'plugins' && parts.length > 2) {
       return [
-        `plugins/${platform}/${parts.slice(2).join('/')}`
+        `plugins/${platform}/${parts.slice(2).join('/')}`,
       ]
     }
     return [
-      `runtimes/${platform}/native/${rest}`
+      `runtimes/${platform}/native/${rest}`,
     ]
   }
   if ((first === 'lib' || first === 'plugins') && rest) {
     return [
-      `plugins/${platform}/${rest}`
+      `plugins/${platform}/${rest}`,
     ]
   }
   if (first === 'share' && parts[1]?.toLowerCase() === 'maaagentbinary' && parts.length > 2) {
     return [
-      `libs/MaaAgentBinary/${parts.slice(2).join('/')}`
+      `libs/MaaAgentBinary/${parts.slice(2).join('/')}`,
     ]
   }
   if (parts.length === 1) {
     return [
-      `runtimes/${platform}/native/${relativePath}`
+      `runtimes/${platform}/native/${relativePath}`,
     ]
   }
   return []
 }
 
 function mapPythonArchiveEntry(platform: string, relativePath: string): string[] {
-  const normalizedPath = relativePath.startsWith('python/')
-    ? relativePath.slice('python/'.length)
-    : relativePath
-  const installPath = normalizedPath.startsWith('install/')
-    ? normalizedPath.slice('install/'.length)
-    : normalizedPath
+  const normalizedPath = relativePath.startsWith('python/') ? relativePath.slice('python/'.length) : relativePath
+  const installPath = normalizedPath.startsWith('install/') ? normalizedPath.slice('install/'.length) : normalizedPath
   if (!installPath) return []
   return [
-    `.create-maa-project/runtime/python/${platform}/${installPath}`
+    `.create-maa-project/runtime/python/${platform}/${installPath}`,
   ]
 }
 
 function stripArchiveRoot(
   product: ProjectArchiveExtraction['product'],
-  entries: ArchiveFileEntry[]
+  entries: ArchiveFileEntry[],
 ): ArchiveFileEntry[] {
   const roots = new Set(entries.map((entry) => entry.path.split('/')[0]).filter(Boolean))
   if (roots.size !== 1) return entries
   const [
-    root
+    root,
   ] = [
-    ...roots
+    ...roots,
   ]
   if (!root) return entries
   if (entries.some((entry) => !entry.path.includes('/'))) return entries
   if (product === 'MFAAvalonia' && root.toLowerCase().endsWith('.app')) return entries
-  if (product === 'MaaFramework' && [
+  if (
+    product === 'MaaFramework' &&
+    [
       'bin',
       'lib',
       'share',
       'include',
-      'plugins'
-    ].includes(root.toLowerCase())) {
+      'plugins',
+    ].includes(root.toLowerCase())
+  ) {
     return entries
   }
   return entries
     .map((entry) => ({
       ...entry,
-      path: entry.path.split('/').slice(1).join('/')
+      path: entry.path.split('/').slice(1).join('/'),
     }))
     .filter((entry) => entry.path.length > 0)
 }
@@ -579,22 +557,19 @@ function isIgnoredArchiveEntry(path: string): boolean {
 async function fetchGithubRelease(
   config: ProductReleaseConfig,
   channel: string,
-  fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch
+  fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
 ): Promise<unknown> {
   const releasePath = channel === 'latest' ? 'latest' : `tags/${encodeURIComponent(channel)}`
-  return fetchJson(
-    `https://api.github.com/repos/${config.owner}/${config.repo}/releases/${releasePath}`,
-    {
-      headers: githubRequestHeaders()
-    }
-  )
+  return fetchJson(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/${releasePath}`, {
+    headers: githubRequestHeaders(),
+  })
 }
 
 async function defaultGithubReleaseJsonFetch(
   url: string,
   options: {
     headers: Record<string, string>
-  }
+  },
 ): Promise<unknown> {
   const attempts = configuredDownloadAttempts()
   let lastError: unknown
@@ -622,7 +597,7 @@ async function defaultGithubReleaseJsonFetch(
 function githubRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28'
+    'X-GitHub-Api-Version': '2022-11-28',
   }
   const token = process.env.GH_TOKEN?.trim() || process.env.GITHUB_TOKEN?.trim()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -633,7 +608,7 @@ function parseGithubReleaseManifest(
   config: ProductReleaseConfig,
   value: unknown,
   channel: string,
-  selectedPlatform: string | undefined
+  selectedPlatform: string | undefined,
 ): ProductAssetManifest | undefined {
   if (!isRecord(value) || typeof value.tag_name !== 'string' || !Array.isArray(value.assets)) {
     throw new Error(`Invalid GitHub release payload for ${config.product}.`)
@@ -648,9 +623,7 @@ function parseGithubReleaseManifest(
     assets.push(asset)
   }
   if (assets.length === 0) return undefined
-  assets.sort((left, right) =>
-    (left.extract?.platform ?? '').localeCompare(right.extract?.platform ?? '')
-  )
+  assets.sort((left, right) => (left.extract?.platform ?? '').localeCompare(right.extract?.platform ?? ''))
   return {
     schemaVersion: 1,
     product: config.product,
@@ -658,26 +631,22 @@ function parseGithubReleaseManifest(
     tag,
     channel,
     ...(selectedPlatform ? { platform: selectedPlatform } : { platform: 'all' }),
-    assets
+    assets,
   }
 }
 
 function parseGithubReleaseAsset(
   product: ProjectArchiveExtraction['product'],
   tag: string,
-  value: unknown
+  value: unknown,
 ): ProductAssetEntry | undefined {
   if (!isRecord(value) || typeof value.name !== 'string') return undefined
   const match = matchProductReleaseAsset(product, tag, value.name)
   if (!match) return undefined
-  if (
-    typeof value.browser_download_url !== 'string' ||
-    !/^https?:\/\//.test(value.browser_download_url)
-  ) {
+  if (typeof value.browser_download_url !== 'string' || !/^https?:\/\//.test(value.browser_download_url)) {
     throw new Error(`GitHub release asset has no download URL: ${value.name}`)
   }
-  const digest =
-    typeof value.digest === 'string' ? parseGithubSha256Digest(value.digest) : undefined
+  const digest = typeof value.digest === 'string' ? parseGithubSha256Digest(value.digest) : undefined
   if (!digest) {
     throw new Error(`GitHub release asset has no sha256 digest: ${value.name}`)
   }
@@ -691,27 +660,23 @@ function parseGithubReleaseAsset(
     path,
     url: value.browser_download_url,
     sha256: digest,
-    ...(Number.isSafeInteger(value.size) && (value.size as number) >= 0
-      ? { size: value.size as number }
-      : {}),
+    ...(Number.isSafeInteger(value.size) && (value.size as number) >= 0 ? { size: value.size as number } : {}),
     extract: {
       product,
       platform: match.platform,
-      format: match.format
-    }
+      format: match.format,
+    },
   })
 }
 
 function matchProductReleaseAsset(
   product: ProjectArchiveExtraction['product'],
   tag: string,
-  name: string
+  name: string,
 ): { platform: string; format: ProjectArchiveExtraction['format'] } | undefined {
   const escapedTag = escapeRegExp(tag)
   if (product === 'MFAAvalonia') {
-    const match = new RegExp(
-      `^MFAAvalonia-${escapedTag}-(win|linux|osx)-(x64|arm64)\\.(zip|tar\\.gz)$`
-    ).exec(name)
+    const match = new RegExp(`^MFAAvalonia-${escapedTag}-(win|linux|osx)-(x64|arm64)\\.(zip|tar\\.gz)$`).exec(name)
     if (!match) return undefined
     const os = normalizeReleaseOs(match[1] as string)
     const arch = normalizeReleaseArch(match[2] as string)
@@ -720,15 +685,13 @@ function matchProductReleaseAsset(
   }
   if (product === 'Python') {
     const match = new RegExp(
-      `^cpython-(${escapeRegExp(PYTHON_STANDALONE_MINOR)}\\.\\d+)\\+${escapedTag}-([^-]+(?:-[^-]+)+)-install_only_stripped\\.tar\\.gz$`
+      `^cpython-(${escapeRegExp(PYTHON_STANDALONE_MINOR)}\\.\\d+)\\+${escapedTag}-([^-]+(?:-[^-]+)+)-install_only_stripped\\.tar\\.gz$`,
     ).exec(name)
     if (!match) return undefined
     const platform = pythonStandalonePlatform(match[2] as string)
     return platform ? { platform, format: 'tar.gz' } : undefined
   }
-  const match = new RegExp(`^MAA-(win|linux|macos)-(x86_64|aarch64)-${escapedTag}\\.zip$`).exec(
-    name
-  )
+  const match = new RegExp(`^MAA-(win|linux|macos)-(x86_64|aarch64)-${escapedTag}\\.zip$`).exec(name)
   if (!match) return undefined
   const os = normalizeReleaseOs(match[1] as string)
   const arch = normalizeReleaseArch(match[2] as string)
@@ -779,7 +742,7 @@ function resolveRequestedRuntimePlatform(value: string | undefined): string | un
   }
   if (process.env.GITHUB_ACTIONS === 'true') {
     throw new Error(
-      'Runtime platform must be explicit in GitHub Actions. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM from the workflow matrix, for example win-arm64.'
+      'Runtime platform must be explicit in GitHub Actions. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM from the workflow matrix, for example win-arm64.',
     )
   }
   return currentRuntimePlatform()
@@ -858,7 +821,7 @@ async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): 
     options.onProgress?.({
       url,
       downloadedBytes: content.byteLength,
-      ...(totalBytes !== undefined ? { totalBytes } : {})
+      ...(totalBytes !== undefined ? { totalBytes } : {}),
     })
     return content
   }
@@ -875,7 +838,7 @@ async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): 
     options.onProgress?.({
       url,
       downloadedBytes,
-      ...(totalBytes !== undefined ? { totalBytes } : {})
+      ...(totalBytes !== undefined ? { totalBytes } : {}),
     })
   }
   return Buffer.concat(chunks, downloadedBytes)
@@ -909,17 +872,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function downloadDefaultOcrZipContent(
-  url: string,
-  options: AssetDownloaderOptions = {}
-): Promise<Buffer> {
+async function downloadDefaultOcrZipContent(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
   const localPath = process.env.CREATE_MAA_PROJECT_OCR_ZIP_PATH?.trim()
   if (localPath) {
     const content = await readFile(localPath)
     options.onProgress?.({
       url,
       downloadedBytes: content.byteLength,
-      totalBytes: content.byteLength
+      totalBytes: content.byteLength,
     })
     return content
   }
@@ -932,10 +892,7 @@ function parseContentLength(value: string | null): number | undefined {
   return Number.isSafeInteger(size) && size >= 0 ? size : undefined
 }
 
-async function loadProductAssetManifest(
-  location: string,
-  strict: boolean
-): Promise<ProductAssetManifest | undefined> {
+async function loadProductAssetManifest(location: string, strict: boolean): Promise<ProductAssetManifest | undefined> {
   try {
     const manifest = JSON.parse((await readLocator(location)).toString('utf8')) as unknown
     return parseProductAssetManifest(manifest, strict)
@@ -955,16 +912,13 @@ async function readLocator(location: string): Promise<Buffer> {
   return readFile(location)
 }
 
-function parseProductAssetManifest(
-  value: unknown,
-  strict: boolean
-): ProductAssetManifest | undefined {
+function parseProductAssetManifest(value: unknown, strict: boolean): ProductAssetManifest | undefined {
   if (!isRecord(value) || !Array.isArray(value.assets)) {
     if (strict) throw new Error('Asset manifest must contain an assets array.')
     return undefined
   }
   const manifest: ProductAssetManifest = {
-    assets: value.assets.map((entry) => validateProductAssetEntry(entry as ProductAssetEntry))
+    assets: value.assets.map((entry) => validateProductAssetEntry(entry as ProductAssetEntry)),
   }
   if (typeof value.schemaVersion === 'number') manifest.schemaVersion = value.schemaVersion
   if (typeof value.product === 'string') manifest.product = value.product
@@ -978,7 +932,7 @@ function parseProductAssetManifest(
 function productManifestEnvironmentNames(product: string): string[] {
   const normalized = product.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
   const names = [
-    `CREATE_MAA_PROJECT_${normalized}_MANIFEST_URL`
+    `CREATE_MAA_PROJECT_${normalized}_MANIFEST_URL`,
   ]
   if (normalized === 'MAAFRAMEWORK') {
     names.push('CREATE_MAA_PROJECT_MAAFW_MANIFEST_URL')
@@ -1018,7 +972,7 @@ function validateAssetEntry(entry: AssetEntry): AssetEntry {
     path: entry.path,
     url: entry.url,
     sha256: entry.sha256.toLowerCase(),
-    ...(entry.size !== undefined ? { size: entry.size } : {})
+    ...(entry.size !== undefined ? { size: entry.size } : {}),
   }
 }
 
@@ -1031,9 +985,7 @@ function validateProductAssetEntry(entry: ProductAssetEntry): ProductAssetEntry 
   const format = entry.extract.format
   const product = entry.extract.product
   const platform =
-    typeof entry.extract.platform === 'string'
-      ? normalizeRuntimePlatform(entry.extract.platform)
-      : undefined
+    typeof entry.extract.platform === 'string' ? normalizeRuntimePlatform(entry.extract.platform) : undefined
   if (format !== 'zip' && format !== 'tar.gz') {
     throw new Error(`Invalid asset extraction format for ${entry.path}`)
   }
@@ -1048,8 +1000,8 @@ function validateProductAssetEntry(entry: ProductAssetEntry): ProductAssetEntry 
     extract: {
       format,
       product,
-      platform
-    }
+      platform,
+    },
   }
 }
 
@@ -1121,7 +1073,7 @@ function readTarEntries(tar: Buffer): ArchiveFileEntry[] {
       path,
       sourcePath,
       content: Buffer.from(data),
-      ...(mode > 0 ? { mode } : {})
+      ...(mode > 0 ? { mode } : {}),
     })
     offset = nextOffset
   }
@@ -1163,9 +1115,9 @@ function readZipEntries(zip: Buffer): ArchiveFileEntry[] {
         localHeaderOffset,
         compressedSize,
         uncompressedSize,
-        method
+        method,
       }),
-      ...(mode > 0 ? { mode } : {})
+      ...(mode > 0 ? { mode } : {}),
     })
   }
   return entries
@@ -1178,7 +1130,7 @@ function readZipEntryContent(
     compressedSize: number
     uncompressedSize: number
     method: number
-  }
+  },
 ): Buffer {
   const offset = entry.localHeaderOffset
   if (zip.readUInt32LE(offset) !== 0x04034b50) {

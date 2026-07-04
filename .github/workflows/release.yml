@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
           cache: pnpm
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
       - run: node scripts/sync-release-version.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
@@ -186,7 +186,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
       - uses: astral-sh/setup-uv@v8.1.0
       - uses: actions/setup-node@v6
         with:

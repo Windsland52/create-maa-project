@@ -13,7 +13,7 @@ describe('parseArgs', () => {
       '--slug',
       'arknights-helper',
       '--controller',
-      'Win32'
+      'Win32',
     ])
 
     expect(options.name).toBe('测试项目')
@@ -22,7 +22,7 @@ describe('parseArgs', () => {
     expect(options.slug).toBe('arknights-helper')
     expect(options.skipDownload).toBe(true)
     expect(options.controllers).toEqual([
-      'Win32'
+      'Win32',
     ])
   })
 
@@ -31,21 +31,21 @@ describe('parseArgs', () => {
       '--controller',
       'ADB,Win32',
       '--controller',
-      'macos'
+      'macos',
     ])
 
     expect(options.controllers).toEqual([
       'Adb',
       'Win32',
-      'MacOS'
+      'MacOS',
     ])
   })
 
   it('rejects unknown options', () => {
     expect(() =>
       parseArgs([
-        '--bad'
-      ])
+        '--bad',
+      ]),
     ).toThrow('Unknown option')
   })
 
@@ -55,11 +55,11 @@ describe('parseArgs', () => {
       'resource-pack',
       'extra',
       '--label',
-      '额外资源'
+      '额外资源',
     ])
 
     expect(options.add).toEqual([
-      'resource-pack'
+      'resource-pack',
     ])
     expect(options.resourcePackSlug).toBe('extra')
     expect(options.label).toBe('额外资源')
@@ -69,7 +69,7 @@ describe('parseArgs', () => {
     const options = parseArgs([
       '--sync',
       'github-url',
-      'https://github.com/MaaXYZ/MaaXX'
+      'https://github.com/MaaXYZ/MaaXX',
     ])
 
     expect(options.sync).toBe('github-url')
@@ -79,7 +79,7 @@ describe('parseArgs', () => {
   it('parses doctor report mode', () => {
     const options = parseArgs([
       '--doctor',
-      '--report'
+      '--report',
     ])
 
     expect(options.doctor).toBe(true)
@@ -88,7 +88,7 @@ describe('parseArgs', () => {
 
   it('parses MCP server mode', () => {
     const options = parseArgs([
-      '--mcp'
+      '--mcp',
     ])
 
     expect(options.mcp).toBe(true)
@@ -98,20 +98,20 @@ describe('parseArgs', () => {
     expect(
       parseArgs([
         '--lang',
-        'zh'
-      ]).lang
+        'zh',
+      ]).lang,
     ).toBe('zh-CN')
     expect(
       parseArgs([
         '--lang',
-        'en'
-      ]).lang
+        'en',
+      ]).lang,
     ).toBe('en')
     expect(() =>
       parseArgs([
         '--lang',
-        'fr'
-      ])
+        'fr',
+      ]),
     ).toThrow('--lang must be one of: auto, en, zh-CN')
   })
 
@@ -119,33 +119,33 @@ describe('parseArgs', () => {
     expect(
       parseArgs([
         'my-project',
-        '--git'
-      ]).initializeGit
+        '--git',
+      ]).initializeGit,
     ).toBe(true)
     expect(
       parseArgs([
         'my-project',
-        '--no-git'
-      ]).initializeGit
+        '--no-git',
+      ]).initializeGit,
     ).toBe(false)
   })
 
   it('parses explicit stale lock cleanup', () => {
     expect(
       parseArgs([
-        '--clear-stale-lock'
-      ]).clearStaleLock
+        '--clear-stale-lock',
+      ]).clearStaleLock,
     ).toBe(true)
   })
 
   it('parses accept changes with optional paths', () => {
     const all = parseArgs([
-      '--accept-changes'
+      '--accept-changes',
     ])
     const selected = parseArgs([
       '--accept-changes',
       'package.json',
-      'interface.json'
+      'interface.json',
     ])
 
     expect(all.acceptChangesRequested).toBe(true)
@@ -153,7 +153,7 @@ describe('parseArgs', () => {
     expect(selected.acceptChangesRequested).toBe(true)
     expect(selected.acceptChanges).toEqual([
       'package.json',
-      'interface.json'
+      'interface.json',
     ])
   })
 
@@ -162,14 +162,14 @@ describe('parseArgs', () => {
       'my-project',
       '--assist',
       '--from',
-      '../M9A'
+      '../M9A',
     ])
     const migration = parseArgs([
       '--migrate',
       '.',
       '--target',
       './new-project',
-      '--dry-run'
+      '--dry-run',
     ])
 
     expect(assisted.assist).toBe(true)

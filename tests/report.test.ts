@@ -54,9 +54,9 @@ describe('CLI JSON reports', () => {
           '--add',
           'dev-tools',
           '--skip-download',
-          '--report'
+          '--report',
         ],
-        root
+        root,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -65,25 +65,25 @@ describe('CLI JSON reports', () => {
         command: 'create',
         ok: true,
         exitCode: 0,
-        root: join(root, 'maa-report-create')
+        root: join(root, 'maa-report-create'),
       })
       expect(report.pending).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            command: 'create-maa-project --update node-deps'
-          })
-        ])
+            command: 'create-maa-project --update node-deps',
+          }),
+        ]),
       )
       expect(report.suggestedCommands).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             command: 'create-maa-project --update node-deps',
-            autoRun: false
-          })
-        ])
+            autoRun: false,
+          }),
+        ]),
       )
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -96,9 +96,9 @@ describe('CLI JSON reports', () => {
           'version',
           '--version',
           '0.2.0',
-          '--report'
+          '--report',
         ],
-        projectRoot
+        projectRoot,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -107,16 +107,16 @@ describe('CLI JSON reports', () => {
         command: 'sync',
         ok: true,
         exitCode: 0,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.written).toEqual(
         expect.arrayContaining([
           'interface.json',
-          'maa-project.json'
-        ])
+          'maa-project.json',
+        ]),
       )
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -127,9 +127,9 @@ describe('CLI JSON reports', () => {
         [
           '--update',
           'schema',
-          '--report'
+          '--report',
         ],
-        projectRoot
+        projectRoot,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -138,16 +138,16 @@ describe('CLI JSON reports', () => {
         command: 'update',
         ok: true,
         exitCode: 0,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.written).toEqual(
         expect.arrayContaining([
           'maa-project.json',
-          'maa-project.lock.json'
-        ])
+          'maa-project.lock.json',
+        ]),
       )
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -158,15 +158,15 @@ describe('CLI JSON reports', () => {
       await writeFile(
         checkProjectPath,
         `${await readFile(checkProjectPath, 'utf8')}\nconsole.log('local report diff')\n`,
-        'utf8'
+        'utf8',
       )
 
       const result = await runCli(
         [
           '--diff',
-          '--report'
+          '--report',
         ],
-        projectRoot
+        projectRoot,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -175,17 +175,17 @@ describe('CLI JSON reports', () => {
         command: 'diff',
         ok: true,
         exitCode: 0,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.changedManagedFiles).toEqual([
         {
           path: 'tools/check-project.mjs',
-          status: 'modified'
-        }
+          status: 'modified',
+        },
       ])
       expect(report.diff?.lines?.join('\n')).toContain('local report diff')
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -196,15 +196,15 @@ describe('CLI JSON reports', () => {
       await writeFile(
         checkProjectPath,
         `${await readFile(checkProjectPath, 'utf8')}\nconsole.log('local report doctor')\n`,
-        'utf8'
+        'utf8',
       )
 
       const result = await runCli(
         [
           '--doctor',
-          '--report'
+          '--report',
         ],
-        projectRoot
+        projectRoot,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -213,23 +213,23 @@ describe('CLI JSON reports', () => {
         command: 'doctor',
         ok: false,
         exitCode: 1,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.changedManagedFiles).toEqual([
         {
           path: 'tools/check-project.mjs',
-          status: 'modified'
-        }
+          status: 'modified',
+        },
       ])
       expect(report.suggestedCommands).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            command: 'create-maa-project --accept-changes tools/check-project.mjs'
-          })
-        ])
+            command: 'create-maa-project --accept-changes tools/check-project.mjs',
+          }),
+        ]),
       )
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 
   it(
@@ -242,9 +242,9 @@ describe('CLI JSON reports', () => {
           'version',
           '--version',
           'not-semver',
-          '--report'
+          '--report',
         ],
-        projectRoot
+        projectRoot,
       )
       const report = parseStdoutReport(result.stdout, result.stderr)
 
@@ -253,11 +253,11 @@ describe('CLI JSON reports', () => {
         command: 'sync',
         ok: false,
         exitCode: 1,
-        root: projectRoot
+        root: projectRoot,
       })
       expect(report.error?.message).toContain('Invalid version')
     },
-    CLI_TEST_TIMEOUT_MS
+    CLI_TEST_TIMEOUT_MS,
   )
 })
 
@@ -269,9 +269,9 @@ async function createReportProject(name: string): Promise<string> {
       '--add',
       'dev-tools',
       '--skip-download',
-      '--report'
+      '--report',
     ],
-    root
+    root,
   )
   expect(result.exitCode, result.stderr).toBe(0)
   parseStdoutReport(result.stdout, result.stderr)
@@ -298,7 +298,7 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
       process.execPath,
       [
         cliEntry,
-        ...args
+        ...args,
       ],
       {
         cwd,
@@ -306,9 +306,9 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
         stdio: [
           'ignore',
           stdout.fd,
-          stderr.fd
-        ]
-      }
+          stderr.fd,
+        ],
+      },
     )
     const timer = setTimeout(() => {
       timedOut = true
@@ -320,7 +320,7 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
       clearTimeout(timer)
       await Promise.all([
         stdout.close(),
-        stderr.close()
+        stderr.close(),
       ])
       await action()
     }
@@ -338,7 +338,7 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
         resolve({
           stdout: await readFile(stdoutPath, 'utf8'),
           stderr: await readFile(stderrPath, 'utf8'),
-          exitCode: code ?? (signal ? 1 : 0)
+          exitCode: code ?? (signal ? 1 : 0),
         })
       })
     })
@@ -357,7 +357,7 @@ function parseStdoutReport(stdout: string, stderr: string): JsonReport {
   }).not.toThrow()
   expect(parsed).toMatchObject({
     schemaVersion: 1,
-    tool: 'create-maa-project'
+    tool: 'create-maa-project',
   })
   const report = parsed as JsonReport
   expect(report.timestamp).toEqual(expect.any(String))

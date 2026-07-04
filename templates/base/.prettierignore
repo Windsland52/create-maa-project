@@ -4,6 +4,7 @@ dist/
 .venv/
 .uv-cache/
 pnpm-lock.yaml
+uv.lock
 MaaCommonAssets/
 resource/base/model/ocr/
 tools/schema/interface.schema.json

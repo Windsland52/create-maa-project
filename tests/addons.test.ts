@@ -7,56 +7,56 @@ describe('applyIncrementalAddons', () => {
   it('resolves add-on dependencies in template order', () => {
     expect(
       resolveAddonDependencies([
-        'schema-sync'
-      ])
+        'schema-sync',
+      ]),
     ).toEqual([
       'dev-tools',
       'github',
-      'schema-sync'
+      'schema-sync',
     ])
     expect(
       resolveAddonDependencies([
-        'community'
-      ])
+        'community',
+      ]),
     ).toEqual([
       'dev-tools',
       'github',
-      'community'
+      'community',
     ])
     expect(
       resolveAddonDependencies([
-        'git-cliff'
-      ])
+        'git-cliff',
+      ]),
     ).toEqual([
       'dev-tools',
       'github',
-      'git-cliff'
+      'git-cliff',
     ])
     expect(
       resolveAddonDependencies([
-        'auto-format'
-      ])
+        'auto-format',
+      ]),
     ).toEqual([
       'dev-tools',
       'github',
-      'auto-format'
+      'auto-format',
     ])
     expect(
       resolveAddonDependencies([
-        'optimize-images'
-      ])
+        'optimize-images',
+      ]),
     ).toEqual([
       'dev-tools',
       'github',
-      'optimize-images'
+      'optimize-images',
     ])
     expect(
       resolveAddonDependencies([
-        'agent'
-      ])
+        'agent',
+      ]),
     ).toEqual([
       'dev-tools',
-      'agent'
+      'agent',
     ])
   })
 
@@ -64,16 +64,16 @@ describe('applyIncrementalAddons', () => {
     await expect(
       applyIncrementalAddons(
         options([
-          'ci'
-        ])
-      )
+          'ci',
+        ]),
+      ),
     ).rejects.toThrow('Unsupported add-on: ci')
     await expect(
       applyIncrementalAddons(
         options([
-          'changelog'
-        ])
-      )
+          'changelog',
+        ]),
+      ),
     ).rejects.toThrow('Unsupported add-on: changelog')
   })
 
@@ -81,23 +81,21 @@ describe('applyIncrementalAddons', () => {
     await expect(
       applyIncrementalAddons(
         options([
-          'mirrorchyan'
-        ])
-      )
-    ).rejects.toThrow(
-      '--add mirrorchyan is reserved for v1.x and is not implemented in this version.'
-    )
+          'mirrorchyan',
+        ]),
+      ),
+    ).rejects.toThrow('--add mirrorchyan is reserved for v1.x and is not implemented in this version.')
   })
 
   it('rejects unknown add-ons with the current support summary', async () => {
     await expect(
       applyIncrementalAddons(
         options([
-          'unknown-addon'
-        ])
-      )
+          'unknown-addon',
+        ]),
+      ),
     ).rejects.toThrow(
-      'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync'
+      'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
     )
   })
 })
@@ -125,6 +123,6 @@ function options(add: string[]): CliOptions {
     cleanCache: false,
     report: false,
     mcp: false,
-    explicitTemplate: false
+    explicitTemplate: false,
   }
 }

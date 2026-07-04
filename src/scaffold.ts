@@ -20,7 +20,7 @@ import {
   optimizeImagesFiles,
   projectCustomSchemaFiles,
   releaseWorkflowFile,
-  schemaSyncFiles
+  schemaSyncFiles,
 } from './templates.js'
 import type {
   CliOptions,
@@ -28,18 +28,9 @@ import type {
   MaaProjectConfig,
   ManagedFileInput,
   PendingItem,
-  ScaffoldResult
+  ScaffoldResult,
 } from './types.js'
-import {
-  assertValidSlug,
-  exists,
-  normalizeSlug,
-  nowIso,
-  prettyJson,
-  readText,
-  stableJson,
-  stripV
-} from './utils.js'
+import { assertValidSlug, exists, normalizeSlug, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
 import {
   backupProjectSnapshot,
   emptyLock,
@@ -50,14 +41,14 @@ import {
   refreshManagedFileContent,
   withProjectWriteLock,
   writeGeneratedFiles,
-  writeProjectState
+  writeProjectState,
 } from './project.js'
 import { assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
 import {
   resolveOcrManifestFromEnvironment,
   type AssetDownloader,
   type AssetManifestResolver,
-  type DownloadProgressReporter
+  type DownloadProgressReporter,
 } from './assets.js'
 import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
@@ -83,24 +74,23 @@ export async function createProject(
     assetDownloader?: AssetDownloader
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
-  } = {}
+  } = {},
 ): Promise<ScaffoldResult> {
   assertSupportedCreateAddons(options.add)
   const targetRoot = resolve(process.cwd(), options.name ?? '.')
   const detectGitTree = environment.detectGitTree ?? isInsideGitTree
   const targetInsideGitTree = await detectGitTree(targetRoot)
-  const defaultName =
-    options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
+  const defaultName = options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
   const slug = options.slug ? normalizeSlug(options.slug) : normalizeSlug(defaultName)
   if (!slug) {
     throw new Error(
-      `Project ID cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`
+      `Project ID cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`,
     )
   }
   assertValidSlug(slug)
   const displayName = requiredNonBlank(
     options.displayName ?? options.label ?? defaultName,
-    'Project display name cannot be blank.'
+    'Project display name cannot be blank.',
   )
   const version = stripV(options.version ?? '0.1.0')
   assertValidVersion(version)
@@ -121,14 +111,14 @@ export async function createProject(
     includeAgent,
     pythonDevCommand,
     options,
-    resolvedAddons
+    resolvedAddons,
   })
   const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
   const pending = defaultPending({
     includeAgent,
     options,
     includeDevTools,
-    includeOcrPending: !shouldDownloadOcrModels
+    includeOcrPending: !shouldDownloadOcrModels,
   })
   const files = [
     ...baseProjectFiles({
@@ -145,10 +135,10 @@ export async function createProject(
       includeOptimizeImages: resolvedAddons.includes('optimize-images'),
       includeSchemaSync: resolvedAddons.includes('schema-sync'),
       pythonDevCommand,
-      resources: config.resources
+      resources: config.resources,
     }),
     ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName }),
-    configFile(config)
+    configFile(config),
   ]
   const lock = emptyLock(CLI_VERSION)
   const scaffold = await withProjectWriteLock(
@@ -160,7 +150,7 @@ export async function createProject(
       }
       const result = await writeGeneratedFiles(targetRoot, files, {
         force: options.force,
-        backup: true
+        backup: true,
       })
       const written = new Set(result.written)
       Object.assign(lock.managedFiles, result.lockEntries)
@@ -168,7 +158,7 @@ export async function createProject(
         if (!file.managed && result.written.includes(file.path)) {
           lock.createdFiles[file.path] = {
             createdAt: nowIso(),
-            managed: false
+            managed: false,
           }
         }
       }
@@ -186,10 +176,10 @@ export async function createProject(
           }
         } catch (error) {
           environment.onProgress?.(
-            `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`
+            `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
           )
           lock.pending = mergePending(lock.pending, [
-            ocrDownloadPending(error)
+            ocrDownloadPending(error),
           ])
         }
       }
@@ -200,27 +190,27 @@ export async function createProject(
         config,
         lock,
         written: [
-          ...written
+          ...written,
         ],
         skipped: result.skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
   const afterDependencies = await maybeInstallNodeDependencies(
     scaffold,
     options,
     environment.commandRunner ?? runCommand,
     environment.installNodeDeps === true,
-    environment.onProgress
+    environment.onProgress,
   )
   const git = await maybeInitializeGit(
     targetRoot,
     options,
     afterDependencies.pending,
     targetInsideGitTree,
-    environment.gitRunner ?? runGit
+    environment.gitRunner ?? runGit,
   )
   return git ? { ...afterDependencies, git } : afterDependencies
 }
@@ -239,7 +229,7 @@ function createOcrUpdateOptions(environment: {
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
   } = {
-    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment
+    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment,
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
@@ -257,7 +247,7 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
       lock,
       written: [],
       skipped: [],
-      pending: lock.pending
+      pending: lock.pending,
     }
   }
 
@@ -266,7 +256,7 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
   config.addons.devTools = { enabled: true }
   const files = [
     ...devToolFiles(templateInputFromConfig(config)),
-    configFile(config)
+    configFile(config),
   ]
   return writeAddonFiles(root, config, lock, files, options, {
     overwriteUnmanaged: true,
@@ -274,9 +264,9 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
       {
         kind: 'node-deps',
         reason: 'Node dependencies need to be installed for dev tools.',
-        command: 'create-maa-project --update node-deps'
-      }
-    ]
+        command: 'create-maa-project --update node-deps',
+      },
+    ],
   })
 }
 
@@ -294,7 +284,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
       lock,
       written: [],
       skipped: [],
-      pending: lock.pending
+      pending: lock.pending,
     }
   }
 
@@ -307,7 +297,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
     'release:dry-run': 'node tools/build-release.mjs --dry-run',
     'sync:runtime': 'node tools/sync-runtime.mjs',
-    ...(config.addons.optimizeImages ? { 'optimize:images': 'node tools/optimize-images.mjs' } : {})
+    ...(config.addons.optimizeImages ? { 'optimize:images': 'node tools/optimize-images.mjs' } : {}),
   }
   const files = [
     ...githubFiles(templateInputFromConfig(config)),
@@ -317,13 +307,13 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     {
       path: 'package.json',
       content: stableJson(packageJson),
-      managed: false
+      managed: false,
     },
-    configFile(config)
+    configFile(config),
   ]
   return writeAddonFiles(root, config, lock, files, options, {
     overwriteUnmanaged: true,
-    pending: []
+    pending: [],
   })
 }
 
@@ -338,7 +328,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       lock,
       written: [],
       skipped: [],
-      pending: lock.pending
+      pending: lock.pending,
     }
   }
 
@@ -346,12 +336,12 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   const pythonDevCommand = defaultAgentDevCommand()
   config.python = {
     requiresPython: '>=3.13,<3.14',
-    recommendedPython: '3.13'
+    recommendedPython: '3.13',
   }
   config.python.devCommand = pythonDevCommand
   const interfaceJson = await readInterfaceJson(root)
   interfaceJson.agent = [
-    interfaceAgent(config.python.devCommand)
+    interfaceAgent(config.python.devCommand),
   ]
   const packageJson = await readJsonObject(root, 'package.json')
   packageJson.scripts = {
@@ -359,7 +349,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     'format:py': 'uv run --frozen ruff format .',
     'lint:py': 'uv run --frozen ruff check .',
     'typecheck:py': 'uv run --frozen pyright',
-    'check:py': 'pnpm lint:py && pnpm typecheck:py'
+    'check:py': 'pnpm lint:py && pnpm typecheck:py',
   }
   const vscodeExtensions = await readJsonObject(root, '.vscode/extensions.json')
   const recommendations = arrayOfStrings(vscodeExtensions.recommendations)
@@ -368,60 +358,56 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     'charliermarsh.ruff',
     'ms-python.debugpy',
     'ms-python.python',
-    'ms-python.vscode-pylance'
+    'ms-python.vscode-pylance',
   ])
   const vscodeSettings = await readJsonObject(root, '.vscode/settings.json')
   vscodeSettings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv'
   vscodeSettings['[python]'] = {
-    'editor.defaultFormatter': 'charliermarsh.ruff'
+    'editor.defaultFormatter': 'charliermarsh.ruff',
   }
   const files: ManagedFileInput[] = [
     ...agentFiles({
       slug: config.project.slug,
       version: config.project.version,
-      displayName: config.project.displayName
+      displayName: config.project.displayName,
     }),
     ...projectCustomSchemaFiles(true),
     {
       path: 'interface.json',
       content: prettyJson(interfaceJson),
-      managed: false
+      managed: false,
     },
     {
       path: 'package.json',
       content: stableJson(packageJson),
-      managed: false
+      managed: false,
     },
     {
       path: '.vscode/extensions.json',
       content: stableJson(vscodeExtensions),
-      managed: false
+      managed: false,
     },
     {
       path: '.vscode/settings.json',
       content: stableJson(vscodeSettings),
-      managed: false
+      managed: false,
     },
     maatoolsConfigFile(
       config.resources.map((pack) => `./${pack.path}`),
-      true
+      true,
     ),
-    configFile(config)
+    configFile(config),
   ]
   if (config.features.vscode.enabled && !(await exists(join(root, '.vscode/launch.json')))) {
-    files.push(
-      ...devToolFiles(templateInputFromConfig(config)).filter(
-        (file) => file.path === '.vscode/launch.json'
-      )
-    )
+    files.push(...devToolFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/launch.json'))
   }
   if (hasGithubAutomation(config)) {
     files.push(
       releaseWorkflowFile({
         slug: config.project.slug,
         displayName: config.project.displayName,
-        includeGitCliff: Boolean(config.addons.gitCliff)
-      })
+        includeGitCliff: Boolean(config.addons.gitCliff),
+      }),
     )
   }
   return withProjectWriteLock(
@@ -431,7 +417,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
-        overwriteUnmanaged: true
+        overwriteUnmanaged: true,
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
@@ -446,10 +432,10 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
         lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: _options.clearStaleLock }
+    { clearStale: _options.clearStaleLock },
   )
 }
 
@@ -462,15 +448,12 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
   if (config.resources.some((pack) => pack.slug === slug)) {
     throw new Error(`Resource pack already exists: ${slug}`)
   }
-  const label = requiredNonBlank(
-    options.label ?? displayNameFromSlug(slug),
-    'Resource pack label cannot be blank.'
-  )
+  const label = requiredNonBlank(options.label ?? displayNameFromSlug(slug), 'Resource pack label cannot be blank.')
   config.resources.push({
     slug,
     label,
     path: `resource/${slug}`,
-    enabled: true
+    enabled: true,
   })
   const interfaceJson = await readInterfaceJson(root)
   interfaceJson.resource = interfaceResourceItems(config.resources)
@@ -479,20 +462,20 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
     {
       path: 'interface.json',
       content: prettyJson(interfaceJson),
-      managed: false
+      managed: false,
     },
     {
       path: `resource/${slug}/pipeline/.gitkeep`,
       content: '',
-      managed: false
+      managed: false,
     },
     {
       path: `resource/${slug}/image/empty.png`,
       content: emptyPng(),
-      managed: false
+      managed: false,
     },
     maatoolsConfigFile(resourcePaths, Boolean(config.python)),
-    configFile(config)
+    configFile(config),
   ]
 
   return withProjectWriteLock(
@@ -502,7 +485,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
-        overwriteUnmanaged: true
+        overwriteUnmanaged: true,
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
@@ -516,10 +499,10 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
         lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
 }
 
@@ -530,7 +513,7 @@ export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult>
   config.addons.gitCliff = { enabled: true }
   const files: ManagedFileInput[] = [
     ...gitCliffFiles(),
-    configFile(config)
+    configFile(config),
   ]
   if (hasGithubAutomation(config)) {
     files.push(releaseWorkflowFile(templateInputFromConfig(config)))
@@ -549,9 +532,9 @@ export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult
     lock,
     [
       ...autoFormatFiles(),
-      configFile(config)
+      configFile(config),
     ],
-    options
+    options,
   )
 }
 
@@ -564,7 +547,7 @@ export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldRe
   const packageJson = await readJsonObject(root, 'package.json')
   packageJson.scripts = {
     ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
-    'optimize:images': 'node tools/optimize-images.mjs'
+    'optimize:images': 'node tools/optimize-images.mjs',
   }
 
   return writeAddonFiles(
@@ -576,12 +559,12 @@ export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldRe
       {
         path: 'package.json',
         content: stableJson(packageJson),
-        managed: false
+        managed: false,
       },
-      configFile(config)
+      configFile(config),
     ],
     options,
-    { overwriteUnmanaged: true }
+    { overwriteUnmanaged: true },
   )
 }
 
@@ -596,9 +579,9 @@ export async function addDependabot(options: CliOptions): Promise<ScaffoldResult
     lock,
     [
       dependabotFile(),
-      configFile(config)
+      configFile(config),
     ],
-    options
+    options,
   )
 }
 
@@ -613,11 +596,11 @@ export async function addCommunity(options: CliOptions): Promise<ScaffoldResult>
     lock,
     [
       ...communityFiles({
-        displayName: config.project.displayName
+        displayName: config.project.displayName,
       }),
-      configFile(config)
+      configFile(config),
     ],
-    options
+    options,
   )
 }
 
@@ -630,7 +613,7 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
   const packageJson = await readJsonObject(root, 'package.json')
   packageJson.scripts = {
     ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
-    'sync:schema': 'node tools/sync-schema.mjs'
+    'sync:schema': 'node tools/sync-schema.mjs',
   }
 
   return writeAddonFiles(
@@ -642,12 +625,12 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
       {
         path: 'package.json',
         content: stableJson(packageJson),
-        managed: false
+        managed: false,
       },
-      configFile(config)
+      configFile(config),
     ],
     options,
-    { overwriteUnmanaged: true }
+    { overwriteUnmanaged: true },
   )
 }
 
@@ -668,39 +651,39 @@ function createConfig(input: {
       slug: input.slug,
       displayName: input.displayName,
       version: input.version,
-      initialTemplate: input.includeAgent ? 'agent' : 'pipeline'
+      initialTemplate: input.includeAgent ? 'agent' : 'pipeline',
     },
     features: {
       ci: { enabled: includeGithub },
       release: { enabled: includeGithub },
       vscode: { enabled: includeDevTools },
-      quality: { enabled: includeDevTools }
+      quality: { enabled: includeDevTools },
     },
     addons: initialAddons(input.resolvedAddons),
     controller: {
-      kinds: input.options.controllers ?? DEFAULT_CONTROLLER_KINDS
+      kinds: input.options.controllers ?? DEFAULT_CONTROLLER_KINDS,
     },
     resources: initialResources(input.options),
     maafw: {
-      channel: 'latest'
+      channel: 'latest',
     },
     runtime: {
       mfa: {
         channel: 'latest',
-        enabled: includeGithub
-      }
+        enabled: includeGithub,
+      },
     },
     network: {
-      mode: input.options.network ?? 'auto'
+      mode: input.options.network ?? 'auto',
     },
     license: {
-      spdx: input.options.license ?? 'AGPL-3.0-or-later'
-    }
+      spdx: input.options.license ?? 'AGPL-3.0-or-later',
+    },
   }
   if (input.includeAgent) {
     config.python = {
       requiresPython: '>=3.13,<3.14',
-      recommendedPython: '3.13'
+      recommendedPython: '3.13',
     }
     config.python.devCommand = input.pythonDevCommand ?? defaultAgentDevCommand()
   }
@@ -713,7 +696,7 @@ async function writeAddonFiles(
   lock: Awaited<ReturnType<typeof readProjectLock>>,
   files: ManagedFileInput[],
   options: CliOptions,
-  writeOptions: { overwriteUnmanaged?: boolean; pending?: PendingItem[] } = {}
+  writeOptions: { overwriteUnmanaged?: boolean; pending?: PendingItem[] } = {},
 ): Promise<ScaffoldResult> {
   return withProjectWriteLock(
     root,
@@ -722,7 +705,7 @@ async function writeAddonFiles(
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
-        ...(writeOptions.overwriteUnmanaged ? { overwriteUnmanaged: true } : {})
+        ...(writeOptions.overwriteUnmanaged ? { overwriteUnmanaged: true } : {}),
       })
       Object.assign(lock.managedFiles, result.lockEntries)
       recordCreatedFiles(lock, files, result.written)
@@ -739,23 +722,23 @@ async function writeAddonFiles(
         lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending
+        pending: lock.pending,
       }
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
 }
 
 function recordCreatedFiles(
   lock: Awaited<ReturnType<typeof readProjectLock>>,
   files: ManagedFileInput[],
-  written: string[]
+  written: string[],
 ): void {
   for (const file of files) {
     if (!file.managed && written.includes(file.path)) {
       lock.createdFiles[file.path] = {
         createdAt: nowIso(),
-        managed: false
+        managed: false,
       }
     }
   }
@@ -780,8 +763,8 @@ function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
       slug: 'base',
       label: 'Base',
       path: 'resource/base',
-      enabled: true
-    }
+      enabled: true,
+    },
   ]
   if (!options.add.includes('resource-pack')) return resources
   const slug = normalizeSlug(options.resourcePackSlug ?? '')
@@ -789,12 +772,9 @@ function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
   assertValidSlug(slug)
   resources.push({
     slug,
-    label: requiredNonBlank(
-      options.label ?? displayNameFromSlug(slug),
-      'Resource pack display name cannot be blank.'
-    ),
+    label: requiredNonBlank(options.label ?? displayNameFromSlug(slug), 'Resource pack display name cannot be blank.'),
     path: `resource/${slug}`,
-    enabled: true
+    enabled: true,
   })
   return resources
 }
@@ -802,7 +782,7 @@ function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
 function addonFilesForCreate(
   options: CliOptions,
   resources: MaaProjectConfig['resources'],
-  input: { displayName: string }
+  input: { displayName: string },
 ): ManagedFileInput[] {
   const files: ManagedFileInput[] = []
   for (const pack of resources.slice(1)) {
@@ -810,13 +790,13 @@ function addonFilesForCreate(
       {
         path: `${pack.path}/pipeline/.gitkeep`,
         content: '',
-        managed: false
+        managed: false,
       },
       {
         path: `${pack.path}/image/empty.png`,
         content: emptyPng(),
-        managed: false
-      }
+        managed: false,
+      },
     )
   }
   const addons = options.add
@@ -840,26 +820,26 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
     includeOptimizeImages: Boolean(config.addons.optimizeImages),
     includeSchemaSync: Boolean(config.addons.schemaSync),
     pythonDevCommand: config.python?.devCommand,
-    resources: config.resources
+    resources: config.resources,
   }
 }
 
 export async function assertCanCreateTarget(
   targetRoot: string,
   options: CliOptions,
-  detectGitTree: (path: string) => Promise<boolean> = isInsideGitTree
+  detectGitTree: (path: string) => Promise<boolean> = isInsideGitTree,
 ): Promise<void> {
   const entries = await listDirectoryEntries(targetRoot)
   if (entries.length === 0) return
   if (!options.force) {
     throw new Error(
-      `Target directory is not empty: ${targetRoot}. Use --force to write missing files and replace existing generated files.`
+      `Target directory is not empty: ${targetRoot}. Use --force to write missing files and replace existing generated files.`,
     )
   }
   const hasGit = await detectGitTree(targetRoot)
   if (!hasGit && !options.allowNonGitDir) {
     throw new Error(
-      'Refusing to write into a non-empty directory without Git protection. Re-run with --allow-non-git-dir after making a backup.'
+      'Refusing to write into a non-empty directory without Git protection. Re-run with --allow-non-git-dir after making a backup.',
     )
   }
 }
@@ -879,40 +859,40 @@ async function maybeInitializeGit(
   options: CliOptions,
   pending: PendingItem[],
   targetInsideGitTree: boolean,
-  gitRunner: GitRunner
+  gitRunner: GitRunner,
 ): Promise<GitInitResult | undefined> {
   if (options.initializeGit !== true) return undefined
   if (targetInsideGitTree) {
     return {
       initialized: false,
       committed: false,
-      reason: 'target is inside an existing Git repository'
+      reason: 'target is inside an existing Git repository',
     }
   }
 
   await gitRunner(root, [
-    'init'
+    'init',
   ])
   if (pending.length > 0 && !options.allowPendingCommit) {
     return {
       initialized: true,
       committed: false,
-      reason: 'project has pending actions'
+      reason: 'project has pending actions',
     }
   }
 
   await gitRunner(root, [
     'add',
-    '.'
+    '.',
   ])
   await gitRunner(root, [
     'commit',
     '-m',
-    'chore: scaffold MaaFW project'
+    'chore: scaffold MaaFW project',
   ])
   return {
     initialized: true,
-    committed: true
+    committed: true,
   }
 }
 
@@ -925,16 +905,16 @@ async function runCommand(root: string, command: string, args: string[]): Promis
     const child = spawn(command, args, {
       cwd: root,
       shell: process.platform === 'win32',
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
     child.on('error', (error) => {
       reject(
         new Error(
           `Failed to run ${[
             command,
-            ...args
-          ].join(' ')}. ${error.message}`
-        )
+            ...args,
+          ].join(' ')}. ${error.message}`,
+        ),
       )
     })
     child.on('exit', (code, signal) => {
@@ -947,9 +927,9 @@ async function runCommand(root: string, command: string, args: string[]): Promis
         new Error(
           `Command failed: ${[
             command,
-            ...args
-          ].join(' ')} (${suffix})`
-        )
+            ...args,
+          ].join(' ')} (${suffix})`,
+        ),
       )
     })
   })
@@ -960,13 +940,9 @@ async function maybeInstallNodeDependencies(
   options: CliOptions,
   commandRunner: CommandRunner,
   enabled: boolean,
-  onProgress?: ProgressReporter
+  onProgress?: ProgressReporter,
 ): Promise<ScaffoldResult> {
-  if (
-    !enabled ||
-    options.skipDownload ||
-    !scaffold.pending.some((item) => item.kind === 'node-deps')
-  ) {
+  if (!enabled || options.skipDownload || !scaffold.pending.some((item) => item.kind === 'node-deps')) {
     return scaffold
   }
 
@@ -977,7 +953,7 @@ async function maybeInstallNodeDependencies(
   try {
     onProgress?.('Installing Node dependencies...')
     await commandRunner(root, 'pnpm', [
-      'install'
+      'install',
     ])
     onProgress?.('Node dependencies installed.')
     lock.pending = lock.pending.filter((item) => item.kind !== 'node-deps')
@@ -985,13 +961,11 @@ async function maybeInstallNodeDependencies(
       written.add('pnpm-lock.yaml')
     }
   } catch (error) {
-    onProgress?.(
-      `Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`
-    )
+    onProgress?.(`Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`)
     lock.pending = replacePending(lock.pending, {
       kind: 'node-deps',
       reason: `pnpm install failed during project creation: ${errorMessage(error)}`,
-      command: 'create-maa-project --update node-deps'
+      command: 'create-maa-project --update node-deps',
     })
   }
 
@@ -1001,7 +975,7 @@ async function maybeInstallNodeDependencies(
     async () => {
       await writeProjectState(root, config, lock)
     },
-    { clearStale: options.clearStaleLock }
+    { clearStale: options.clearStaleLock },
   )
   written.add('maa-project.json')
   written.add('maa-project.lock.json')
@@ -1009,16 +983,16 @@ async function maybeInstallNodeDependencies(
     ...scaffold,
     lock,
     written: [
-      ...written
+      ...written,
     ],
-    pending: lock.pending
+    pending: lock.pending,
   }
 }
 
 function replacePending(pending: PendingItem[], next: PendingItem): PendingItem[] {
   return [
     ...pending.filter((item) => item.kind !== next.kind),
-    next
+    next,
   ]
 }
 
@@ -1036,22 +1010,21 @@ function defaultPending(input: {
   if (input.includeDevTools) {
     pending.push({
       kind: 'node-deps',
-      reason:
-        'Generated project dependencies are pinned in package.json but not installed by the scaffold.',
-      command: 'create-maa-project --update node-deps'
+      reason: 'Generated project dependencies are pinned in package.json but not installed by the scaffold.',
+      command: 'create-maa-project --update node-deps',
     })
   }
   if (input.includeOcrPending !== false && input.options.skipDownload) {
     pending.push({
       kind: 'ocr-model',
       reason: 'OCR model download was skipped.',
-      command: 'create-maa-project --update ocr-models'
+      command: 'create-maa-project --update ocr-models',
     })
   } else if (input.includeOcrPending !== false) {
     pending.push({
       kind: 'ocr-model',
       reason: 'OCR model manifest source is not configured.',
-      command: 'create-maa-project --update ocr-models'
+      command: 'create-maa-project --update ocr-models',
     })
   }
   if (input.includeAgent) {
@@ -1064,7 +1037,7 @@ function ocrDownloadPending(error: unknown): PendingItem {
   return {
     kind: 'ocr-model',
     reason: `OCR model download failed during project creation: ${errorMessage(error)}`,
-    command: 'create-maa-project --update ocr-models'
+    command: 'create-maa-project --update ocr-models',
   }
 }
 
@@ -1073,17 +1046,13 @@ function pythonPending(): PendingItem[] {
     {
       kind: 'python-deps',
       reason: 'Agent dependencies are managed by uv and need to be synchronized locally.',
-      command: 'create-maa-project --update python-deps'
-    }
+      command: 'create-maa-project --update python-deps',
+    },
   ]
 }
 
 function assertValidVersion(version: string): void {
-  if (
-    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-      version
-    )
-  ) {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`Invalid version "${version}". Use a SemVer version such as 0.1.0.`)
   }
 }
@@ -1115,15 +1084,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function arrayOfStrings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : []
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 function appendUnique(existing: string[], values: string[]): string[] {
   const set = new Set(existing)
   for (const value of values) set.add(value)
   return [
-    ...set
+    ...set,
   ]
 }

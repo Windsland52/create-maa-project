@@ -15,12 +15,8 @@ describe('prompt language', () => {
   })
 
   it('uses CREATE_MAA_PROJECT_LANG for auto mode', () => {
-    expect(resolvePromptLanguage('auto', { CREATE_MAA_PROJECT_LANG: 'zh' }, false, 'en-US')).toBe(
-      'zh-CN'
-    )
-    expect(resolvePromptLanguage(undefined, { CREATE_MAA_PROJECT_LANG: 'en' }, true, 'zh-CN')).toBe(
-      'en'
-    )
+    expect(resolvePromptLanguage('auto', { CREATE_MAA_PROJECT_LANG: 'zh' }, false, 'en-US')).toBe('zh-CN')
+    expect(resolvePromptLanguage(undefined, { CREATE_MAA_PROJECT_LANG: 'en' }, true, 'zh-CN')).toBe('en')
   })
 
   it('keeps auto mode in English for non-interactive output', () => {

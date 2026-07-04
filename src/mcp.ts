@@ -5,14 +5,10 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   type CallToolResult,
-  type Tool
+  type Tool,
 } from '@modelcontextprotocol/sdk/types.js'
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
-import {
-  controllerUnavailableMessage,
-  normalizeControllerKind,
-  uniqueControllerKinds
-} from './controllers.js'
+import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import {
@@ -23,7 +19,7 @@ import {
   readProjectConfig,
   readProjectLock,
   restoreBackup,
-  withProjectWriteLock
+  withProjectWriteLock,
 } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
@@ -34,7 +30,7 @@ import {
   createScaffoldJsonReport,
   type CliJsonReport,
   type CliReportCommand,
-  type ReportContext
+  type ReportContext,
 } from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
@@ -45,16 +41,16 @@ const SERVER_VERSION = '0.1.0'
 
 const TEMPLATE_NAMES = [
   'pipeline',
-  'agent'
+  'agent',
 ] as const
 const LICENSE_KINDS = [
   'AGPL-3.0-or-later',
   'MIT',
-  'None'
+  'None',
 ] as const
 const NETWORK_MODES = [
   'auto',
-  'official'
+  'official',
 ] as const
 const SYNC_TARGETS = [
   'metadata',
@@ -62,7 +58,7 @@ const SYNC_TARGETS = [
   'version',
   'license',
   'github-url',
-  'network'
+  'network',
 ] as const
 const UPDATE_TARGETS = [
   'schema',
@@ -72,7 +68,7 @@ const UPDATE_TARGETS = [
   'node-deps',
   'python-deps',
   'python-runtime',
-  'template'
+  'template',
 ] as const
 const ADDONS = [
   'dev-tools',
@@ -84,7 +80,7 @@ const ADDONS = [
   'optimize-images',
   'community',
   'dependabot',
-  'schema-sync'
+  'schema-sync',
 ] as const
 
 let serverRoot = safeProcessCwd('.')
@@ -104,17 +100,14 @@ type JsonObject = Record<string, unknown>
 
 export function createMcpServer(root = safeProcessCwd('.')): Server {
   serverRoot = root
-  const server = new Server(
-    { name: 'create-maa-project', version: SERVER_VERSION },
-    { capabilities: { tools: {} } }
-  )
+  const server = new Server({ name: 'create-maa-project', version: SERVER_VERSION }, { capabilities: { tools: {} } })
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: MCP_TOOLS
+    tools: MCP_TOOLS,
   }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    callTool(request.params.name, request.params.arguments)
+    callTool(request.params.name, request.params.arguments),
   )
 
   return server
@@ -139,7 +132,7 @@ const MCP_TOOLS: Tool[] = [
         name: stringSchema('Project folder path or name. Ask the user for this before calling.'),
         template: enumSchema(
           TEMPLATE_NAMES,
-          'Project template. Use "pipeline" for task/resource projects and "agent" when the user wants Python Agent custom logic.'
+          'Project template. Use "pipeline" for task/resource projects and "agent" when the user wants Python Agent custom logic.',
         ),
         slug: stringSchema('ASCII kebab-case project id.'),
         displayName: stringSchema('Human-readable project display name.'),
@@ -148,31 +141,31 @@ const MCP_TOOLS: Tool[] = [
         network: enumSchema(NETWORK_MODES, 'Network asset source mode.'),
         add: arraySchema(
           enumSchema(ADDONS, 'Add-on name.'),
-          'Create-time add-ons. Common repository setup is ["dev-tools","github"]. If this includes "resource-pack", resourcePackSlug is required.'
+          'Create-time add-ons. Common repository setup is ["dev-tools","github"]. If this includes "resource-pack", resourcePackSlug is required.',
         ),
         resourcePackSlug: stringSchema(
-          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when add includes "resource-pack".'
+          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when add includes "resource-pack".',
         ),
         resourcePackLabel: stringSchema(
-          'Optional display label for the resource pack. If omitted, it is derived from resourcePackSlug.'
+          'Optional display label for the resource pack. If omitted, it is derived from resourcePackSlug.',
         ),
         skipDownload: booleanSchema('Skip runtime/OCR/dependency downloads.'),
-        git: booleanSchema('Initialize a Git repository.')
+        git: booleanSchema('Initialize a Git repository.'),
       },
       [
-        'name'
-      ]
-    )
+        'name',
+      ],
+    ),
   },
   {
     name: 'doctor',
     description: 'Check project health',
-    inputSchema: objectSchema()
+    inputSchema: objectSchema(),
   },
   {
     name: 'diff',
     description: 'Show managed file drift',
-    inputSchema: objectSchema()
+    inputSchema: objectSchema(),
   },
   {
     name: 'sync',
@@ -180,12 +173,12 @@ const MCP_TOOLS: Tool[] = [
     inputSchema: objectSchema(
       {
         target: enumSchema(SYNC_TARGETS, 'Metadata target to sync.'),
-        value: stringSchema('New value for targets that require one.')
+        value: stringSchema('New value for targets that require one.'),
       },
       [
-        'target'
-      ]
-    )
+        'target',
+      ],
+    ),
   },
   {
     name: 'update',
@@ -193,12 +186,12 @@ const MCP_TOOLS: Tool[] = [
     inputSchema: objectSchema(
       {
         targets: arraySchema(enumSchema(UPDATE_TARGETS, 'Update target.'), 'Update targets.'),
-        diff: booleanSchema('Preview template/schema changes instead of applying them.')
+        diff: booleanSchema('Preview template/schema changes instead of applying them.'),
       },
       [
-        'targets'
-      ]
-    )
+        'targets',
+      ],
+    ),
   },
   {
     name: 'add',
@@ -208,41 +201,39 @@ const MCP_TOOLS: Tool[] = [
       {
         addon: enumSchema(ADDONS, 'Add-on to apply.'),
         resourcePackSlug: stringSchema(
-          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon is "resource-pack".'
+          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon is "resource-pack".',
         ),
-        label: stringSchema(
-          'Optional resource pack display label. If omitted, it is derived from resourcePackSlug.'
-        )
+        label: stringSchema('Optional resource pack display label. If omitted, it is derived from resourcePackSlug.'),
       },
       [
-        'addon'
-      ]
-    )
+        'addon',
+      ],
+    ),
   },
   {
     name: 'accept_changes',
     description: 'Accept managed file drift as the new baseline',
     inputSchema: objectSchema({
-      paths: arraySchema(stringSchema('Managed file path.'), 'Specific files to accept.')
-    })
+      paths: arraySchema(stringSchema('Managed file path.'), 'Specific files to accept.'),
+    }),
   },
   {
     name: 'restore',
     description: 'Restore files from a backup',
     inputSchema: objectSchema(
       {
-        backupId: stringSchema('Backup id under .create-maa-project/backups.')
+        backupId: stringSchema('Backup id under .create-maa-project/backups.'),
       },
       [
-        'backupId'
-      ]
-    )
+        'backupId',
+      ],
+    ),
   },
   {
     name: 'clean_cache',
     description: 'Clean local cache',
-    inputSchema: objectSchema()
-  }
+    inputSchema: objectSchema(),
+  },
 ]
 
 async function callTool(name: string, input: unknown): Promise<CallToolResult> {
@@ -260,7 +251,7 @@ async function callTool(name: string, input: unknown): Promise<CallToolResult> {
           root,
           doctor,
           pending: lock.pending,
-          changedManagedFiles: await listChangedManagedFiles(root)
+          changedManagedFiles: await listChangedManagedFiles(root),
         })
       })
     case 'diff':
@@ -270,7 +261,7 @@ async function callTool(name: string, input: unknown): Promise<CallToolResult> {
           context,
           root,
           lines: await diffManagedFiles(root),
-          changedManagedFiles: await listChangedManagedFiles(root)
+          changedManagedFiles: await listChangedManagedFiles(root),
         })
       })
     case 'sync':
@@ -303,7 +294,7 @@ async function callCreateProject(input: unknown): Promise<CallToolResult> {
       installNodeDeps: true,
       downloadOcrModels: true,
       commandRunner: runMcpChildCommand,
-      ocrManifestResolver: () => resolveOcrManifestFromEnvironment()
+      ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
     })
     return createScaffoldJsonReport(context, result)
   })
@@ -316,9 +307,7 @@ async function callSync(input: unknown): Promise<CallToolResult> {
   } catch (error) {
     return errorToolResult('sync', error)
   }
-  return withReport('sync', async (context) =>
-    createScaffoldJsonReport(context, await syncProject(options))
-  )
+  return withReport('sync', async (context) => createScaffoldJsonReport(context, await syncProject(options)))
 }
 
 async function callUpdate(input: unknown): Promise<CallToolResult> {
@@ -334,15 +323,15 @@ async function callUpdate(input: unknown): Promise<CallToolResult> {
         context,
         root: currentRoot(),
         lines: await previewTemplateUpdate(options),
-        changedManagedFiles: []
-      })
+        changedManagedFiles: [],
+      }),
     )
   }
   return withReport('update', async (context) => {
     const result = await recordUpdateRequests(options, {
       commandRunner: runMcpChildCommand,
       productManifestResolver: (request) => resolveProductAssetManifest(request),
-      ocrManifestResolver: () => resolveOcrManifestFromEnvironment()
+      ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
     })
     return createScaffoldJsonReport(context, result)
   })
@@ -375,10 +364,8 @@ async function callAcceptChanges(input: unknown): Promise<CallToolResult> {
   }
   return withReport('update', async (context) => {
     const root = currentRoot()
-    const accepted = await withProjectWriteLock(
-      root,
-      'create-maa-project --mcp accept_changes',
-      () => acceptManagedChanges(root, paths)
+    const accepted = await withProjectWriteLock(root, 'create-maa-project --mcp accept_changes', () =>
+      acceptManagedChanges(root, paths),
     )
     return createMaintenanceReport(context, root, accepted)
   })
@@ -394,7 +381,7 @@ async function callRestore(input: unknown): Promise<CallToolResult> {
   return withReport('update', async (context) => {
     const root = currentRoot()
     const restored = await withProjectWriteLock(root, 'create-maa-project --mcp restore', () =>
-      restoreBackup(root, backupId)
+      restoreBackup(root, backupId),
     )
     return createMaintenanceReport(context, root, restored)
   })
@@ -404,14 +391,14 @@ async function callCleanCache(): Promise<CallToolResult> {
   return withReport('update', async (context) => {
     const root = currentRoot()
     return createBaseReport(context, root, [
-      await cleanCache(root)
+      await cleanCache(root),
     ])
   })
 }
 
 async function withReport(
   command: CliReportCommand,
-  action: (context: ReportContext) => Promise<CliJsonReport>
+  action: (context: ReportContext) => Promise<CliJsonReport>,
 ): Promise<CallToolResult> {
   const startTimeMs = Date.now()
   const context = createMcpReportContext(command, startTimeMs)
@@ -422,8 +409,8 @@ async function withReport(
       createErrorJsonReport({
         context,
         root: currentRoot(),
-        error
-      })
+        error,
+      }),
     )
   }
 }
@@ -433,7 +420,7 @@ function createMcpReportContext(command: CliReportCommand, startTimeMs: number):
     command,
     startTimeMs,
     executionId: createReportExecutionId(new Date(startTimeMs)),
-    logPath: null
+    logPath: null,
   }
 }
 
@@ -443,8 +430,8 @@ function errorToolResult(command: CliReportCommand, error: unknown): CallToolRes
     createErrorJsonReport({
       context: createMcpReportContext(command, startTimeMs),
       root: currentRoot(),
-      error
-    })
+      error,
+    }),
   )
 }
 
@@ -453,17 +440,17 @@ function reportToolResult(report: CliJsonReport): CallToolResult {
     content: [
       {
         type: 'text',
-        text: JSON.stringify(report)
-      }
+        text: JSON.stringify(report),
+      },
     ],
-    isError: !report.ok
+    isError: !report.ok,
   }
 }
 
 async function createMaintenanceReport(
   context: ReportContext,
   root: string,
-  affectedPaths: string[]
+  affectedPaths: string[],
 ): Promise<CliJsonReport> {
   const config = await readProjectConfig(root)
   const lock = await readProjectLock(root)
@@ -473,16 +460,12 @@ async function createMaintenanceReport(
     lock,
     written: affectedPaths,
     skipped: [],
-    pending: lock.pending
+    pending: lock.pending,
   }
   return createScaffoldJsonReport(context, result)
 }
 
-function createBaseReport(
-  context: ReportContext,
-  root: string,
-  affectedPaths: string[]
-): CliJsonReport {
+function createBaseReport(context: ReportContext, root: string, affectedPaths: string[]): CliJsonReport {
   return {
     schemaVersion: 1,
     tool: 'create-maa-project',
@@ -499,7 +482,7 @@ function createBaseReport(
     pending: [],
     changedManagedFiles: [],
     changedUserFiles: [],
-    suggestedCommands: []
+    suggestedCommands: [],
   }
 }
 
@@ -509,17 +492,14 @@ function createProjectOptions(args: JsonObject): CliOptions {
   const resourcePackSlug = optionalString(args, 'resourcePackSlug')
   const resourcePackLabel = optionalString(args, 'resourcePackLabel')
   const add = [
-    ...(optionalStringArray(args, 'add', ADDONS) ?? [])
+    ...(optionalStringArray(args, 'add', ADDONS) ?? []),
   ]
-  if (
-    (resourcePackSlug !== undefined || resourcePackLabel !== undefined) &&
-    !add.includes('resource-pack')
-  ) {
+  if ((resourcePackSlug !== undefined || resourcePackLabel !== undefined) && !add.includes('resource-pack')) {
     add.push('resource-pack')
   }
   if (add.includes('resource-pack') && !nonBlank(resourcePackSlug)) {
     throw new Error(
-      'resourcePackSlug is required when add includes "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.'
+      'resourcePackSlug is required when add includes "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.',
     )
   }
   const overrides: Partial<CliOptions> = {
@@ -527,7 +507,7 @@ function createProjectOptions(args: JsonObject): CliOptions {
     template,
     explicitTemplate: optionalString(args, 'template') !== undefined,
     add,
-    skipDownload: optionalBoolean(args, 'skipDownload') ?? false
+    skipDownload: optionalBoolean(args, 'skipDownload') ?? false,
   }
   const slug = optionalString(args, 'slug')
   const displayName = optionalString(args, 'displayName')
@@ -548,17 +528,20 @@ function createProjectOptions(args: JsonObject): CliOptions {
 async function syncOptions(args: JsonObject): Promise<CliOptions> {
   const target = requiredEnum(args, 'target', SYNC_TARGETS)
   const value = optionalString(args, 'value')
-  if ([
+  if (
+    [
       'display-name',
       'version',
       'license',
-      'github-url'
-    ].includes(target) && !value) {
+      'github-url',
+    ].includes(target) &&
+    !value
+  ) {
     throw new Error(`sync target "${target}" requires value.`)
   }
 
   const options = baseOptions({
-    sync: target
+    sync: target,
   })
   if (target === 'display-name') options.displayName = requiredString(args, 'value')
   if (target === 'version') options.version = requiredString(args, 'value')
@@ -575,7 +558,7 @@ async function syncOptions(args: JsonObject): Promise<CliOptions> {
 function updateOptions(args: JsonObject): CliOptions {
   return baseOptions({
     update: requiredStringArray(args, 'targets', UPDATE_TARGETS),
-    diff: optionalBoolean(args, 'diff') ?? false
+    diff: optionalBoolean(args, 'diff') ?? false,
   })
 }
 
@@ -583,14 +566,14 @@ function addOptions(args: JsonObject): CliOptions {
   const addon = requiredEnum(args, 'addon', ADDONS)
   const overrides: Partial<CliOptions> = {
     add: [
-      addon
-    ]
+      addon,
+    ],
   }
   const resourcePackSlug = optionalString(args, 'resourcePackSlug')
   const label = optionalString(args, 'label')
   if (addon === 'resource-pack' && !nonBlank(resourcePackSlug)) {
     throw new Error(
-      'resourcePackSlug is required when addon is "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.'
+      'resourcePackSlug is required when addon is "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.',
     )
   }
   if (resourcePackSlug !== undefined) overrides.resourcePackSlug = resourcePackSlug
@@ -622,7 +605,7 @@ function baseOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     report: false,
     mcp: false,
     explicitTemplate: false,
-    ...overrides
+    ...overrides,
   }
 }
 
@@ -660,29 +643,17 @@ function optionalBoolean(args: JsonObject, key: string): boolean | undefined {
   return value
 }
 
-function requiredEnum<T extends readonly string[]>(
-  args: JsonObject,
-  key: string,
-  allowed: T
-): T[number] {
+function requiredEnum<T extends readonly string[]>(args: JsonObject, key: string, allowed: T): T[number] {
   const value = requiredString(args, key)
   return valueAsEnum(value, allowed, key)
 }
 
-function optionalEnum<T extends readonly string[]>(
-  args: JsonObject,
-  key: string,
-  allowed: T
-): T[number] | undefined {
+function optionalEnum<T extends readonly string[]>(args: JsonObject, key: string, allowed: T): T[number] | undefined {
   const value = optionalString(args, key)
   return value === undefined ? undefined : valueAsEnum(value, allowed, key)
 }
 
-function valueAsEnum<T extends readonly string[]>(
-  value: string,
-  allowed: T,
-  label: string
-): T[number] {
+function valueAsEnum<T extends readonly string[]>(value: string, allowed: T, label: string): T[number] {
   if (!allowed.includes(value)) {
     throw new Error(`${label} must be one of: ${allowed.join(', ')}`)
   }
@@ -692,7 +663,7 @@ function valueAsEnum<T extends readonly string[]>(
 function requiredStringArray<T extends readonly string[]>(
   args: JsonObject,
   key: string,
-  allowed?: T
+  allowed?: T,
 ): T extends readonly string[] ? T[number][] : string[] {
   const value = optionalStringArray(args, key, allowed)
   if (!value) throw new Error(`${key} is required.`)
@@ -703,7 +674,7 @@ function requiredStringArray<T extends readonly string[]>(
 function optionalStringArray<T extends readonly string[]>(
   args: JsonObject,
   key: string,
-  allowed?: T
+  allowed?: T,
 ): (T extends readonly string[] ? T[number][] : string[]) | undefined {
   const value = args[key]
   if (value === undefined) return undefined
@@ -746,8 +717,8 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
       stdio: [
         'ignore',
         'pipe',
-        'pipe'
-      ]
+        'pipe',
+      ],
     })
     child.stdout?.on('data', (chunk: Buffer) => {
       process.stderr.write(chunk)
@@ -784,18 +755,15 @@ function safeProcessCwd(fallback: string): string {
 function formatCommand(command: string, args: string[]): string {
   return [
     command,
-    ...args
+    ...args,
   ].join(' ')
 }
 
-function objectSchema(
-  properties: Record<string, object> = {},
-  required: string[] = []
-): Tool['inputSchema'] {
+function objectSchema(properties: Record<string, object> = {}, required: string[] = []): Tool['inputSchema'] {
   const schema: Tool['inputSchema'] = {
     type: 'object',
     properties,
-    additionalProperties: false
+    additionalProperties: false,
   }
   if (required.length > 0) schema.required = required
   return schema
@@ -804,14 +772,14 @@ function objectSchema(
 function stringSchema(description: string): object {
   return {
     type: 'string',
-    description
+    description,
   }
 }
 
 function booleanSchema(description: string): object {
   return {
     type: 'boolean',
-    description
+    description,
   }
 }
 
@@ -819,9 +787,9 @@ function enumSchema(values: readonly string[], description: string): object {
   return {
     type: 'string',
     enum: [
-      ...values
+      ...values,
     ],
-    description
+    description,
   }
 }
 
@@ -829,7 +797,7 @@ function arraySchema(items: object, description: string): object {
   return {
     type: 'array',
     items,
-    description
+    description,
   }
 }
 

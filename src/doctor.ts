@@ -46,17 +46,11 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
   return { ok, lines }
 }
 
-async function checkInterfaceMetadata(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const interfacePath = join(root, 'interface.json')
   if (!(await exists(interfacePath))) {
     lines.push('[ERR] interface.json is missing.')
-    lines.push(
-      '      To fix: restore it from backup or re-run create-maa-project --update template'
-    )
+    lines.push('      To fix: restore it from backup or re-run create-maa-project --update template')
     return false
   }
 
@@ -117,19 +111,15 @@ async function checkInterfaceMetadata(
   return ok
 }
 
-function expectedInterfaceAgent(
-  config: MaaProjectConfig
-): ReturnType<typeof interfaceAgent>[] | undefined {
-  return config.python ? [
-        interfaceAgent(config.python.devCommand)
-      ] : undefined
+function expectedInterfaceAgent(config: MaaProjectConfig): ReturnType<typeof interfaceAgent>[] | undefined {
+  return config.python
+    ? [
+        interfaceAgent(config.python.devCommand),
+      ]
+    : undefined
 }
 
-async function checkPackageMetadata(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkPackageMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const packagePath = join(root, 'package.json')
   if (!(await exists(packagePath))) {
     lines.push('[ERR] package.json is missing.')
@@ -175,7 +165,7 @@ async function checkPackageMetadata(
   }
   for (const [
     name,
-    version
+    version,
   ] of Object.entries(expectedDevDependencies())) {
     if (packageJson.devDependencies?.[name] !== version) {
       const label = name === '@nekosu/maa-tools' ? '@nekosu/maa-tools' : `devDependencies.${name}`
@@ -186,7 +176,7 @@ async function checkPackageMetadata(
   }
   for (const [
     name,
-    command
+    command,
   ] of Object.entries(expectedPackageScripts(config))) {
     if (packageJson.scripts?.[name] !== command) {
       const message =
@@ -202,19 +192,12 @@ async function checkPackageMetadata(
   return ok
 }
 
-async function checkNodeLockfile(
-  root: string,
-  lock: MaaProjectLock,
-  lines: string[]
-): Promise<boolean> {
+async function checkNodeLockfile(root: string, lock: MaaProjectLock, lines: string[]): Promise<boolean> {
   if (lock.pending.some((item) => item.kind === 'node-deps')) return true
   const packagePath = join(root, 'package.json')
   if (!(await exists(packagePath))) return true
   const packageJson = JSON.parse(await readText(packagePath)) as { packageManager?: unknown }
-  if (
-    typeof packageJson.packageManager !== 'string' ||
-    !packageJson.packageManager.startsWith('pnpm@')
-  ) {
+  if (typeof packageJson.packageManager !== 'string' || !packageJson.packageManager.startsWith('pnpm@')) {
     return true
   }
   if (await exists(join(root, 'pnpm-lock.yaml'))) {
@@ -226,11 +209,7 @@ async function checkNodeLockfile(
   return false
 }
 
-async function checkNodeToolingFiles(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   let ok = true
   const nodeVersionPath = join(root, '.node-version')
   if (!(await exists(nodeVersionPath))) {
@@ -243,10 +222,12 @@ async function checkNodeToolingFiles(
     ok = false
   }
 
-  const workflows = hasGithubAutomation(config) ? [
+  const workflows = hasGithubAutomation(config)
+    ? [
         '.github/workflows/check.yml',
-        '.github/workflows/release.yml'
-      ] : []
+        '.github/workflows/release.yml',
+      ]
+    : []
   if (config.addons.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
   if (config.addons.optimizeImages) workflows.push('.github/workflows/optimize-images.yml')
   for (const workflow of workflows) {
@@ -289,27 +270,23 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
     ok = false
   }
   if (!hasJsoncFileAssociations(settings['files.associations'])) {
-    lines.push(
-      '[ERR] .vscode/settings.json files.associations must map *.json and *.jsonc to jsonc.'
-    )
+    lines.push('[ERR] .vscode/settings.json files.associations must map *.json and *.jsonc to jsonc.')
     lines.push('      To fix: create-maa-project --update template')
     ok = false
   }
   for (const language of [
     '[json]',
-    '[jsonc]'
+    '[jsonc]',
   ]) {
     if (editorDefaultFormatter(settings[language]) !== 'esbenp.prettier-vscode') {
-      lines.push(
-        `[ERR] .vscode/settings.json ${language} editor.defaultFormatter must be esbenp.prettier-vscode.`
-      )
+      lines.push(`[ERR] .vscode/settings.json ${language} editor.defaultFormatter must be esbenp.prettier-vscode.`)
       lines.push('      To fix: create-maa-project --update template')
       ok = false
     }
   }
   if (!hasInterfaceJsonSchema(settings['json.schemas'])) {
     lines.push(
-      '[ERR] .vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json.'
+      '[ERR] .vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json.',
     )
     lines.push('      To fix: create-maa-project --update template')
     ok = false
@@ -318,11 +295,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
   return ok
 }
 
-async function checkPyprojectMetadata(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkPyprojectMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   if (!config.python) return true
 
   const pyprojectPath = join(root, 'pyproject.toml')
@@ -337,9 +310,7 @@ async function checkPyprojectMetadata(
     ok = false
   }
   if (metadata.version !== config.project.version) {
-    lines.push(
-      '[ERR] pyproject.toml project.version differs from maa-project.json project.version.'
-    )
+    lines.push('[ERR] pyproject.toml project.version differs from maa-project.json project.version.')
     lines.push('      To fix: create-maa-project --sync metadata')
     ok = false
   }
@@ -352,17 +323,11 @@ async function checkPyprojectMetadata(
   return ok
 }
 
-async function checkResourceOrder(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkResourceOrder(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const first = config.resources[0]
   if (!first || first.path !== 'resource/base') {
     lines.push('[ERR] resource/base must be the first resource pack.')
-    lines.push(
-      '      To fix: edit maa-project.json resources order, then run create-maa-project --sync metadata'
-    )
+    lines.push('      To fix: edit maa-project.json resources order, then run create-maa-project --sync metadata')
     return false
   }
   for (const pack of config.resources) {
@@ -403,7 +368,7 @@ async function checkReferencedPaths(root: string, lines: string[]): Promise<bool
   let ok = true
   const references = [
     ...interfaceResourcePaths(interfaceJson.resource).map((path) => ({ kind: 'resource', path })),
-    ...arrayOfStrings(interfaceJson.import).map((path) => ({ kind: 'import', path }))
+    ...arrayOfStrings(interfaceJson.import).map((path) => ({ kind: 'import', path })),
   ]
   for (const reference of references) {
     if (reference.path.includes('\\')) {
@@ -427,7 +392,7 @@ async function checkMaaJsonPaths(root: string, lines: string[]): Promise<boolean
   for (const path of await listJsonFiles(root, [
     'interface.json',
     'tasks',
-    'resource'
+    'resource',
   ])) {
     const content = await readText(join(root, path))
     if (!content.includes('\\')) continue
@@ -439,11 +404,7 @@ async function checkMaaJsonPaths(root: string, lines: string[]): Promise<boolean
   return ok
 }
 
-async function checkMaatoolsConfig(
-  root: string,
-  config: MaaProjectConfig,
-  lines: string[]
-): Promise<boolean> {
+async function checkMaatoolsConfig(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const configPath = join(root, 'maatools.config.mts')
   if (!(await exists(configPath))) {
     lines.push('[ERR] maatools.config.mts is missing.')
@@ -481,16 +442,12 @@ function hasMaatoolsRequiredFields(content: string): boolean {
   )
 }
 
-async function checkManagedFiles(
-  root: string,
-  lock: MaaProjectLock,
-  lines: string[]
-): Promise<boolean> {
+async function checkManagedFiles(root: string, lock: MaaProjectLock, lines: string[]): Promise<boolean> {
   let ok = true
   const entries = Object.entries(lock.managedFiles)
   for (const [
     path,
-    state
+    state,
   ] of entries) {
     const fullPath = join(root, path)
     if (!(await exists(fullPath))) {
@@ -516,10 +473,7 @@ async function checkManagedFiles(
   return ok
 }
 
-async function readManagedFileForDoctor(
-  fullPath: string,
-  managedPath: string
-): Promise<string | Buffer> {
+async function readManagedFileForDoctor(fullPath: string, managedPath: string): Promise<string | Buffer> {
   return managedPath.endsWith('.onnx') ? readFile(fullPath) : readText(fullPath)
 }
 
@@ -536,8 +490,8 @@ async function listJsonFiles(root: string, paths: string[]): Promise<string[]> {
     for (const entry of entries) {
       files.push(
         ...(await listJsonFiles(root, [
-          `${path}/${entry}`
-        ]))
+          `${path}/${entry}`,
+        ])),
       )
     }
   }
@@ -554,9 +508,7 @@ async function safeReadDirectory(path: string): Promise<string[] | undefined> {
 }
 
 function arrayOfStrings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : []
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 function interfaceResourcePaths(value: unknown): string[] {
@@ -603,7 +555,7 @@ function expectedDevDependencies(): Record<string, string> {
     'ajv-formats': '3.0.1',
     'jsonc-parser': '3.3.1',
     prettier: '3.8.4',
-    'prettier-plugin-multiline-arrays': '4.1.9'
+    'prettier-plugin-multiline-arrays': '4.1.9',
   }
 }
 
@@ -614,7 +566,7 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
     lint: 'node tools/check-project.mjs',
     'check:schema': 'node tools/validate-schema.mjs',
     'check:maa': 'pnpm exec maa-tools check',
-    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint'
+    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
   }
   if (hasGithubAutomation(config)) {
     scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
@@ -639,10 +591,14 @@ function parseMaatoolsResourceArray(content: string): string[] | undefined {
   const match = content.match(/resource\s*:\s*(\[[^\]]*\])/)
   if (!match?.[1]) return undefined
   return [
-    ...match[1].matchAll(/(['"])(.*?)\1/g)
-  ].flatMap((item) => (item[2] ? [
-          item[2]
-        ] : []))
+    ...match[1].matchAll(/(['"])(.*?)\1/g),
+  ].flatMap((item) =>
+    item[2]
+      ? [
+          item[2],
+        ]
+      : [],
+  )
 }
 
 function parseTomlProjectMetadata(content: string): {
@@ -652,7 +608,7 @@ function parseTomlProjectMetadata(content: string): {
   const section = tomlProjectSection(content)
   return {
     name: parseTomlStringField(section, 'name'),
-    version: parseTomlStringField(section, 'version')
+    version: parseTomlStringField(section, 'version'),
   }
 }
 

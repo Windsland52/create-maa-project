@@ -351,8 +351,7 @@ function interfaceAgent(project) {
   return [
     {
       child_exec: childExec,
-      ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
-      identifier: project.project?.slug + '.agent'
+      ...(childArgs.length > 0 ? { child_args: childArgs } : {})
     }
   ]
 }

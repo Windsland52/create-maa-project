@@ -68,7 +68,6 @@ if (interfaceJson.agent !== undefined) {
     if (agent.child_args !== undefined) {
       assertArrayOfStrings(agent.child_args, 'interface.json agent[' + index + '].child_args')
     }
-    assertNonEmptyString(agent.identifier, 'interface.json agent[' + index + '].identifier')
   }
 }
 

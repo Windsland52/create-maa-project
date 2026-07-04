@@ -819,7 +819,7 @@ describe('scaffold', () => {
       icon: 'logo.ico',
       agent: [
         {
-          identifier: 'maa-agent-test.agent'
+          child_exec: 'uv'
         }
       ]
     })
@@ -915,8 +915,7 @@ describe('scaffold', () => {
             'run',
             'python',
             'agent/bootstrap.py'
-          ],
-          identifier: 'maa-agent-test.agent'
+          ]
         }
       ]
     })
@@ -1876,8 +1875,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         child_exec: [
           'python',
           'wrong.py'
-        ],
-        identifier: 'wrong.agent'
+        ]
       }
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
@@ -2449,8 +2447,7 @@ export default defineConfig({
     interfaceJson.icon = 'logo.ico'
     interfaceJson.agent = [
       {
-        child_exec: [],
-        identifier: 'wrong.agent'
+        child_exec: []
       }
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')

@@ -121,7 +121,7 @@ function expectedInterfaceAgent(
   config: MaaProjectConfig
 ): ReturnType<typeof interfaceAgent>[] | undefined {
   return config.python ? [
-        interfaceAgent(config.project.slug, config.python.devCommand)
+        interfaceAgent(config.python.devCommand)
       ] : undefined
 }
 

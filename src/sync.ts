@@ -203,7 +203,7 @@ function applyInterfaceMetadata(
   }
   if (config.python) {
     interfaceJson.agent = [
-      interfaceAgent(config.project.slug, config.python.devCommand)
+      interfaceAgent(config.python.devCommand)
     ]
   } else {
     delete interfaceJson.agent

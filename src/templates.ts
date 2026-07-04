@@ -290,7 +290,7 @@ function interfaceJson(input: ProjectTemplateInput): string {
   const controller = interfaceController(input.controllers)
   const agentBlock = input.includeAgent
     ? `,\n    "agent": ${jsonFragment([
-        interfaceAgent(input.slug, input.pythonDevCommand)
+        interfaceAgent(input.pythonDevCommand)
       ])}`
     : ''
 
@@ -359,17 +359,15 @@ function resourcePaths(resources: Pick<ResourcePackConfig, 'path'>[]): string[] 
 }
 
 export function interfaceAgent(
-  slug: string,
   command: string[] | undefined
-): { child_exec: string; child_args?: string[]; identifier: string } {
+): { child_exec: string; child_args?: string[] } {
   const [
     childExec = '',
     ...childArgs
   ] = command ?? defaultAgentDevCommand()
   return {
     child_exec: childExec,
-    ...(childArgs.length > 0 ? { child_args: childArgs } : {}),
-    identifier: `${slug}.agent`
+    ...(childArgs.length > 0 ? { child_args: childArgs } : {})
   }
 }
 

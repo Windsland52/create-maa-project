@@ -351,7 +351,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   config.python.devCommand = pythonDevCommand
   const interfaceJson = await readInterfaceJson(root)
   interfaceJson.agent = [
-    interfaceAgent(config.project.slug, config.python.devCommand)
+    interfaceAgent(config.python.devCommand)
   ]
   const packageJson = await readJsonObject(root, 'package.json')
   packageJson.scripts = {

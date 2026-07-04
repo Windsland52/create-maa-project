@@ -49,9 +49,9 @@ jobs:
         if: github.event_name != 'workflow_dispatch' && hashFiles('logo.ico') != ''
         shell: bash
         run: |
-          for gui in mfaa mxu; do
-            pkg_dir="dist/package-${gui}"
+          for pkg_dir in dist/package-*; do
             [ -d "$pkg_dir" ] || continue
+            gui=$(basename "$pkg_dir" | sed 's/^package-//')
             cp logo.ico "$pkg_dir/logo.ico"
 
             if [[ "${{ matrix.runtime_os }}" == "win" ]]; then
@@ -72,9 +72,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          for gui in mfaa mxu; do
-            pkg_dir="dist/package-${gui}"
+          for pkg_dir in dist/package-*; do
             [ -d "$pkg_dir" ] || continue
+            gui=$(basename "$pkg_dir" | sed 's/^package-//')
             archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"
             (
               cd "$pkg_dir"

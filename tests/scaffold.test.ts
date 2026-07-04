@@ -379,7 +379,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
-    expect(releaseWorkflow).toContain('cp logo.ico dist/package/logo.ico')
+    expect(releaseWorkflow).toContain('cp logo.ico dist/package-mfaa/logo.ico')
     expect(releaseWorkflow).toContain('rcedit-x64.exe')
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
     expect(releaseWorkflow).toContain('actions/download-artifact@v7')
@@ -2682,7 +2682,7 @@ version = "0.1.0"
         },
       ),
     ).resolves.toBeDefined()
-    const packageInterface = (await readJson(join(projectRoot, 'dist/package/interface.json'))) as Record<
+    const packageInterface = (await readJson(join(projectRoot, 'dist/package-mfaa/interface.json'))) as Record<
       string,
       unknown
     >
@@ -2692,7 +2692,7 @@ version = "0.1.0"
     expect(packageInterface.$schema).toBeUndefined()
     expect(sourceInterface.version).toBe('v0.1.0')
     expect(sourceInterface.$schema).toBeUndefined()
-    expect((await readdir(join(projectRoot, 'dist/package'))).sort()).toEqual(
+    expect((await readdir(join(projectRoot, 'dist/package-mfaa'))).sort()).toEqual(
       [
         'interface.json',
         'libs',
@@ -2713,12 +2713,12 @@ version = "0.1.0"
       'maa-project.lock.json',
       'tools/schema',
     ]) {
-      expect(await pathExists(join(projectRoot, 'dist/package', devPath))).toBe(false)
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa', devPath))).toBe(false)
     }
-    expect(await readFile(join(projectRoot, 'dist/package/tasks/tutorial.json'), 'utf8')).toContain('Tutorial')
-    expect(await readFile(join(projectRoot, 'dist/package', guiEntrypoint), 'utf8')).toBe('gui')
+    expect(await readFile(join(projectRoot, 'dist/package-mfaa/tasks/tutorial.json'), 'utf8')).toContain('Tutorial')
+    expect(await readFile(join(projectRoot, 'dist/package-mfaa', guiEntrypoint), 'utf8')).toBe('gui')
     expect(
-      await readFile(join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/libMaaCore.so'), 'utf8'),
+      await readFile(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/libMaaCore.so'), 'utf8'),
     ).toBe('maafw-fw')
     expect(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')).toContain(
       'const version = releaseTag ?? sourceVersion',
@@ -2822,7 +2822,7 @@ version = "0.1.0"
         ),
       ).resolves.toBeDefined()
 
-      const packageInterface = (await readJson(join(projectRoot, 'dist/package/interface.json'))) as {
+      const packageInterface = (await readJson(join(projectRoot, 'dist/package-mfaa/interface.json'))) as {
         $schema?: unknown
         version?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
@@ -2841,25 +2841,25 @@ version = "0.1.0"
         'agent/bootstrap.py',
       ])
       expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(packageInterface.agent?.[0]?.child_args)
-      const packagedBootstrap = await readFile(join(projectRoot, 'dist/package/agent/bootstrap.py'), 'utf8')
+      const packagedBootstrap = await readFile(join(projectRoot, 'dist/package-mfaa/agent/bootstrap.py'), 'utf8')
       expect(packagedBootstrap).toContain('Python >=3.13,<3.14 is required')
       expect(packagedBootstrap).toContain('agent-bootstrap.log')
       if (runtimePlatform.startsWith('linux-')) {
-        expect(await pathExists(join(projectRoot, 'dist/package/python'))).toBe(false)
-        expect(await pathExists(join(projectRoot, 'dist/package/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
+        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/python'))).toBe(false)
+        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
       } else {
-        expect(await pathExists(join(projectRoot, 'dist/package', expectedChildExec))).toBe(true)
+        expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
       }
       if (!runtimePlatform.startsWith('win-')) {
         expect(
           (
             await stat(
-              join(projectRoot, 'dist/package', mfaaEntrypointForTest('maa-agent-release-test', runtimePlatform)),
+              join(projectRoot, 'dist/package-mfaa', mfaaEntrypointForTest('maa-agent-release-test', runtimePlatform)),
             )
           ).mode & 0o111,
         ).not.toBe(0)
         expect(
-          (await stat(join(projectRoot, 'dist/package/runtimes', runtimePlatform, 'native/MaaPiCli'))).mode & 0o111,
+          (await stat(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/MaaPiCli'))).mode & 0o111,
         ).not.toBe(0)
       }
     }
@@ -4363,10 +4363,10 @@ function expectReleaseWorkflowTargets(releaseWorkflow: string): void {
 
 function expectReleaseScriptTargets(releaseScript: string): void {
   for (const target of EXPECTED_RELEASE_TARGETS) {
-    expect(releaseScript).toContain(`'${target.artifactOs}'`)
-    expect(releaseScript).toContain(`'${target.arch}'`)
-    expect(releaseScript).toContain(`'${target.ext}'`)
-    expect(releaseScript).toContain('-MFAA.')
+    expect(releaseScript).toContain(`"${target.artifactOs}"`)
+    expect(releaseScript).toContain(`"${target.arch}"`)
+    expect(releaseScript).toContain(`"${target.ext}"`)
+    expect(releaseScript).toContain('suffix: "MFAA"')
   }
 }
 

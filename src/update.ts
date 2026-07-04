@@ -13,7 +13,7 @@ import {
 } from './project.js'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { chmod, copyFile, mkdir, readdir, rm } from 'node:fs/promises'
+import { chmod, copyFile, cp, mkdir, readdir, rm } from 'node:fs/promises'
 import {
   downloadDefaultOcrZip,
   downloadUrl,
@@ -55,6 +55,11 @@ const UPDATE_PENDING: Record<string, PendingItem> = {
     kind: 'runtime',
     reason: 'MFAAvalonia runtime asset resolution is pending.',
     command: 'create-maa-project --update runtime:mfa',
+  },
+  'runtime:mxu': {
+    kind: 'runtime',
+    reason: 'MXU runtime asset resolution is pending.',
+    command: 'create-maa-project --update runtime:mxu',
   },
   'ocr-models': {
     kind: 'ocr-model',
@@ -227,7 +232,54 @@ export async function recordUpdateRequests(
           environment.onProgress?.('MFAAvalonia runtime assets downloaded.')
           continue
         }
+        if (target === 'runtime:mxu') {
+          if (!config.runtime.mxu?.enabled) {
+            skipped.push('runtime:mxu (disabled in config)')
+            continue
+          }
+          environment.onProgress?.('Resolving MXU runtime assets...')
+          const result = await updateProjectAssets(
+            root,
+            createProjectAssetUpdateOptions(
+              {
+                product: 'MXU',
+                channel: config.runtime.mxu.channel,
+              },
+              environment,
+            ),
+          )
+          if (!result) {
+            pendingToAdd.push(remoteAssetPending(target))
+            continue
+          }
+          for (const path of result.written) written.add(path)
+          lock.pending = removePending(lock.pending, 'runtime')
+          environment.onProgress?.('MXU runtime assets downloaded.')
+          continue
+        }
         if (target === 'ocr-models') {
+          if (config.ocr?.source === 'submodule') {
+            environment.onProgress?.('Copying OCR models from submodule...')
+            const subPath = config.ocr.submodulePath
+            if (!subPath) {
+              throw new Error('ocr.submodulePath is required when ocr.source is "submodule"')
+            }
+            const ocrDest = join(root, 'resource/base/model/ocr')
+            const subRoot = join(root, subPath)
+            await mkdir(ocrDest, { recursive: true })
+            if (config.ocr.files) {
+              for (const [destName, srcRel] of Object.entries(config.ocr.files)) {
+                await cp(join(subRoot, srcRel), join(ocrDest, destName))
+                written.add(join('resource/base/model/ocr', destName))
+              }
+            } else {
+              await cp(subRoot, ocrDest, { recursive: true, force: true })
+              written.add('resource/base/model/ocr')
+            }
+            lock.pending = removePending(lock.pending, 'ocr-model')
+            environment.onProgress?.('OCR models copied from submodule.')
+            continue
+          }
           environment.onProgress?.('Downloading OCR models...')
           const result = await updateOcrModels(root, createOcrUpdateOptions(environment))
           if (!result) {

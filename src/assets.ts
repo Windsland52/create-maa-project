@@ -49,7 +49,7 @@ export type ProductAssetEntry = AssetEntry & {
 
 export type ProjectArchiveExtraction = {
   format: 'zip' | 'tar.gz'
-  product: 'MaaFramework' | 'MFAAvalonia' | 'Python'
+  product: 'MaaFramework' | 'MFAAvalonia' | 'MXU' | 'Python'
   platform: string
 }
 
@@ -97,6 +97,11 @@ const PRODUCT_RELEASES: ProductReleaseConfig[] = [
     product: 'MFAAvalonia',
     owner: 'MaaXYZ',
     repo: 'MFAAvalonia',
+  },
+  {
+    product: 'MXU',
+    owner: 'MistEO',
+    repo: 'MXU',
   },
   {
     product: 'Python',
@@ -460,6 +465,10 @@ function mapProjectArchiveEntry(extraction: ProjectArchiveExtraction, relativePa
     mapped = [
       `.create-maa-project/runtime/mfaa/${extraction.platform}/${relativePath}`,
     ]
+  } else if (extraction.product === 'MXU') {
+    mapped = [
+      `.create-maa-project/runtime/mxu/${extraction.platform}/${relativePath}`,
+    ]
   } else if (extraction.product === 'Python') {
     mapped = mapPythonArchiveEntry(extraction.platform, relativePath)
   } else {
@@ -653,9 +662,11 @@ function parseGithubReleaseAsset(
   const path =
     product === 'MFAAvalonia'
       ? `.create-maa-project/runtime/mfaa/${match.platform}/${value.name}`
-      : product === 'Python'
-        ? `.create-maa-project/runtime/python/${match.platform}/${value.name}`
-        : `plugins/${match.platform}/${value.name}`
+      : product === 'MXU'
+        ? `.create-maa-project/runtime/mxu/${match.platform}/${value.name}`
+        : product === 'Python'
+          ? `.create-maa-project/runtime/python/${match.platform}/${value.name}`
+          : `plugins/${match.platform}/${value.name}`
   return validateProductAssetEntry({
     path,
     url: value.browser_download_url,
@@ -677,6 +688,14 @@ function matchProductReleaseAsset(
   const escapedTag = escapeRegExp(tag)
   if (product === 'MFAAvalonia') {
     const match = new RegExp(`^MFAAvalonia-${escapedTag}-(win|linux|osx)-(x64|arm64)\\.(zip|tar\\.gz)$`).exec(name)
+    if (!match) return undefined
+    const os = normalizeReleaseOs(match[1] as string)
+    const arch = normalizeReleaseArch(match[2] as string)
+    const format = match[3] === 'zip' ? 'zip' : 'tar.gz'
+    return os && arch ? { platform: `${os}-${arch}`, format } : undefined
+  }
+  if (product === 'MXU') {
+    const match = new RegExp(`^MXU-(win|linux|macos)-(x86_64|aarch64)-${escapedTag}\\.(zip|tar\\.gz)$`).exec(name)
     if (!match) return undefined
     const os = normalizeReleaseOs(match[1] as string)
     const arch = normalizeReleaseArch(match[2] as string)
@@ -710,6 +729,9 @@ function productReleaseConfig(product: string): ProductReleaseConfig | undefined
   }
   if (normalized === 'mfaavalonia' || normalized === 'mfa') {
     return PRODUCT_RELEASES.find((config) => config.product === 'MFAAvalonia')
+  }
+  if (normalized === 'mxu') {
+    return PRODUCT_RELEASES.find((config) => config.product === 'MXU')
   }
   if (normalized === 'python' || normalized === 'pythonruntime' || normalized === 'cpython') {
     return PRODUCT_RELEASES.find((config) => config.product === 'Python')
@@ -989,7 +1011,7 @@ function validateProductAssetEntry(entry: ProductAssetEntry): ProductAssetEntry 
   if (format !== 'zip' && format !== 'tar.gz') {
     throw new Error(`Invalid asset extraction format for ${entry.path}`)
   }
-  if (product !== 'MaaFramework' && product !== 'MFAAvalonia' && product !== 'Python') {
+  if (product !== 'MaaFramework' && product !== 'MFAAvalonia' && product !== 'MXU' && product !== 'Python') {
     throw new Error(`Invalid asset extraction product for ${entry.path}`)
   }
   if (!platform || platform === 'all') {

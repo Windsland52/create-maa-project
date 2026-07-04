@@ -27,11 +27,10 @@ export type MaaProjectConfig = {
     channel: 'latest' | string
   }
   runtime: {
-    mfa: {
-      channel: 'latest' | string
-      enabled: boolean
-    }
+    mfa: RuntimeGuiConfig
+    mxu?: RuntimeGuiConfig
   }
+  ocr?: OcrConfig
   python?: {
     devCommand?: string[]
     requiresPython: string
@@ -43,6 +42,17 @@ export type MaaProjectConfig = {
   license: {
     spdx: LicenseKind
   }
+}
+
+export type RuntimeGuiConfig = {
+  channel: 'latest' | string
+  enabled: boolean
+}
+
+export type OcrConfig = {
+  source: 'download' | 'submodule'
+  submodulePath?: string
+  files?: Record<string, string>
 }
 
 export type FeatureState = {

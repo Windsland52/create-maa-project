@@ -441,7 +441,7 @@ function maatoolsConfig(resources: string[], includeAgent = false): string {
   return template('base/maatools.config.mts', {
     resources: javascriptStringArray(resources),
     vscodeBlock: includeAgent
-      ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}'\n    }\n  }`
+      ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}',\n    },\n  }`
       : '',
   })
 }
@@ -532,8 +532,8 @@ function validateSchemaScript(): string {
 
 function buildReleaseScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
   return template('addons/github/tools/build-release.mjs', {
-    projectSlug: javascriptString(input.slug),
-    releaseArtifactName: javascriptString(releaseArtifactName(input)),
+    projectSlug: JSON.stringify(input.slug),
+    releaseArtifactName: JSON.stringify(releaseArtifactName(input)),
     releaseTargetArtifactTuples: releaseTargetArtifactTuples(),
   })
 }
@@ -564,13 +564,15 @@ function releaseTargetMatrixYaml(): string {
 }
 
 function releaseTargetArtifactTuples(): string {
-  return RELEASE_TARGETS.map(
-    (target) => `  [
-    '${target.artifactOs}',
-    '${target.arch}',
-    '${target.ext}'
-  ]`,
-  ).join(',\n')
+  return (
+    RELEASE_TARGETS.map(
+      (target) => `    [
+        ${JSON.stringify(target.artifactOs)},
+        ${JSON.stringify(target.arch)},
+        ${JSON.stringify(target.ext)},
+    ]`,
+    ).join(',\n') + ','
+  )
 }
 
 function syncRuntimeScript(): string {
@@ -690,6 +692,7 @@ function agentBootstrapPy(): string {
 
 function template(path: string, values: Record<string, string> = {}): string {
   let content = embeddedTextTemplates[path] ?? readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
+  content = content.replace(/\r\n/g, '\n')
   for (const [
     key,
     value,
@@ -720,7 +723,7 @@ function jsonStringContent(value: string): string {
 
 function javascriptStringArray(values: string[]): string {
   if (values.length === 0) return '[]'
-  return `[\n${values.map((value) => `    ${javascriptString(value)}`).join(',\n')}\n  ]`
+  return `[\n${values.map((value) => `    ${javascriptString(value)}`).join(',\n')},\n  ]`
 }
 
 function javascriptString(value: string): string {

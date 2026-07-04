@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -39,6 +40,20 @@ import { sha256 } from '../src/utils.js'
 
 const cwdStack: string[] = []
 const execFileAsync = promisify(execFile)
+const repoNodeModules = join(dirname(dirname(fileURLToPath(import.meta.url))), 'node_modules')
+
+function runSchemaValidator(projectRoot: string) {
+  return execFileAsync(
+    process.execPath,
+    [
+      'tools/validate-schema.mjs'
+    ],
+    {
+      cwd: projectRoot,
+      env: { ...process.env, NODE_PATH: repoNodeModules }
+    }
+  )
+}
 const EXPECTED_RELEASE_TARGETS = [
   {
     runner: 'windows-latest',
@@ -2531,30 +2546,14 @@ version = "0.1.0"
     await createProject(defaultOptions({ name: 'maa-schema-test' }))
     const projectRoot = join(root, 'maa-schema-test')
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/validate-schema.mjs'
-        ],
-        { cwd: projectRoot }
-      )
-    ).resolves.toBeDefined()
+    await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
 
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.interface_version = 1
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/validate-schema.mjs'
-        ],
-        { cwd: projectRoot }
-      )
-    ).rejects.toThrow('interface.json interface_version must be 2')
+    await expect(runSchemaValidator(projectRoot)).rejects.toThrow('must be equal to constant')
 
     interfaceJson.interface_version = 2
     interfaceJson.resource = [
@@ -2562,15 +2561,7 @@ version = "0.1.0"
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/validate-schema.mjs'
-        ],
-        { cwd: projectRoot }
-      )
-    ).rejects.toThrow('interface.json resource[0].path must be an array of strings')
+    await expect(runSchemaValidator(projectRoot)).rejects.toThrow('must be array')
   })
 
   it('checks generated interface schema baseline files', async () => {
@@ -2597,15 +2588,7 @@ version = "0.1.0"
       )
     ).rejects.toThrow('managed file is missing: tools/schema/interface.schema.json')
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/validate-schema.mjs'
-        ],
-        { cwd: projectRoot }
-      )
-    ).rejects.toThrow('tools/schema/interface.schema.json is missing')
+    await expect(runSchemaValidator(projectRoot)).rejects.toThrow('interface.schema.json')
   })
 
   it('generated schema validation script accepts agent project shape', async () => {
@@ -2614,15 +2597,7 @@ version = "0.1.0"
     await createProject(defaultOptions({ name: 'maa-agent-schema-test', template: 'agent' }))
     const projectRoot = join(root, 'maa-agent-schema-test')
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/validate-schema.mjs'
-        ],
-        { cwd: projectRoot }
-      )
-    ).resolves.toBeDefined()
+    await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
   })
 
   it('generated release dry-run smoke checks package references', async () => {

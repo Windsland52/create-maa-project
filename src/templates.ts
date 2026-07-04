@@ -358,9 +358,10 @@ function resourcePaths(resources: Pick<ResourcePackConfig, 'path'>[]): string[] 
   return resources.map((resource) => `./${resource.path}`)
 }
 
-export function interfaceAgent(
-  command: string[] | undefined
-): { child_exec: string; child_args?: string[] } {
+export function interfaceAgent(command: string[] | undefined): {
+  child_exec: string
+  child_args?: string[]
+} {
   const [
     childExec = '',
     ...childArgs

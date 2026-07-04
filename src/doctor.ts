@@ -599,6 +599,9 @@ function expectedDevDependencies(): Record<string, string> {
   return {
     '@nekosu/maa-tools': '1.0.24',
     '@nekosu/prettier-plugin-maafw-sort': '1.0.5',
+    ajv: '8.20.0',
+    'ajv-formats': '3.0.1',
+    'jsonc-parser': '3.3.1',
     prettier: '3.8.4',
     'prettier-plugin-multiline-arrays': '4.1.9'
   }

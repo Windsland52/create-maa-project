@@ -17,9 +17,18 @@ importers:
       '@types/node':
         specifier: 24.0.0
         version: 24.0.0
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: 3.0.1
+        version: 3.0.1(ajv@8.20.0)
       esbuild:
         specifier: 0.25.5
         version: 0.25.5
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
       postject:
         specifier: 1.0.0-alpha.6
         version: 1.0.0-alpha.6
@@ -1400,6 +1409,12 @@ packages:
     engines: { node: '>=6' }
     hasBin: true
 
+  jsonc-parser@3.3.1:
+    resolution:
+      {
+        integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==
+      }
+
   loupe@3.2.1:
     resolution:
       {
@@ -2680,6 +2695,8 @@ snapshots:
   json-schema-typed@8.0.2: {}
 
   json5@2.2.3: {}
+
+  jsonc-parser@3.3.1: {}
 
   loupe@3.2.1: {}
 

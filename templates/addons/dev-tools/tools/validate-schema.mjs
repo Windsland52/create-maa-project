@@ -1,157 +1,185 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 
-if (!existsSync('tools/schema')) {
+const require = createRequire(import.meta.url)
+const Ajv = require('ajv')
+const Ajv2020 = require('ajv/dist/2020.js')
+const addFormats = require('ajv-formats')
+const { parse: parseJsonc } = require('jsonc-parser')
+
+// ---------------------------------------------------------------------------
+// Load JSON/JSONC files (comments and trailing commas allowed)
+// ---------------------------------------------------------------------------
+
+function loadJson(path) {
+  if (!existsSync(path)) throw new Error(path + ' is missing')
+  const errors = []
+  const data = parseJsonc(readFileSync(path, 'utf8'), errors)
+  if (errors.length > 0) {
+    throw new Error(path + ': ' + errors[0].error)
+  }
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// Schema setup: load all *.schema.json, register for $ref resolution
+// ---------------------------------------------------------------------------
+
+const schemaDir = resolve('tools/schema')
+if (!existsSync(schemaDir)) {
   throw new Error('Missing tools/schema directory')
 }
 
-const interfaceJson = readJson('interface.json')
-const interfaceSchema = readJson('tools/schema/interface.schema.json')
-const packageJson = readJson('package.json')
+// logger:false suppresses "unknown format" warnings for MaaFW custom formats
+// (uint32, int32, etc.) — they are informational, not validation errors.
+const ajv7 = new Ajv({ allErrors: true, strict: false, logger: false })
+addFormats(ajv7)
 
-assertRecord(interfaceJson, 'interface.json')
-assertEqual(interfaceJson.interface_version, 2, 'interface.json interface_version must be 2')
-assertSlug(interfaceJson.name, 'interface.json name')
-assertNonEmptyString(interfaceJson.label, 'interface.json label')
-assertVersion(interfaceJson.version, 'interface.json version', true)
-assertArrayOfRecords(interfaceJson.controller, 'interface.json controller')
-assertArrayOfRecords(interfaceJson.resource, 'interface.json resource')
-assertArrayOfStrings(interfaceJson.import, 'interface.json import')
+const ajv2020 = new Ajv2020({ allErrors: true, strict: false, logger: false })
+addFormats(ajv2020)
 
-for (const [
-  index,
-  controller
-] of interfaceJson.controller.entries()) {
-  assertNonEmptyString(controller.name, 'interface.json controller[' + index + '].name')
-  assertNonEmptyString(controller.label, 'interface.json controller[' + index + '].label')
-  assertEnum(
-    controller.type,
-    [
-      'Adb',
-      'Win32',
-      'MacOS',
-      'PlayCover',
-      'Gamepad',
-      'WlRoots'
-    ],
-    'interface.json controller[' + index + '].type'
-  )
+const schemaUris = {}
+
+for (const file of readdirSync(schemaDir)) {
+  if (!file.endsWith('.schema.json')) continue
+  const fullPath = join(schemaDir, file)
+  const schema = loadJson(fullPath)
+  const uri = pathToFileURL(fullPath).href
+  const is2020 = String(schema.$schema || '').includes('2020-12')
+  const ajv = is2020 ? ajv2020 : ajv7
+  ajv.addSchema(schema, uri)
+  schemaUris[file] = uri
 }
 
-for (const [
-  index,
-  resource
-] of interfaceJson.resource.entries()) {
-  assertNonEmptyString(resource.name, 'interface.json resource[' + index + '].name')
-  assertArrayOfStrings(resource.path, 'interface.json resource[' + index + '].path')
+function validator(filename) {
+  const uri = schemaUris[filename]
+  if (!uri) throw new Error('Schema not found: ' + filename)
+  const schema = loadJson(join(schemaDir, filename))
+  const ajv = String(schema.$schema || '').includes('2020-12') ? ajv2020 : ajv7
+  return ajv.getSchema(uri)
 }
 
-if (interfaceJson.task !== undefined) {
-  assertArrayOfRecords(interfaceJson.task, 'interface.json task')
-  for (const [
-    index,
-    task
-  ] of interfaceJson.task.entries()) {
-    assertNonEmptyString(task.name, 'interface.json task[' + index + '].name')
-    assertNonEmptyString(task.entry, 'interface.json task[' + index + '].entry')
+const interfaceValidator = validator('interface.schema.json')
+const taskValidator = validator('interface_import.schema.json')
+const pipelineValidator = validator('pipeline.schema.json')
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+let allValid = true
+
+function validateFile(path, validate) {
+  let data
+  try {
+    data = loadJson(path)
+  } catch (e) {
+    console.error(`x ${path}: ${e.message}`)
+    allValid = false
+    return
   }
+  const valid = validate(data)
+  if (valid) {
+    console.log(`v ${path}`)
+    return
+  }
+  console.error(`x ${path}:`)
+  const errors = validate.errors || []
+  for (const err of errors.slice(0, 10)) {
+    const jsonPath = err.instancePath || '/'
+    console.error(`  ${jsonPath}: ${err.message}`)
+  }
+  if (errors.length > 10) {
+    console.error(`  ... and ${errors.length - 10} more error(s)`)
+  }
+  allValid = false
 }
 
-if (interfaceJson.agent !== undefined) {
-  assertArrayOfRecords(interfaceJson.agent, 'interface.json agent')
-  for (const [
-    index,
-    agent
-  ] of interfaceJson.agent.entries()) {
-    assertNonEmptyString(agent.child_exec, 'interface.json agent[' + index + '].child_exec')
-    if (agent.child_args !== undefined) {
-      assertArrayOfStrings(agent.child_args, 'interface.json agent[' + index + '].child_args')
+function* walkJsonFiles(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      yield* walkJsonFiles(fullPath)
+    } else if (entry.name.endsWith('.json') || entry.name.endsWith('.jsonc')) {
+      yield fullPath
     }
   }
 }
 
-assertRecord(interfaceSchema, 'tools/schema/interface.schema.json')
-assertEqual(
-  interfaceSchema.title,
-  'MaaFramework Project Interface V2',
-  'tools/schema/interface.schema.json title must be MaaFramework Project Interface V2'
-)
-assertRecord(interfaceSchema.properties, 'tools/schema/interface.schema.json properties')
-assertRecord(
-  interfaceSchema.properties.interface_version,
-  'tools/schema/interface.schema.json properties.interface_version'
-)
-assertEqual(
-  interfaceSchema.properties.interface_version.const,
-  2,
-  'tools/schema/interface.schema.json interface_version const must be 2'
-)
+// interface.json
+validateFile('interface.json', interfaceValidator)
 
-assertRecord(packageJson, 'package.json')
-assertSlug(packageJson.name, 'package.json name')
-assertVersion(packageJson.version, 'package.json version', false)
-assertEqual(packageJson.private, true, 'package.json private must be true')
-assertEqual(packageJson.type, 'module', 'package.json type must be module')
-assertRecord(packageJson.scripts, 'package.json scripts')
-
-console.log('[OK] local project schema shape is valid')
-
-function readJson(path) {
-  if (!existsSync(path)) throw new Error(path + ' is missing')
-  return JSON.parse(readFileSync(path, 'utf8'))
-}
-
-function assertRecord(value, label) {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(label + ' must be an object')
+// tasks/*.json
+if (existsSync('tasks')) {
+  for (const file of readdirSync('tasks')) {
+    if (file.endsWith('.json') || file.endsWith('.jsonc')) {
+      validateFile(join('tasks', file), taskValidator)
+    }
   }
 }
 
-function assertArrayOfRecords(value, label) {
-  if (
-    !Array.isArray(value) ||
-    value.some((item) => typeof item !== 'object' || item === null || Array.isArray(item))
-  ) {
-    throw new Error(label + ' must be an array of objects')
+// resource/*/pipeline/**/*.json
+// default_pipeline.json is intentionally skipped: it contains partial default
+// parameters that are merged into actual nodes at runtime, not standalone
+// pipeline nodes. The pipeline schema validates complete nodes only.
+if (existsSync('resource')) {
+  for (const pack of readdirSync('resource', { withFileTypes: true })) {
+    if (!pack.isDirectory()) continue
+    const pipelineDir = join('resource', pack.name, 'pipeline')
+    if (existsSync(pipelineDir) && statSync(pipelineDir).isDirectory()) {
+      for (const file of walkJsonFiles(pipelineDir)) {
+        validateFile(file, pipelineValidator)
+      }
+    }
   }
 }
 
-function assertArrayOfStrings(value, label) {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new Error(label + ' must be an array of strings')
-  }
+// ---------------------------------------------------------------------------
+// package.json manual checks (not a MaaFW schema file)
+// ---------------------------------------------------------------------------
+
+const packageJson = loadJson('package.json')
+const pkgErrors = []
+
+if (typeof packageJson.name !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageJson.name)) {
+  pkgErrors.push('name must be an ASCII kebab-case slug')
+}
+if (
+  typeof packageJson.version !== 'string' ||
+  !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+    packageJson.version
+  )
+) {
+  pkgErrors.push('version must be a SemVer version')
+}
+if (packageJson.private !== true) {
+  pkgErrors.push('private must be true')
+}
+if (packageJson.type !== 'module') {
+  pkgErrors.push('type must be module')
+}
+if (
+  typeof packageJson.scripts !== 'object' ||
+  packageJson.scripts === null ||
+  Array.isArray(packageJson.scripts)
+) {
+  pkgErrors.push('scripts must be an object')
 }
 
-function assertNonEmptyString(value, label) {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(label + ' must be a non-empty string')
-  }
+if (pkgErrors.length > 0) {
+  console.error('x package.json:')
+  for (const err of pkgErrors) console.error(`  ${err}`)
+  allValid = false
+} else {
+  console.log('v package.json')
 }
 
-function assertSlug(value, label) {
-  assertNonEmptyString(value, label)
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
-    throw new Error(label + ' must be an ASCII kebab-case slug')
-  }
-}
+// ---------------------------------------------------------------------------
 
-function assertVersion(value, label, withV) {
-  assertNonEmptyString(value, label)
-  const pattern = withV
-    ? /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
-    : /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
-  if (!pattern.test(value)) {
-    throw new Error(label + ' must be a SemVer version' + (withV ? ' with v prefix' : ''))
-  }
-}
-
-function assertEnum(value, allowed, label) {
-  if (!allowed.includes(value)) {
-    throw new Error(label + ' must be one of: ' + allowed.join(', '))
-  }
-}
-
-function assertEqual(actual, expected, message) {
-  if (actual !== expected) {
-    throw new Error(message)
-  }
+if (allValid) {
+  console.log('\n[OK] local project schema is valid')
+} else {
+  process.exitCode = 1
 }

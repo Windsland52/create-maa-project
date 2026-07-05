@@ -16,7 +16,6 @@ describe('workflow templates', () => {
     await expect(
       check(file.content.toString(), {
         parser: 'yaml',
-        singleQuote: true,
         trailingComma: 'none',
         tabWidth: 2,
         printWidth: 100,

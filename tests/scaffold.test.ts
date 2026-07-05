@@ -372,14 +372,14 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).toContain(
-      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"',
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
     )
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
     expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
-    expect(releaseWorkflow).toContain('cp logo.ico dist/package-mfaa/logo.ico')
+    expect(releaseWorkflow).toContain('cp logo.ico "$pkg_dir/logo.ico"')
     expect(releaseWorkflow).toContain('rcedit-x64.exe')
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
     expect(releaseWorkflow).toContain('actions/download-artifact@v7')
@@ -898,7 +898,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('astral-sh/setup-uv@v8.1.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
-    expect(releaseWorkflow).toContain('-MFAA.${{ matrix.ext }}"')
+    expect(releaseWorkflow).toContain('-${gui^^}.${{ matrix.ext }}"')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
     expect(releaseWorkflow).not.toContain('package_paths=')
@@ -1813,7 +1813,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       icon: 'logo.ico',
     })
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-MFAA.${{ matrix.ext }}"',
+      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
     )
     expect(await readFile(join(root, 'MaaXX', 'README.md'), 'utf8')).toContain('# MaaXX')
   })
@@ -2849,7 +2849,7 @@ version = "0.1.0"
       } else {
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
       }
-      if (!runtimePlatform.startsWith('win-')) {
+      if (!runtimePlatform.startsWith('win-') && process.platform !== 'win32') {
         expect(
           (
             await stat(
@@ -3245,9 +3245,11 @@ version = "0.1.0"
     expect(await readFile(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'), 'utf8')).toBe(
       'runner',
     )
-    expect(
-      (await stat(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'))).mode & 0o111,
-    ).not.toBe(0)
+    if (process.platform !== 'win32') {
+      expect(
+        (await stat(join(projectRoot, '.create-maa-project/runtime/mfaa/linux-x64/MFAAvalonia'))).mode & 0o111,
+      ).not.toBe(0)
+    }
   })
 
   it('maps MaaFramework archive contents into agent binary and plugin directories', async () => {
@@ -3474,9 +3476,11 @@ version = "0.1.0"
       expect(
         await readFile(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3.13'), 'utf8'),
       ).toBe('python')
-      expect(
-        (await stat(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'))).mode & 0o111,
-      ).not.toBe(0)
+      if (process.platform !== 'win32') {
+        expect(
+          (await stat(join(projectRoot, '.create-maa-project/runtime/python/osx-arm64/bin/python3'))).mode & 0o111,
+        ).not.toBe(0)
+      }
     })
 
     expect(commands).toEqual([

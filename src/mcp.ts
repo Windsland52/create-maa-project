@@ -741,7 +741,7 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
 }
 
 function currentRoot(): string {
-  return safeProcessCwd(serverRoot)
+  return serverRoot
 }
 
 function safeProcessCwd(fallback: string): string {

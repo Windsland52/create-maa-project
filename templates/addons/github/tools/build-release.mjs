@@ -365,7 +365,7 @@ function copyDirectoryContents(source, target) {
 }
 
 function ensureUnixExecutablePermissions(root, runtimePlatform) {
-    if (runtimePlatform.startsWith("win-")) return;
+    if (process.platform === "win32" || runtimePlatform.startsWith("win-")) return;
     for (const path of findUnixExecutableFiles(root)) {
         const mode = statSync(path).mode;
         chmodSync(path, mode | 0o755);
@@ -373,7 +373,7 @@ function ensureUnixExecutablePermissions(root, runtimePlatform) {
 }
 
 function assertUnixExecutablePermissions(root, runtimePlatform) {
-    if (runtimePlatform.startsWith("win-")) return;
+    if (process.platform === "win32" || runtimePlatform.startsWith("win-")) return;
     for (const path of findUnixExecutableFiles(root)) {
         if ((statSync(path).mode & 0o111) === 0) {
             throw new Error(`release package smoke failed: executable bit is missing: ${path}`);
@@ -411,7 +411,8 @@ function walkFiles(root, visit) {
 }
 
 function releasePackagePath(path) {
-    return path.startsWith(".create-maa-project/runtime/python-deps/") ? "deps" : path;
+    const normalized = path.split("\\").join("/");
+    return normalized.startsWith(".create-maa-project/runtime/python-deps/") ? "deps" : path;
 }
 
 function guiRuntimePath(runtimeDir, runtimePlatform) {

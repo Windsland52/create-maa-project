@@ -5,6 +5,10 @@ import { gunzipSync, inflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { sha256, stableJson } from './utils.js'
 
+function posixJoin(...segments: string[]): string {
+  return segments.filter(Boolean).join('/').replace(/\\/g, '/')
+}
+
 export const DEFAULT_OCR_ZIP_URL = 'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip'
 
 export type AssetManifest = {
@@ -323,7 +327,7 @@ export async function writeDownloadedAssets(
 ): Promise<{ written: string[]; manifestContent: string }> {
   const written: string[] = []
   for (const asset of assets) {
-    const relativePath = join(basePath, asset.path)
+    const relativePath = posixJoin(basePath, asset.path)
     const target = join(root, relativePath)
     await mkdir(dirname(target), { recursive: true })
     await writeFile(target, asset.content)
@@ -339,7 +343,7 @@ export async function writeDownloadedAssets(
     })),
   })
   await writeFile(join(root, basePath, 'manifest.json'), manifestContent, 'utf8')
-  written.push(join(basePath, 'manifest.json'))
+  written.push(posixJoin(basePath, 'manifest.json'))
   return { written, manifestContent }
 }
 

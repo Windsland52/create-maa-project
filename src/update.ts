@@ -270,7 +270,7 @@ export async function recordUpdateRequests(
             if (config.ocr.files) {
               for (const [destName, srcRel] of Object.entries(config.ocr.files)) {
                 await cp(join(subRoot, srcRel), join(ocrDest, destName))
-                written.add(join('resource/base/model/ocr', destName))
+                written.add(['resource/base/model/ocr', destName].join('/'))
               }
             } else {
               await cp(subRoot, ocrDest, { recursive: true, force: true })

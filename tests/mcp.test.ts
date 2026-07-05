@@ -287,6 +287,7 @@ describe('MCP server', () => {
       const root = await tempRoot()
       const session = await startSession(root)
       await initialize(session)
+      process.chdir(tmpdir())
       await rm(root, { recursive: true, force: true })
 
       const response = await session.request('tools/call', {

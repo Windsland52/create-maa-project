@@ -2859,7 +2859,8 @@ version = "0.1.0"
           ).mode & 0o111,
         ).not.toBe(0)
         expect(
-          (await stat(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/MaaPiCli'))).mode & 0o111,
+          (await stat(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/MaaPiCli'))).mode &
+            0o111,
         ).not.toBe(0)
       }
     }

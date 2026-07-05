@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { managedFileHash, readProjectConfig, readProjectLock } from './project.js'
 import { interfaceAgent, interfaceController, interfaceResourceItems } from './templates.js'
@@ -29,7 +29,6 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
   ok = (await checkPyprojectMetadata(root, config, lines)) && ok
   ok = (await checkResourceOrder(root, config, lines)) && ok
   ok = (await checkReferencedPaths(root, lines)) && ok
-  ok = (await checkMaaJsonPaths(root, lines)) && ok
   ok = (await checkMaatoolsConfig(root, config, lines)) && ok
   ok = (await checkManagedFiles(root, lock, lines)) && ok
 
@@ -387,23 +386,6 @@ async function checkReferencedPaths(root: string, lines: string[]): Promise<bool
   return ok
 }
 
-async function checkMaaJsonPaths(root: string, lines: string[]): Promise<boolean> {
-  let ok = true
-  for (const path of await listJsonFiles(root, [
-    'interface.json',
-    'tasks',
-    'resource',
-  ])) {
-    const content = await readText(join(root, path))
-    if (!content.includes('\\')) continue
-    lines.push(`[ERR] MaaFW JSON paths must use forward slashes: ${path}`)
-    lines.push(`      To fix: replace backslashes with / in ${path}`)
-    ok = false
-  }
-  if (ok) lines.push('[OK] MaaFW JSON paths use forward slashes.')
-  return ok
-}
-
 async function checkMaatoolsConfig(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const configPath = join(root, 'maatools.config.mts')
   if (!(await exists(configPath))) {
@@ -475,36 +457,6 @@ async function checkManagedFiles(root: string, lock: MaaProjectLock, lines: stri
 
 async function readManagedFileForDoctor(fullPath: string, managedPath: string): Promise<string | Buffer> {
   return managedPath.endsWith('.onnx') ? readFile(fullPath) : readText(fullPath)
-}
-
-async function listJsonFiles(root: string, paths: string[]): Promise<string[]> {
-  const files: string[] = []
-  for (const path of paths) {
-    const fullPath = join(root, path)
-    if (!(await exists(fullPath))) continue
-    const entries = await safeReadDirectory(fullPath)
-    if (!entries) {
-      if (path.endsWith('.json')) files.push(path)
-      continue
-    }
-    for (const entry of entries) {
-      files.push(
-        ...(await listJsonFiles(root, [
-          `${path}/${entry}`,
-        ])),
-      )
-    }
-  }
-  return files
-}
-
-async function safeReadDirectory(path: string): Promise<string[] | undefined> {
-  try {
-    const entries = await readdir(path, { withFileTypes: true })
-    return entries.map((entry) => entry.name)
-  } catch {
-    return undefined
-  }
 }
 
 function arrayOfStrings(value: unknown): string[] {

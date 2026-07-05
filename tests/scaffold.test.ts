@@ -2081,7 +2081,6 @@ version = "ignored"
 
     expect(report.ok).toBe(false)
     expect(output).toContain('interface.json import path is missing')
-    expect(output).toContain('MaaFW JSON paths must use forward slashes')
     expect(output).toContain('maatools.config.mts resource order differs')
 
     await writeFile(

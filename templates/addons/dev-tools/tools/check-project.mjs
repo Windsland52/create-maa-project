@@ -1,5 +1,5 @@
-import {createHash} from "node:crypto";
-import {existsSync, readFileSync, readdirSync, statSync} from "node:fs";
+﻿import {createHash} from "node:crypto";
+import {existsSync, readFileSync} from "node:fs";
 
 const interfaceJson = JSON.parse(readFileSync("interface.json", "utf8"));
 const project = JSON.parse(readFileSync("maa-project.json", "utf8"));
@@ -203,17 +203,6 @@ for (const path of [
     }
     if (!existsSync(path)) {
         throw new Error(`referenced path does not exist: ${path}`);
-    }
-}
-
-for (const path of walkJsonFiles([
-    "interface.json",
-    "tasks",
-    "resource",
-])) {
-    const content = readFileSync(path, "utf8");
-    if (content.includes("\\")) {
-        throw new Error(`MaaFW JSON paths must use forward slashes: ${path}`);
     }
 }
 
@@ -477,26 +466,6 @@ function extractGitignoreBlock(content) {
     if (markerEnd < 0) return undefined;
     const endOfLine = content.indexOf("\n", markerEnd);
     return content.slice(start, endOfLine >= 0 ? endOfLine + 1 : content.length);
-}
-
-function walkJsonFiles(paths) {
-    const files = [];
-    for (const path of paths) {
-        if (!existsSync(path)) continue;
-        const stat = statSync(path);
-        if (stat.isDirectory()) {
-            for (const entry of readdirSync(path)) {
-                files.push(
-                    ...walkJsonFiles([
-                        `${path}/${entry}`,
-                    ]),
-                );
-            }
-        } else if (path.endsWith(".json")) {
-            files.push(path);
-        }
-    }
-    return files;
 }
 
 function parseTomlProjectMetadata(content) {

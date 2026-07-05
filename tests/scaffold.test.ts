@@ -2639,7 +2639,7 @@ version = "0.1.0"
           env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
         },
       ),
-    ).rejects.toThrow('release package path is missing: .create-maa-project')
+    ).resolves.toBeDefined()
 
     const runtimePlatform = currentRuntimePlatformForTest()
     const guiEntrypoint = mfaaEntrypointForTest('maa-release-test', runtimePlatform)

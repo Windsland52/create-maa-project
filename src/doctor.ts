@@ -63,20 +63,39 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
     controller?: unknown
   }
   let ok = true
+  const unmanaged = config.project.interfaceUnmanaged === true
   if (interfaceJson.name !== config.project.slug) {
-    lines.push('[ERR] interface.json name differs from maa-project.json project.slug.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json name differs from maa-project.json project.slug; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json name differs from maa-project.json project.slug.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (interfaceJson.label !== config.project.displayName) {
-    lines.push('[ERR] interface.json label differs from maa-project.json project.displayName.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json label differs from maa-project.json project.displayName; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json label differs from maa-project.json project.displayName.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (interfaceJson.version !== addV(config.project.version)) {
-    lines.push('[ERR] interface.json version differs from maa-project.json project.version.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json version differs from maa-project.json project.version; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json version differs from maa-project.json project.version.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (interfaceJson.icon !== 'logo.ico') {
     lines.push('[ERR] interface.json icon must be logo.ico.')
@@ -89,22 +108,40 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
     ok = false
   }
   if (JSON.stringify(interfaceJson.agent) !== JSON.stringify(expectedInterfaceAgent(config))) {
-    lines.push('[ERR] interface.json agent differs from maa-project.json python config.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json agent differs from maa-project.json python config; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json agent differs from maa-project.json python config.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (interfaceJson.github !== config.project.github) {
-    lines.push('[ERR] interface.json github differs from maa-project.json project.github.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json github differs from maa-project.json project.github; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json github differs from maa-project.json project.github.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (
     JSON.stringify(interfaceJson.controller ?? []) !==
     JSON.stringify(interfaceController(projectControllerKinds(config)))
   ) {
-    lines.push('[ERR] interface.json controller differs from maa-project.json controller.kinds.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
+    if (unmanaged) {
+      lines.push(
+        '[INFO] interface.json controller differs from maa-project.json controller.kinds; interface.json is unmanaged so this is allowed.',
+      )
+    } else {
+      lines.push('[ERR] interface.json controller differs from maa-project.json controller.kinds.')
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
   }
   if (ok) lines.push('[OK] Interface metadata matches project config.')
   return ok

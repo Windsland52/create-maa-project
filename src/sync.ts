@@ -76,11 +76,20 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
   if (packageJson) applyPackageMetadata(packageJson, config)
   const pyproject = await syncedPyproject(root, config)
 
-  files.push(
-    { path: 'interface.json', content: prettyJson(interfaceJson), managed: false },
-    maatoolsConfigFile(config.resources.map((pack) => `./${pack.path}`)),
-    { path: CONFIG_FILE, content: stableJson(config), managed: false },
-  )
+  files.push(maatoolsConfigFile(config.resources.map((pack) => `./${pack.path}`)))
+  files.push({ path: CONFIG_FILE, content: stableJson(config), managed: false })
+  // interface.json is intentionally unmanaged: projects may carry a hand-tuned
+  // controller/resource layout (e.g. multi-server packs) that the template-
+  // generated content would clobber. Only write it on first creation; once it
+  // exists, leave it untouched and let lint/doctor drift checks surface any
+  // metadata divergence instead of overwriting it.
+  if (config.project.interfaceUnmanaged && (await exists(join(root, 'interface.json')))) {
+    // interface.json is unmanaged: projects may carry a hand-tuned
+    // controller/resource layout (e.g. multi-server packs) that the
+    // template-generated content would clobber. Leave it untouched.
+  } else {
+    files.push({ path: 'interface.json', content: prettyJson(interfaceJson), managed: false })
+  }
   if (packageJson && hasDevTools(config)) {
     files.splice(2, 0, { path: 'package.json', content: stableJson(packageJson), managed: false })
   }

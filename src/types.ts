@@ -11,6 +11,7 @@ export type MaaProjectConfig = {
     version: string
     initialTemplate: TemplateName
     github?: string
+    interfaceUnmanaged?: boolean
   }
   features: {
     ci: FeatureState

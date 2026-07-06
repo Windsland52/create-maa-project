@@ -7,16 +7,27 @@ const lock = JSON.parse(readFileSync("maa-project.lock.json", "utf8"));
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const imports = interfaceJson.import ?? [];
 
+const interfaceUnmanaged = project.project?.interfaceUnmanaged === true;
 if (interfaceJson.name !== project.project?.slug) {
-    throw new Error("interface.json name must match maa-project.json project.slug");
+    console.warn(
+        "[INFO] interface.json name differs from maa-project.json project.slug; interface.json is unmanaged so this is allowed.",
+    );
 }
 
 if (interfaceJson.label !== project.project?.displayName) {
-    throw new Error("interface.json label must match maa-project.json project.displayName");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json label must match maa-project.json project.displayName; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json label must match maa-project.json project.displayName");
 }
 
 if (interfaceJson.version !== addV(project.project?.version)) {
-    throw new Error("interface.json version must match maa-project.json project.version");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json version must match maa-project.json project.version; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json version must match maa-project.json project.version");
 }
 
 if (interfaceJson.icon !== "logo.ico") {
@@ -156,25 +167,43 @@ if (
     JSON.stringify(interfaceJson.controller ?? []) !==
     JSON.stringify(interfaceController(projectControllerKinds(project)))
 ) {
-    throw new Error("interface.json controller must match maa-project.json controller.kinds");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json controller must match maa-project.json controller.kinds; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json controller must match maa-project.json controller.kinds");
 }
 
 if (interfaceJson.agent !== undefined && !Array.isArray(interfaceJson.agent)) {
-    throw new Error("interface.json agent must be an array");
+    if (interfaceUnmanaged)
+        console.warn("[INFO] interface.json agent must be an array; interface.json is unmanaged so this is allowed.");
+    else throw new Error("interface.json agent must be an array");
 }
 
 if (JSON.stringify(interfaceJson.agent) !== JSON.stringify(interfaceAgent(project))) {
-    throw new Error("interface.json agent must match maa-project.json python config");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json agent must match maa-project.json python config; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json agent must match maa-project.json python config");
 }
 
 const resources = interfaceResources(interfaceJson.resource);
 if (!Array.isArray(interfaceJson.resource) || resources[0]?.path?.[0] !== "./resource/base") {
-    throw new Error("interface.json resource must start with ./resource/base");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json resource must start with ./resource/base; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json resource must start with ./resource/base");
 }
 
 const expectedResources = interfaceResourceItems(project.resources ?? []);
 if (JSON.stringify(resources) !== JSON.stringify(expectedResources)) {
-    throw new Error("interface.json resource order differs from maa-project.json resources");
+    if (interfaceUnmanaged)
+        console.warn(
+            "[INFO] interface.json resource order differs from maa-project.json resources; interface.json is unmanaged so this is allowed.",
+        );
+    else throw new Error("interface.json resource order differs from maa-project.json resources");
 }
 
 const expectedResourcePaths = (project.resources ?? []).map((pack) => "./" + pack.path);

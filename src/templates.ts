@@ -437,9 +437,8 @@ function pnpmWorkspaceYaml(): string {
   return template('addons/dev-tools/pnpm-workspace.yaml')
 }
 
-function maatoolsConfig(resources: string[], includeAgent = false): string {
+function maatoolsConfig(_resources: string[], includeAgent = false): string {
   return template('base/maatools.config.mts', {
-    resources: javascriptStringArray(resources),
     vscodeBlock: includeAgent
       ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}',\n    },\n  }`
       : '',
@@ -719,15 +718,6 @@ function jsonFragment(value: unknown): string {
 
 function jsonStringContent(value: string): string {
   return JSON.stringify(value).slice(1, -1)
-}
-
-function javascriptStringArray(values: string[]): string {
-  if (values.length === 0) return '[]'
-  return `[\n${values.map((value) => `    ${javascriptString(value)}`).join(',\n')},\n  ]`
-}
-
-function javascriptString(value: string): string {
-  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '\\r').replace(/\n/g, '\\n')}'`
 }
 
 function indentContinuation(value: string, spaces: number): string {

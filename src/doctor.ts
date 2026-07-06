@@ -423,7 +423,7 @@ async function checkReferencedPaths(root: string, lines: string[]): Promise<bool
   return ok
 }
 
-async function checkMaatoolsConfig(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
+async function checkMaatoolsConfig(root: string, _config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   const configPath = join(root, 'maatools.config.mts')
   if (!(await exists(configPath))) {
     lines.push('[ERR] maatools.config.mts is missing.')
@@ -442,14 +442,7 @@ async function checkMaatoolsConfig(root: string, config: MaaProjectConfig, lines
     lines.push('      To fix: create-maa-project --sync metadata')
     return false
   }
-  const expected = config.resources.map((pack) => `./${pack.path}`)
-  const actual = parseMaatoolsResourceArray(content)
-  if (!actual || JSON.stringify(actual) !== JSON.stringify(expected)) {
-    lines.push('[ERR] maatools.config.mts resource order differs from maa-project.json resources.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    return false
-  }
-  lines.push('[OK] Maa tools resource order matches project config.')
+  lines.push('[OK] Maa tools config fields are present.')
   return true
 }
 
@@ -574,20 +567,6 @@ function expectedPackageScripts(config: MaaProjectConfig): Record<string, string
     scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
   }
   return scripts
-}
-
-function parseMaatoolsResourceArray(content: string): string[] | undefined {
-  const match = content.match(/resource\s*:\s*(\[[^\]]*\])/)
-  if (!match?.[1]) return undefined
-  return [
-    ...match[1].matchAll(/(['"])(.*?)\1/g),
-  ].flatMap((item) =>
-    item[2]
-      ? [
-          item[2],
-        ]
-      : [],
-  )
 }
 
 function parseTomlProjectMetadata(content: string): {

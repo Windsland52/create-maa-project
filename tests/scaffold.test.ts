@@ -962,10 +962,15 @@ describe('scaffold', () => {
         },
       ],
     })
-    const maatoolsConfig = await readFile(join(root, 'maa-resource-test', 'maatools.config.mts'), 'utf8')
-    expect(maatoolsConfig).toContain("'./resource/base'")
-    expect(maatoolsConfig).toContain("'./resource/pack-a'")
-    expect(maatoolsConfig).toContain("'./resource/pack-b'")
+    const maatoolsCfg = await readFile(join(root, 'maa-resource-test', 'maatools.config.mts'), 'utf8')
+    expect(maatoolsCfg).not.toContain('resource:')
+    const iface = (await readJson(join(root, 'maa-resource-test', 'interface.json'))) as {
+      resource: { path: string[] }[]
+    }
+    const ifacePaths = iface.resource.flatMap((r) => r.path)
+    expect(ifacePaths).toContain('./resource/base')
+    expect(ifacePaths).toContain('./resource/pack-a')
+    expect(ifacePaths).toContain('./resource/pack-b')
     expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/empty.png'))).toBe(true)
     expect(await pathExists(join(root, 'maa-resource-test', 'resource/pack-b/image/.gitkeep'))).toBe(false)
   })
@@ -1006,9 +1011,14 @@ describe('scaffold', () => {
         },
       ],
     })
-    const maatoolsConfig = await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')
-    expect(maatoolsConfig).toContain("'./resource/base'")
-    expect(maatoolsConfig).toContain("'./resource/pack-a'")
+    const maatoolsCfg = await readFile(join(root, 'maa-resource-create', 'maatools.config.mts'), 'utf8')
+    expect(maatoolsCfg).not.toContain('resource:')
+    const iface2 = (await readJson(join(root, 'maa-resource-create', 'interface.json'))) as {
+      resource: { path: string[] }[]
+    }
+    const ifacePaths2 = iface2.resource.flatMap((r) => r.path)
+    expect(ifacePaths2).toContain('./resource/base')
+    expect(ifacePaths2).toContain('./resource/pack-a')
     expect(result.written).toEqual(
       expect.arrayContaining([
         'resource/pack-a/pipeline/.gitkeep',
@@ -2069,7 +2079,6 @@ version = "ignored"
       `export default {
   maaVersion: 'latest',
   interfacePath: 'interface.json',
-  resource: ['./resource/other'],
   check: {}
 }
 `,
@@ -2081,14 +2090,13 @@ version = "ignored"
 
     expect(report.ok).toBe(false)
     expect(output).toContain('interface.json import path is missing')
-    expect(output).toContain('maatools.config.mts resource order differs')
+    expect(output).toContain('[OK] Maa tools config fields are present.')
 
     await writeFile(
       join(projectRoot, 'maatools.config.mts'),
       `import { defineConfig } from '@nekosu/maa-tools'
 
 export default defineConfig({
-  resource: ['./resource/base']
 })
 `,
       'utf8',
@@ -2328,56 +2336,6 @@ jobs:
     ).rejects.toThrow(
       '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
-  })
-
-  it('generated project lint script checks maa tools resource order', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-maatools-lint' }))
-    const projectRoot = join(root, 'maa-maatools-lint')
-    await clearPending(projectRoot)
-    await writeFile(
-      join(projectRoot, 'maatools.config.mts'),
-      `export default {
-  maaVersion: 'latest',
-  interfacePath: 'interface.json',
-  resource: ['./resource/other'],
-  check: {}
-}
-`,
-      'utf8',
-    )
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('maatools.config.mts resource order differs')
-
-    await writeFile(
-      join(projectRoot, 'maatools.config.mts'),
-      `import { defineConfig } from '@nekosu/maa-tools'
-
-export default defineConfig({
-  resource: ['./resource/base']
-})
-`,
-      'utf8',
-    )
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('maatools.config.mts must not use @nekosu/maa-tools defineConfig')
   })
 
   it('generated project lint script checks interface version and agent metadata', async () => {

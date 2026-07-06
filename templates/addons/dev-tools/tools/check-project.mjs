@@ -206,7 +206,6 @@ if (JSON.stringify(resources) !== JSON.stringify(expectedResources)) {
     else throw new Error("interface.json resource order differs from maa-project.json resources");
 }
 
-const expectedResourcePaths = (project.resources ?? []).map((pack) => "./" + pack.path);
 if (!existsSync("maatools.config.mts")) {
     throw new Error("maatools.config.mts is missing");
 }
@@ -218,11 +217,6 @@ if (maatoolsConfigContent.includes("defineConfig")) {
 if (!hasMaatoolsRequiredFields(maatoolsConfigContent)) {
     throw new Error("maatools.config.mts must set maaVersion, interfacePath: 'interface.json', and check: {}");
 }
-const maatoolsResources = parseMaatoolsResourceArray(maatoolsConfigContent);
-if (!maatoolsResources || JSON.stringify(maatoolsResources) !== JSON.stringify(expectedResourcePaths)) {
-    throw new Error("maatools.config.mts resource order differs from maa-project.json resources");
-}
-
 for (const path of [
     ...interfaceResourcePaths(interfaceJson.resource),
     ...imports,
@@ -554,12 +548,4 @@ function hasMaatoolsRequiredFields(content) {
         /\binterfacePath\s*:\s*['"]interface\.json['"]/.test(content) &&
         /\bcheck\s*:\s*\{/.test(content)
     );
-}
-
-function parseMaatoolsResourceArray(content) {
-    const match = content.match(/resource\s*:\s*(\[[^\]]*\])/);
-    if (!match?.[1]) return undefined;
-    return [
-        ...match[1].matchAll(/(['"])(.*?)\1/g),
-    ].map((item) => item[2]);
 }

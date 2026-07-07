@@ -2651,6 +2651,8 @@ version = "0.1.0"
     expect(sourceInterface.$schema).toBeUndefined()
     expect((await readdir(join(projectRoot, 'dist/package-mfaa'))).sort()).toEqual(
       [
+        'LICENSE',
+        'README.md',
         'interface.json',
         'libs',
         'logo.ico',
@@ -2684,7 +2686,7 @@ version = "0.1.0"
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.import = [
-      './README.md',
+      './maa-project.json',
     ]
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
 
@@ -2699,7 +2701,7 @@ version = "0.1.0"
           env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
         },
       ),
-    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./README.md')
+    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./maa-project.json')
 
     interfaceJson.import = [
       './tasks/missing.json',

@@ -1,4 +1,4 @@
-﻿import {
+import {
     chmodSync,
     cpSync,
     existsSync,
@@ -74,7 +74,7 @@ const GUI_TYPES = {
         flatLayout: false,
         modifyInterface(iface, slug, ver, platform) {
             const modified = {...iface};
-            modified.title = `${slug} ${ver} | MXU`;
+            modified.title = `${iface.label ?? slug} ${ver} | MXU`;
             if (Array.isArray(modified.agent) && modified.agent[0]) {
                 modified.agent = modified.agent.map((agent) =>
                     isRecord(agent)
@@ -108,8 +108,6 @@ if (enabledGuis.length === 0) {
     throw new Error("no GUI runtime enabled in maa-project.json");
 }
 
-const packagePaths = releasePackagePaths(interfaceJson, runtimePlatform);
-
 for (const path of [
     ...strings(interfaceJson.resource),
     ...strings(interfaceJson.import),
@@ -128,6 +126,7 @@ const artifacts = [];
 for (const guiKey of enabledGuis) {
     const gui = GUI_TYPES[guiKey];
     console.log(`\n--- Building ${gui.suffix} package ---`);
+    const packagePaths = releasePackagePaths(interfaceJson, runtimePlatform, guiKey);
 
     const guiInterface = gui.modifyInterface(
         prepareReleaseInterface(interfaceJson, version, runtimePlatform),
@@ -203,14 +202,14 @@ function interfaceResourcePaths(value) {
     return Array.isArray(value) ? value.flatMap((item) => (isRecord(item) ? strings(item.path) : [])) : [];
 }
 
-function releasePackagePaths(interfaceJson, runtimePlatform) {
+function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {
     const paths = [
         "tasks",
         "resource",
-        "runtimes",
-        "libs/MaaAgentBinary",
-        "plugins",
     ];
+    if (guiKey === "mfaa") {
+        paths.push("runtimes", "libs/MaaAgentBinary", "plugins");
+    }
     if (packageHasAgent(interfaceJson)) {
         paths.push("agent", "requirements.txt");
         if (runtimePlatform.startsWith("linux-")) {
@@ -218,6 +217,15 @@ function releasePackagePaths(interfaceJson, runtimePlatform) {
         }
     }
     return paths;
+}
+
+function optionalPackagePaths() {
+    return [
+        "data",
+        "README.md",
+        "LICENSE",
+        "CONTACT",
+    ];
 }
 
 function packageHasAgent(interfaceJson) {
@@ -254,23 +262,34 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
     for (const path of packagePaths) {
         copyPath(path, join(pkgDir, releasePackagePath(path)));
     }
+    for (const path of optionalPackagePaths()) {
+        if (existsSync(path)) {
+            copyPath(path, join(pkgDir, releasePackagePath(path)));
+        }
+    }
     if (packageHasAgent(interfaceJson) && hasEmbeddedPythonRuntime(runtimePlatform)) {
         copyPath(pythonRuntimePath(runtimePlatform), join(pkgDir, "python"));
     }
-    // MXU: copy MaaFramework runtime into maafw/ subdirectory
     if (!gui.flatLayout) {
-        const maafwDest = join(pkgDir, "maafw");
-        if (!existsSync(maafwDest)) {
-            mkdirSync(maafwDest, {recursive: true});
-            if (existsSync("runtimes")) {
-                copyDirectoryContents("runtimes", maafwDest);
-            }
-            if (existsSync("libs/MaaAgentBinary")) {
-                copyDirectoryContents("libs/MaaAgentBinary", join(maafwDest, "MaaAgentBinary"));
-            }
-        }
+        prepareMxuMaafwRuntime(pkgDir, runtimePlatform);
+        removeFiles(pkgDir, (name) => name.toLowerCase().endsWith(".pdb"));
     }
     ensureUnixExecutablePermissions(pkgDir, runtimePlatform);
+}
+
+function prepareMxuMaafwRuntime(pkgDir, runtimePlatform) {
+    const maafwDest = join(pkgDir, "maafw");
+    mkdirSync(maafwDest, {recursive: true});
+
+    const nativeRuntime = join("runtimes", runtimePlatform, "native");
+    if (!existsSync(nativeRuntime)) {
+        throw new Error(`release package path is missing: ${nativeRuntime}`);
+    }
+    copyDirectoryContents(nativeRuntime, maafwDest);
+
+    if (existsSync("libs/MaaAgentBinary")) {
+        copyDirectoryContents("libs/MaaAgentBinary", join(maafwDest, "MaaAgentBinary"));
+    }
 }
 
 function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
@@ -298,6 +317,23 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
     for (const path of releaseDevPaths()) {
         if (existsSync(join(root, path))) {
             throw new Error(`release package smoke failed: package includes dev file: ${path}`);
+        }
+    }
+    if (!gui.flatLayout) {
+        if (!existsSync(join(root, "maafw"))) {
+            throw new Error("release package smoke failed: MXU package is missing maafw");
+        }
+        for (const path of ["runtimes", "libs", "plugins"]) {
+            if (existsSync(join(root, path))) {
+                throw new Error(`release package smoke failed: MXU package includes top-level ${path}`);
+            }
+        }
+        const pdbFiles = [];
+        walkFiles(root, (path, name) => {
+            if (name.toLowerCase().endsWith(".pdb")) pdbFiles.push(path);
+        });
+        if (pdbFiles.length > 0) {
+            throw new Error(`release package smoke failed: MXU package includes pdb files: ${pdbFiles.join(", ")}`);
         }
     }
 
@@ -408,6 +444,12 @@ function walkFiles(root, visit) {
             visit(path, entry.name);
         }
     }
+}
+
+function removeFiles(root, shouldRemove) {
+    walkFiles(root, (path, name) => {
+        if (shouldRemove(name)) rmSync(path, {force: true});
+    });
 }
 
 function releasePackagePath(path) {

@@ -47,9 +47,7 @@ class ExampleRecognition(CustomRecognition):
 
             box_value = params.get("box")
             if box_value is not None and not (
-                isinstance(box_value, list)
-                and len(box_value) == 4
-                and all(isinstance(item, int) for item in box_value)
+                isinstance(box_value, list) and len(box_value) == 4 and all(isinstance(item, int) for item in box_value)
             ):
                 raise ValueError("box must be [x, y, w, h].")
             box = cast(RectType | None, box_value)
@@ -86,7 +84,5 @@ class ExampleRecognition(CustomRecognition):
         if box is not None:
             return CustomRecognition.AnalyzeResult(box=box, detail=detail)
 
-        logger.info(
-            "ExampleRecognition has no node or box configured; replace it with project logic."
-        )
+        logger.info("ExampleRecognition has no node or box configured; replace it with project logic.")
         return None

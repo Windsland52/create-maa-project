@@ -228,14 +228,14 @@ def _build_env() -> Env:
         version=os.getenv(ENV_VERSION, ""),
         controller_raw=controller_raw,
         resource_raw=resource_raw,
-        controller=_parse_json_env(
-            ENV_CONTROLLER, controller_raw, Controller.from_dict
-        ),
+        controller=_parse_json_env(ENV_CONTROLLER, controller_raw, Controller.from_dict),
         resource=_parse_json_env(ENV_RESOURCE, resource_raw, Resource.from_dict),
     )
 
     _module_logger.info(
-        "PI environment initialized: interface_version=%s client_name=%s client_version=%s client_language=%s client_maafw_version=%s pi_version=%s controller_ok=%s resource_ok=%s",
+        "PI environment initialized: interface_version=%s client_name=%s client_version=%s"
+        " client_language=%s client_maafw_version=%s pi_version=%s"
+        " controller_ok=%s resource_ok=%s",
         env.interface_version,
         env.client_name,
         env.client_version,

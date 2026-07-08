@@ -1934,8 +1934,6 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(report.ok).toBe(false)
     expect(output).toContain('package.json packageManager must be pnpm@11.5.1')
     expect(output).toContain('package.json engines.node must be >=24')
-    expect(output).toContain('package.json @nekosu/maa-tools must be pinned to 1.0.24')
-    expect(output).toContain('package.json devDependencies.prettier must be pinned to 3.8.4')
     expect(output).toContain('package.json scripts.format:check must be prettier --check .')
     expect(output).toContain('package.json scripts.check:maa must use local pnpm exec maa-tools check')
     expect(output).toContain('create-maa-project --update template')
@@ -2203,18 +2201,6 @@ export default defineConfig({
     await expectPackageToolingError((packageJson) => {
       packageJson.engines = { ...(packageJson.engines ?? {}), node: '>=22' }
     }, 'package.json engines.node must be >=24')
-    await expectPackageToolingError((packageJson) => {
-      packageJson.devDependencies = {
-        ...(packageJson.devDependencies ?? {}),
-        '@nekosu/maa-tools': '^0.4.0',
-      }
-    }, 'package.json @nekosu/maa-tools must be pinned to 1.0.24')
-    await expectPackageToolingError((packageJson) => {
-      packageJson.devDependencies = {
-        ...(packageJson.devDependencies ?? {}),
-        prettier: '^3.8.4',
-      }
-    }, 'package.json devDependencies.prettier must be pinned to 3.8.4')
     await expectPackageToolingError((packageJson) => {
       packageJson.scripts = {
         ...(packageJson.scripts ?? {}),

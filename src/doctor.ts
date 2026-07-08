@@ -201,17 +201,6 @@ async function checkPackageMetadata(root: string, config: MaaProjectConfig, line
   }
   for (const [
     name,
-    version,
-  ] of Object.entries(expectedDevDependencies())) {
-    if (packageJson.devDependencies?.[name] !== version) {
-      const label = name === '@nekosu/maa-tools' ? '@nekosu/maa-tools' : `devDependencies.${name}`
-      lines.push(`[ERR] package.json ${label} must be pinned to ${version}.`)
-      lines.push('      To fix: create-maa-project --update template')
-      ok = false
-    }
-  }
-  for (const [
-    name,
     command,
   ] of Object.entries(expectedPackageScripts(config))) {
     if (packageJson.scripts?.[name] !== command) {
@@ -527,18 +516,6 @@ function hasJsoncFileAssociations(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function expectedDevDependencies(): Record<string, string> {
-  return {
-    '@nekosu/maa-tools': '1.0.24',
-    '@nekosu/prettier-plugin-maafw-sort': '1.0.5',
-    ajv: '8.20.0',
-    'ajv-formats': '3.0.1',
-    'jsonc-parser': '3.3.1',
-    prettier: '3.8.4',
-    'prettier-plugin-multiline-arrays': '4.1.9',
-  }
 }
 
 function expectedPackageScripts(config: MaaProjectConfig): Record<string, string> {

@@ -377,7 +377,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
     expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
-    expect(releaseWorkflow).toContain('package_dirs=(dist/package-*)')
+    expect(releaseWorkflow).toContain('package_dirs=(dist/package-*/)')
     expect(releaseWorkflow).toContain('if (( ${#package_dirs[@]} == 0 )); then')
     expect(releaseWorkflow).toContain('for pkg_dir in "${package_dirs[@]}"; do')
     expect(releaseWorkflow).toContain('if-no-files-found: error')

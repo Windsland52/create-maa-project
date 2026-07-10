@@ -73,7 +73,7 @@ jobs:
         run: |
           mkdir -p dist
           shopt -s nullglob
-          package_dirs=(dist/package-*)
+          package_dirs=(dist/package-*/)
           if (( ${#package_dirs[@]} == 0 )); then
             echo "[ERR] no release packages were generated"
             exit 1

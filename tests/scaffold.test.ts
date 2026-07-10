@@ -2087,6 +2087,19 @@ jobs:
     await expect(runSchemaValidator(projectRoot)).rejects.toThrow('must be array')
   })
 
+  it('generated schema validation script checks nested task JSON files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-nested-task-schema-test' }))
+    const projectRoot = join(root, 'maa-nested-task-schema-test')
+    const nestedTaskPath = join(projectRoot, 'tasks', 'presets', 'invalid.json')
+
+    await mkdir(dirname(nestedTaskPath), { recursive: true })
+    await writeFile(nestedTaskPath, '[]\n', 'utf8')
+
+    await expect(runSchemaValidator(projectRoot)).rejects.toThrow('must be object')
+  })
+
   it('checks generated interface schema baseline files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

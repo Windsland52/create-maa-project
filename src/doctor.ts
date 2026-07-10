@@ -499,7 +499,13 @@ function stripDotSlash(path: string): string {
 
 function isProjectRelativePath(path: string): boolean {
   const stripped = stripDotSlash(path)
-  return !stripped.startsWith('/') && !/^[A-Za-z]:/.test(stripped) && !stripped.split('/').includes('..')
+  return (
+    stripped !== '' &&
+    stripped !== '.' &&
+    !stripped.startsWith('/') &&
+    !/^[A-Za-z]:/.test(stripped) &&
+    !stripped.split('/').includes('..')
+  )
 }
 
 function workflowPinsNode24(content: string): boolean {

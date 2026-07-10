@@ -2119,6 +2119,8 @@ export default defineConfig({
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
 
     for (const unsafePath of [
+      '',
+      '.',
       '../outside.json',
       outsidePath.split('\\').join('/'),
     ]) {

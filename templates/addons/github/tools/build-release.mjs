@@ -207,7 +207,7 @@ function interfaceResourcePaths(value) {
 
 function isProjectRelativePath(path) {
     const stripped = path.startsWith("./") ? path.slice(2) : path;
-    return !stripped.startsWith("/") && !/^[A-Za-z]:/.test(stripped) && !stripped.split("/").includes("..");
+    return stripped !== "" && stripped !== "." && !stripped.startsWith("/") && !/^[A-Za-z]:/.test(stripped) && !stripped.split("/").includes("..");
 }
 
 function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {

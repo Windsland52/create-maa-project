@@ -2721,6 +2721,9 @@ version = "0.1.0"
       version?: unknown
       agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
     }
+    await mkdir(join(projectRoot, 'agent', '__pycache__'), { recursive: true })
+    await writeFile(join(projectRoot, 'agent', '__pycache__', 'main.cpython-313.pyc'), 'cache', 'utf8')
+    await writeFile(join(projectRoot, 'agent', 'main.pyo'), 'cache', 'utf8')
 
     for (const runtimePlatform of [
       'win-x64',
@@ -2789,6 +2792,8 @@ version = "0.1.0"
       const packagedBootstrap = await readFile(join(projectRoot, 'dist/package-mfaa/agent/bootstrap.py'), 'utf8')
       expect(packagedBootstrap).toContain('Python >=3.13,<3.14 is required')
       expect(packagedBootstrap).toContain('agent-bootstrap.log')
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/__pycache__'))).toBe(false)
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/main.pyo'))).toBe(false)
       if (runtimePlatform.startsWith('linux-')) {
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa/python'))).toBe(false)
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)

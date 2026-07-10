@@ -10,7 +10,7 @@ import {
     statSync,
     writeFileSync,
 } from "node:fs";
-import {dirname, join} from "node:path";
+import {basename, dirname, join} from "node:path";
 
 const dryRun = process.argv.includes("--dry-run");
 const projectSlug = {{projectSlug}};
@@ -260,7 +260,8 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
         copyPath("logo.ico", join(pkgDir, "logo.ico"));
     }
     for (const path of packagePaths) {
-        copyPath(path, join(pkgDir, releasePackagePath(path)));
+        const options = path === "agent" ? {filter: shouldCopyAgentPath} : {};
+        copyPath(path, join(pkgDir, releasePackagePath(path)), options);
     }
     for (const path of optionalPackagePaths()) {
         if (existsSync(path)) {
@@ -388,9 +389,9 @@ function releaseDevPaths() {
     ];
 }
 
-function copyPath(source, target) {
+function copyPath(source, target, options = {}) {
     mkdirSync(dirname(target), {recursive: true});
-    cpSync(source, target, {recursive: true, force: true});
+    cpSync(source, target, {recursive: true, force: true, filter: options.filter});
 }
 
 function copyDirectoryContents(source, target) {
@@ -398,6 +399,11 @@ function copyDirectoryContents(source, target) {
     for (const entry of readdirSync(source)) {
         copyPath(join(source, entry), join(target, entry));
     }
+}
+
+function shouldCopyAgentPath(source) {
+    const name = basename(source).toLowerCase();
+    return name !== "__pycache__" && !name.endsWith(".pyc") && !name.endsWith(".pyo");
 }
 
 function ensureUnixExecutablePermissions(root, runtimePlatform) {

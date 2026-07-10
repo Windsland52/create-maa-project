@@ -199,20 +199,6 @@ async function checkPackageMetadata(root: string, config: MaaProjectConfig, line
     lines.push('      To fix: create-maa-project --update template')
     ok = false
   }
-  for (const [
-    name,
-    command,
-  ] of Object.entries(expectedPackageScripts(config))) {
-    if (packageJson.scripts?.[name] !== command) {
-      const message =
-        name === 'check:maa'
-          ? 'package.json scripts.check:maa must use local pnpm exec maa-tools check.'
-          : `package.json scripts.${name} must be ${command}.`
-      lines.push(`[ERR] ${message}`)
-      lines.push('      To fix: create-maa-project --update template')
-      ok = false
-    }
-  }
   if (ok) lines.push('[OK] Package metadata matches project config.')
   return ok
 }
@@ -516,34 +502,6 @@ function hasJsoncFileAssociations(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function expectedPackageScripts(config: MaaProjectConfig): Record<string, string> {
-  const scripts: Record<string, string> = {
-    format: 'prettier --write .',
-    'format:check': 'prettier --check .',
-    lint: 'node tools/check-project.mjs',
-    'check:schema': 'node tools/validate-schema.mjs',
-    'check:maa': 'pnpm exec maa-tools check',
-    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
-  }
-  if (hasGithubAutomation(config)) {
-    scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
-    scripts['sync:runtime'] = 'node tools/sync-runtime.mjs'
-  }
-  if (config.addons.schemaSync) {
-    scripts['sync:schema'] = 'node tools/sync-schema.mjs'
-  }
-  if (config.addons.optimizeImages) {
-    scripts['optimize:images'] = 'node tools/optimize-images.mjs'
-  }
-  if (config.python) {
-    scripts['format:py'] = 'uv run --frozen ruff format .'
-    scripts['lint:py'] = 'uv run --frozen ruff check .'
-    scripts['typecheck:py'] = 'uv run --frozen pyright'
-    scripts['check:py'] = 'pnpm lint:py && pnpm typecheck:py'
-  }
-  return scripts
 }
 
 function parseTomlProjectMetadata(content: string): {

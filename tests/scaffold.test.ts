@@ -1934,36 +1934,6 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(report.ok).toBe(false)
     expect(output).toContain('package.json packageManager must be pnpm@11.5.1')
     expect(output).toContain('package.json engines.node must be >=24')
-    expect(output).toContain('package.json scripts.format:check must be prettier --check .')
-    expect(output).toContain('package.json scripts.check:maa must use local pnpm exec maa-tools check')
-    expect(output).toContain('create-maa-project --update template')
-  })
-
-  it('doctor reports agent package tooling drift with a repair command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-agent-package-tooling-test' }))
-    const projectRoot = join(root, 'maa-agent-package-tooling-test')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    const packagePath = join(projectRoot, 'package.json')
-    const packageJson = (await readJson(packagePath)) as {
-      scripts?: Record<string, unknown>
-    }
-    packageJson.scripts = { ...(packageJson.scripts ?? {}), 'check:py': 'uv run pyright' }
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-
-    const report = await runDoctor(projectRoot)
-    const output = report.lines.join('\n')
-
-    expect(report.ok).toBe(false)
-    expect(output).toContain('package.json scripts.check:py must be pnpm lint:py && pnpm typecheck:py')
     expect(output).toContain('create-maa-project --update template')
   })
 
@@ -2201,47 +2171,6 @@ export default defineConfig({
     await expectPackageToolingError((packageJson) => {
       packageJson.engines = { ...(packageJson.engines ?? {}), node: '>=22' }
     }, 'package.json engines.node must be >=24')
-    await expectPackageToolingError((packageJson) => {
-      packageJson.scripts = {
-        ...(packageJson.scripts ?? {}),
-        'format:check': 'prettier . --check',
-      }
-    }, 'package.json scripts.format:check must be prettier --check .')
-    await expectPackageToolingError((packageJson) => {
-      packageJson.scripts = { ...(packageJson.scripts ?? {}), 'check:maa': 'maa-tools check' }
-    }, 'package.json scripts.check:maa must use local pnpm exec maa-tools check')
-  })
-
-  it('generated project lint script checks agent package tooling metadata', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-agent-package-tooling-lint' }))
-    const projectRoot = join(root, 'maa-agent-package-tooling-lint')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    await clearPending(projectRoot)
-    const packagePath = join(projectRoot, 'package.json')
-    const packageJson = (await readJson(packagePath)) as {
-      scripts?: Record<string, unknown>
-    }
-    packageJson.scripts = { ...(packageJson.scripts ?? {}), 'check:py': 'uv run pyright' }
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('package.json scripts.check:py must be pnpm lint:py && pnpm typecheck:py')
   })
 
   it('generated project lint script checks Node tooling files', async () => {

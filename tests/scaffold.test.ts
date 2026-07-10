@@ -2107,6 +2107,41 @@ export default defineConfig({
     expect(defineConfigReport.lines.join('\n')).toContain('create-maa-project --sync metadata')
   })
 
+  it('rejects interface paths outside the project root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-path-boundary-test' }))
+    const projectRoot = join(root, 'maa-path-boundary-test')
+    await clearPending(projectRoot)
+    const outsidePath = join(root, 'outside.json')
+    await writeFile(outsidePath, '{}\n', 'utf8')
+    const interfacePath = join(projectRoot, 'interface.json')
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
+
+    for (const unsafePath of [
+      '../outside.json',
+      outsidePath.split('\\').join('/'),
+    ]) {
+      interfaceJson.import = [
+        unsafePath,
+      ]
+      await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+      const report = await runDoctor(projectRoot)
+      expect(report.ok).toBe(false)
+      expect(report.lines.join('\n')).toContain(
+        `interface.json import path must stay within project root: ${unsafePath}`,
+      )
+
+      await expect(execFileAsync(process.execPath, ['tools/check-project.mjs'], { cwd: projectRoot })).rejects.toThrow(
+        'interface/import paths must stay within the project root',
+      )
+      await expect(
+        execFileAsync(process.execPath, ['tools/build-release.mjs', '--dry-run'], { cwd: projectRoot }),
+      ).rejects.toThrow('release paths must stay within the project root')
+    }
+  })
+
   it('generated project lint script checks project state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

@@ -402,6 +402,12 @@ async function checkReferencedPaths(root: string, lines: string[]): Promise<bool
       ok = false
       continue
     }
+    if (!isProjectRelativePath(reference.path)) {
+      lines.push(`[ERR] interface.json ${reference.kind} path must stay within project root: ${reference.path}`)
+      lines.push('      To fix: use a project-relative path without .. segments')
+      ok = false
+      continue
+    }
     if (!(await exists(join(root, stripDotSlash(reference.path))))) {
       lines.push(`[ERR] interface.json ${reference.kind} path is missing: ${reference.path}`)
       lines.push('      To fix: restore the path or run create-maa-project --sync metadata')
@@ -489,6 +495,11 @@ function interfaceResourcePaths(value: unknown): string[] {
 
 function stripDotSlash(path: string): string {
   return path.startsWith('./') ? path.slice(2) : path
+}
+
+function isProjectRelativePath(path: string): boolean {
+  const stripped = stripDotSlash(path)
+  return !stripped.startsWith('/') && !/^[A-Za-z]:/.test(stripped) && !stripped.split('/').includes('..')
 }
 
 function workflowPinsNode24(content: string): boolean {

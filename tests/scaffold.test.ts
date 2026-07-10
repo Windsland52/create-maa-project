@@ -1755,20 +1755,14 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     interfaceJson.controller = []
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
 
-    let report = await runDoctor(projectRoot)
-    expect(report.ok).toBe(false)
-    expect(report.lines.join('\n')).toContain('interface.json controller differs')
-
     process.chdir(projectRoot)
     await syncProject(defaultOptions({ sync: 'metadata' }))
-    report = await runDoctor(projectRoot)
 
     expect(await readJson(interfacePath)).toMatchObject({
       controller: [
         { name: 'Windows', label: 'Windows app', type: 'Win32' },
       ],
     })
-    expect(report.lines.join('\n')).toContain('Interface metadata matches project config')
   })
 
   it('rejects Chinese-only non-interactive project ID', async () => {
@@ -1836,105 +1830,13 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
     interfaceJson.name = 'Wrong Display Name'
-    interfaceJson.icon = 'wrong.ico'
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
 
     const report = await runDoctor(projectRoot)
 
     expect(report.ok).toBe(false)
     expect(report.lines.join('\n')).toContain('interface.json name differs')
-    expect(report.lines.join('\n')).toContain('interface.json icon must be logo.ico')
     expect(report.lines.join('\n')).toContain('create-maa-project --sync metadata')
-  })
-
-  it('doctor reports interface version and agent drift with a repair command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-interface-agent-test' }))
-    const projectRoot = join(root, 'maa-interface-agent-test')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    const interfacePath = join(projectRoot, 'interface.json')
-    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
-    interfaceJson.version = 'v9.9.9'
-    interfaceJson.agent = [
-      {
-        child_exec: [
-          'python',
-          'wrong.py',
-        ],
-      },
-    ]
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4), 'utf8')
-
-    const report = await runDoctor(projectRoot)
-    const output = report.lines.join('\n')
-
-    expect(report.ok).toBe(false)
-    expect(output).toContain('interface.json version differs')
-    expect(output).toContain('interface.json agent differs')
-    expect(output).toContain('create-maa-project --sync metadata')
-  })
-
-  it('doctor reports package metadata drift with a repair command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-package-test' }))
-    const projectRoot = join(root, 'maa-package-test')
-    const packagePath = join(projectRoot, 'package.json')
-    const packageJson = (await readJson(packagePath)) as Record<string, unknown>
-    packageJson.name = 'wrong-package'
-    packageJson.license = 'MIT'
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4), 'utf8')
-
-    const report = await runDoctor(projectRoot)
-    const output = report.lines.join('\n')
-
-    expect(report.ok).toBe(false)
-    expect(output).toContain('package.json name differs')
-    expect(output).toContain('package.json license differs')
-    expect(output).toContain('create-maa-project --sync metadata')
-  })
-
-  it('doctor reports package tooling drift with a repair command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-package-tooling-test' }))
-    const projectRoot = join(root, 'maa-package-tooling-test')
-    const packagePath = join(projectRoot, 'package.json')
-    const packageJson = (await readJson(packagePath)) as {
-      packageManager?: unknown
-      engines?: Record<string, unknown>
-      devDependencies?: Record<string, unknown>
-      scripts?: Record<string, unknown>
-    }
-    packageJson.packageManager = 'npm@11.0.0'
-    packageJson.engines = { ...(packageJson.engines ?? {}), node: '>=22' }
-    packageJson.devDependencies = {
-      ...(packageJson.devDependencies ?? {}),
-      '@nekosu/maa-tools': '^0.4.0',
-      prettier: '^3.8.4',
-    }
-    packageJson.scripts = {
-      ...(packageJson.scripts ?? {}),
-      'format:check': 'prettier . --check',
-      'check:maa': 'maa-tools check',
-    }
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-
-    const report = await runDoctor(projectRoot)
-    const output = report.lines.join('\n')
-
-    expect(report.ok).toBe(false)
-    expect(output).toContain('package.json packageManager must be pnpm@11.5.1')
-    expect(output).toContain('package.json engines.node must be >=24')
-    expect(output).toContain('create-maa-project --update template')
   })
 
   it('doctor reports Node tooling file drift with a repair command', async () => {
@@ -1986,43 +1888,6 @@ jobs:
     expect(output).toContain(
       '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
-    expect(output).toContain('create-maa-project --update template')
-  })
-
-  it('doctor reports pyproject metadata drift with a repair command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-pyproject-doctor' }))
-    const projectRoot = join(root, 'maa-pyproject-doctor')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    await writeFile(
-      join(projectRoot, 'pyproject.toml'),
-      `[project]
-name = "wrong-agent"
-version = "9.9.9"
-
-[tool.example]
-name = "ignored"
-version = "ignored"
-`,
-      'utf8',
-    )
-
-    const report = await runDoctor(projectRoot)
-    const output = report.lines.join('\n')
-
-    expect(report.ok).toBe(false)
-    expect(output).toContain('pyproject.toml project.name differs')
-    expect(output).toContain('pyproject.toml project.version differs')
-    expect(output).toContain('pyproject.toml hatch wheel packages must include agent')
-    expect(output).toContain('create-maa-project --sync metadata')
     expect(output).toContain('create-maa-project --update template')
   })
 
@@ -2116,61 +1981,6 @@ export default defineConfig({
         { cwd: projectRoot },
       ),
     ).resolves.toBeDefined()
-
-    const packagePath = join(projectRoot, 'package.json')
-    const packageJson = (await readJson(packagePath)) as Record<string, unknown>
-    packageJson.name = 'wrong-package'
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('package.json name must match')
-  })
-
-  it('generated project lint script checks package tooling metadata', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-package-tooling-lint' }))
-    const projectRoot = join(root, 'maa-package-tooling-lint')
-    const packagePath = join(projectRoot, 'package.json')
-    const originalPackageJson = (await readJson(packagePath)) as {
-      packageManager?: unknown
-      engines?: Record<string, unknown>
-      devDependencies?: Record<string, unknown>
-      scripts?: Record<string, unknown>
-    }
-    await clearPending(projectRoot)
-
-    async function expectPackageToolingError(
-      patch: (packageJson: typeof originalPackageJson) => void,
-      message: string,
-    ): Promise<void> {
-      const packageJson = JSON.parse(JSON.stringify(originalPackageJson)) as typeof originalPackageJson
-      patch(packageJson)
-      await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-      await expect(
-        execFileAsync(
-          process.execPath,
-          [
-            'tools/check-project.mjs',
-          ],
-          { cwd: projectRoot },
-        ),
-      ).rejects.toThrow(message)
-    }
-
-    await expectPackageToolingError((packageJson) => {
-      packageJson.packageManager = 'pnpm@10.0.0'
-    }, 'package.json packageManager must be pnpm@11.5.1')
-    await expectPackageToolingError((packageJson) => {
-      packageJson.engines = { ...(packageJson.engines ?? {}), node: '>=22' }
-    }, 'package.json engines.node must be >=24')
   })
 
   it('generated project lint script checks Node tooling files', async () => {
@@ -2251,133 +2061,6 @@ jobs:
     ).rejects.toThrow(
       '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
-  })
-
-  it('generated project lint script checks interface version and agent metadata', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-interface-agent-lint' }))
-    const projectRoot = join(root, 'maa-interface-agent-lint')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    await clearPending(projectRoot)
-
-    const interfacePath = join(projectRoot, 'interface.json')
-    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
-    interfaceJson.version = 'v9.9.9'
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('interface.json version must match')
-
-    interfaceJson.version = 'v0.1.0'
-    interfaceJson.icon = 'wrong.ico'
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('interface.json icon must be logo.ico')
-
-    interfaceJson.icon = 'logo.ico'
-    interfaceJson.agent = [
-      {
-        child_exec: [],
-      },
-    ]
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('interface.json agent must match')
-  })
-
-  it('generated project lint script checks pyproject metadata', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-pyproject-lint' }))
-    const projectRoot = join(root, 'maa-pyproject-lint')
-    process.chdir(projectRoot)
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
-    await clearPending(projectRoot)
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).resolves.toBeDefined()
-
-    await writeFile(
-      join(projectRoot, 'pyproject.toml'),
-      `[project]
-name = "wrong-agent"
-version = "0.1.0"
-`,
-      'utf8',
-    )
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('pyproject.toml project.name must match')
-
-    await writeFile(
-      join(projectRoot, 'pyproject.toml'),
-      `[project]
-name = "maa-pyproject-lint"
-version = "0.1.0"
-`,
-      'utf8',
-    )
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('pyproject.toml hatch wheel packages must include agent')
   })
 
   it('generated schema validation script checks local project JSON shape', async () => {

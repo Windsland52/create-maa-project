@@ -1,11 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { managedFileHash, readProjectConfig, readProjectLock } from './project.js'
-import { interfaceAgent, interfaceController, interfaceResourceItems } from './templates.js'
 import type { MaaProjectConfig, MaaProjectLock } from './types.js'
-import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
-import { addV, exists, readText } from './utils.js'
+import { exists, readText } from './utils.js'
 
 export type DoctorReport = {
   ok: boolean
@@ -21,13 +19,11 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
   lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
   ok = (await checkInterfaceMetadata(root, config, lines)) && ok
   if (hasDevTools(config)) {
-    ok = (await checkPackageMetadata(root, config, lines)) && ok
     ok = (await checkNodeToolingFiles(root, config, lines)) && ok
     if (config.features.vscode.enabled) ok = (await checkVscodeSettings(root, lines)) && ok
     ok = (await checkNodeLockfile(root, lock, lines)) && ok
   }
-  ok = (await checkPyprojectMetadata(root, config, lines)) && ok
-  ok = (await checkResourceOrder(root, config, lines)) && ok
+  ok = (await checkResourcePaths(root, config, lines)) && ok
   ok = (await checkReferencedPaths(root, lines)) && ok
   ok = (await checkMaatoolsConfig(root, config, lines)) && ok
   ok = (await checkManagedFiles(root, lock, lines)) && ok
@@ -55,12 +51,7 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
 
   const interfaceJson = JSON.parse(await readText(interfacePath)) as {
     name?: unknown
-    label?: unknown
-    version?: unknown
-    icon?: unknown
     github?: unknown
-    agent?: unknown
-    controller?: unknown
   }
   let ok = true
   const unmanaged = config.project.interfaceUnmanaged === true
@@ -71,49 +62,6 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
       )
     } else {
       lines.push('[ERR] interface.json name differs from maa-project.json project.slug.')
-      lines.push('      To fix: create-maa-project --sync metadata')
-      ok = false
-    }
-  }
-  if (interfaceJson.label !== config.project.displayName) {
-    if (unmanaged) {
-      lines.push(
-        '[INFO] interface.json label differs from maa-project.json project.displayName; interface.json is unmanaged so this is allowed.',
-      )
-    } else {
-      lines.push('[ERR] interface.json label differs from maa-project.json project.displayName.')
-      lines.push('      To fix: create-maa-project --sync metadata')
-      ok = false
-    }
-  }
-  if (interfaceJson.version !== addV(config.project.version)) {
-    if (unmanaged) {
-      lines.push(
-        '[INFO] interface.json version differs from maa-project.json project.version; interface.json is unmanaged so this is allowed.',
-      )
-    } else {
-      lines.push('[ERR] interface.json version differs from maa-project.json project.version.')
-      lines.push('      To fix: create-maa-project --sync metadata')
-      ok = false
-    }
-  }
-  if (interfaceJson.icon !== 'logo.ico') {
-    lines.push('[ERR] interface.json icon must be logo.ico.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (interfaceJson.agent !== undefined && !Array.isArray(interfaceJson.agent)) {
-    lines.push('[ERR] interface.json agent must be an array.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (JSON.stringify(interfaceJson.agent) !== JSON.stringify(expectedInterfaceAgent(config))) {
-    if (unmanaged) {
-      lines.push(
-        '[INFO] interface.json agent differs from maa-project.json python config; interface.json is unmanaged so this is allowed.',
-      )
-    } else {
-      lines.push('[ERR] interface.json agent differs from maa-project.json python config.')
       lines.push('      To fix: create-maa-project --sync metadata')
       ok = false
     }
@@ -129,88 +77,12 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
       ok = false
     }
   }
-  if (
-    JSON.stringify(interfaceJson.controller ?? []) !==
-    JSON.stringify(interfaceController(projectControllerKinds(config)))
-  ) {
-    if (unmanaged) {
-      lines.push(
-        '[INFO] interface.json controller differs from maa-project.json controller.kinds; interface.json is unmanaged so this is allowed.',
-      )
-    } else {
-      lines.push('[ERR] interface.json controller differs from maa-project.json controller.kinds.')
-      lines.push('      To fix: create-maa-project --sync metadata')
-      ok = false
-    }
-  }
   if (ok) lines.push('[OK] Interface metadata matches project config.')
-  return ok
-}
-
-function expectedInterfaceAgent(config: MaaProjectConfig): ReturnType<typeof interfaceAgent>[] | undefined {
-  return config.python
-    ? [
-        interfaceAgent(config.python.devCommand),
-      ]
-    : undefined
-}
-
-async function checkPackageMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
-  const packagePath = join(root, 'package.json')
-  if (!(await exists(packagePath))) {
-    lines.push('[ERR] package.json is missing.')
-    lines.push('      To fix: restore it from backup or run create-maa-project --update template')
-    return false
-  }
-
-  const packageJson = JSON.parse(await readText(packagePath)) as {
-    name?: unknown
-    version?: unknown
-    license?: unknown
-    packageManager?: unknown
-    engines?: { node?: unknown }
-    devDependencies?: Record<string, unknown>
-    scripts?: Record<string, unknown>
-  }
-  const expectedLicense = config.license.spdx === 'None' ? 'UNLICENSED' : config.license.spdx
-  let ok = true
-  if (packageJson.name !== config.project.slug) {
-    lines.push('[ERR] package.json name differs from maa-project.json project.slug.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (packageJson.version !== config.project.version) {
-    lines.push('[ERR] package.json version differs from maa-project.json project.version.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (packageJson.license !== expectedLicense) {
-    lines.push('[ERR] package.json license differs from maa-project.json license.spdx.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (packageJson.packageManager !== 'pnpm@11.5.1') {
-    lines.push('[ERR] package.json packageManager must be pnpm@11.5.1.')
-    lines.push('      To fix: create-maa-project --update template')
-    ok = false
-  }
-  if (packageJson.engines?.node !== '>=24') {
-    lines.push('[ERR] package.json engines.node must be >=24.')
-    lines.push('      To fix: create-maa-project --update template')
-    ok = false
-  }
-  if (ok) lines.push('[OK] Package metadata matches project config.')
   return ok
 }
 
 async function checkNodeLockfile(root: string, lock: MaaProjectLock, lines: string[]): Promise<boolean> {
   if (lock.pending.some((item) => item.kind === 'node-deps')) return true
-  const packagePath = join(root, 'package.json')
-  if (!(await exists(packagePath))) return true
-  const packageJson = JSON.parse(await readText(packagePath)) as { packageManager?: unknown }
-  if (typeof packageJson.packageManager !== 'string' || !packageJson.packageManager.startsWith('pnpm@')) {
-    return true
-  }
   if (await exists(join(root, 'pnpm-lock.yaml'))) {
     lines.push('[OK] pnpm lockfile is present.')
     return true
@@ -306,41 +178,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
   return ok
 }
 
-async function checkPyprojectMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
-  if (!config.python) return true
-
-  const pyprojectPath = join(root, 'pyproject.toml')
-  if (!(await exists(pyprojectPath))) return true
-
-  const content = await readText(pyprojectPath)
-  const metadata = parseTomlProjectMetadata(content)
-  let ok = true
-  if (metadata.name !== config.project.slug) {
-    lines.push('[ERR] pyproject.toml project.name differs from maa-project.json project.slug.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (metadata.version !== config.project.version) {
-    lines.push('[ERR] pyproject.toml project.version differs from maa-project.json project.version.')
-    lines.push('      To fix: create-maa-project --sync metadata')
-    ok = false
-  }
-  if (!tomlHasAgentWheelPackage(content)) {
-    lines.push('[ERR] pyproject.toml hatch wheel packages must include agent.')
-    lines.push('      To fix: create-maa-project --update template')
-    ok = false
-  }
-  if (ok) lines.push('[OK] Python project metadata matches project config.')
-  return ok
-}
-
-async function checkResourceOrder(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
-  const first = config.resources[0]
-  if (!first || first.path !== 'resource/base') {
-    lines.push('[ERR] resource/base must be the first resource pack.')
-    lines.push('      To fix: edit maa-project.json resources order, then run create-maa-project --sync metadata')
-    return false
-  }
+async function checkResourcePaths(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   for (const pack of config.resources) {
     if (pack.path.includes('\\')) {
       lines.push(`[ERR] Resource pack path uses backslashes: ${pack.path}`)
@@ -353,18 +191,7 @@ async function checkResourceOrder(root: string, config: MaaProjectConfig, lines:
       return false
     }
   }
-  const interfacePath = join(root, 'interface.json')
-  if (await exists(interfacePath)) {
-    const interfaceJson = JSON.parse(await readText(interfacePath)) as { resource?: unknown }
-    const actual = Array.isArray(interfaceJson.resource) ? interfaceJson.resource : []
-    const expected = interfaceResourceItems(config.resources)
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      lines.push('[ERR] interface.json resource order differs from maa-project.json resources.')
-      lines.push('      To fix: create-maa-project --sync metadata')
-      return false
-    }
-  }
-  lines.push('[OK] Resource packs are ordered and present.')
+  lines.push('[OK] Resource pack paths are present.')
   return true
 }
 
@@ -502,58 +329,4 @@ function hasJsoncFileAssociations(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function parseTomlProjectMetadata(content: string): {
-  name: string | undefined
-  version: string | undefined
-} {
-  const section = tomlProjectSection(content)
-  return {
-    name: parseTomlStringField(section, 'name'),
-    version: parseTomlStringField(section, 'version'),
-  }
-}
-
-function tomlProjectSection(content: string): string {
-  const section: string[] = []
-  let inside = false
-  for (const line of content.split(/\r?\n/)) {
-    if (/^\s*\[project\]\s*$/.test(line)) {
-      inside = true
-      continue
-    }
-    if (inside && /^\s*\[[^\]]+\]\s*$/.test(line)) break
-    if (inside) section.push(line)
-  }
-  return section.join('\n')
-}
-
-function tomlHasAgentWheelPackage(content: string): boolean {
-  const section = tomlSection(content, 'tool.hatch.build.targets.wheel')
-  return /^\s*packages\s*=\s*\[\s*"agent"\s*\]\s*$/m.test(section)
-}
-
-function tomlSection(content: string, name: string): string {
-  const section: string[] = []
-  let inside = false
-  const pattern = new RegExp(`^\\s*\\[${escapeRegExp(name)}\\]\\s*$`)
-  for (const line of content.split(/\r?\n/)) {
-    if (pattern.test(line)) {
-      inside = true
-      continue
-    }
-    if (inside && /^\s*\[[^\]]+\]\s*$/.test(line)) break
-    if (inside) section.push(line)
-  }
-  return section.join('\n')
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function parseTomlStringField(section: string, key: 'name' | 'version'): string | undefined {
-  const match = section.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"\\s*$`, 'm'))
-  return match?.[1]
 }

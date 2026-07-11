@@ -115,6 +115,9 @@ for (const path of [
     if (path.includes("\\")) {
         throw new Error(`release paths must use forward slashes: ${path}`);
     }
+    if (!isProjectRelativePath(path)) {
+        throw new Error(`release paths must stay within the project root: ${path}`);
+    }
     const relativePath = path.startsWith("./") ? path.slice(2) : path;
     if (!existsSync(relativePath)) {
         throw new Error(`release referenced path does not exist: ${path}`);
@@ -200,6 +203,11 @@ function strings(value) {
 
 function interfaceResourcePaths(value) {
     return Array.isArray(value) ? value.flatMap((item) => (isRecord(item) ? strings(item.path) : [])) : [];
+}
+
+function isProjectRelativePath(path) {
+    const stripped = path.startsWith("./") ? path.slice(2) : path;
+    return stripped !== "" && stripped !== "." && !stripped.startsWith("/") && !/^[A-Za-z]:/.test(stripped) && !stripped.split("/").includes("..");
 }
 
 function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {

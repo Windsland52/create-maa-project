@@ -95,6 +95,9 @@ for (const path of [
     if (typeof path !== "string" || path.includes("\\")) {
         throw new Error("interface/import paths must be strings with forward slashes");
     }
+    if (!isProjectRelativePath(path)) {
+        throw new Error(`interface/import paths must stay within the project root: ${path}`);
+    }
     if (!existsSync(path)) {
         throw new Error(`referenced path does not exist: ${path}`);
     }
@@ -180,6 +183,16 @@ function stripDotSlash(path) {
     return path.startsWith("./") ? path.slice(2) : path;
 }
 
+function isProjectRelativePath(path) {
+    const stripped = stripDotSlash(path);
+    return (
+        stripped !== "" &&
+        stripped !== "." &&
+        !stripped.startsWith("/") &&
+        !/^[A-Za-z]:/.test(stripped) &&
+        !stripped.split("/").includes("..")
+    );
+}
 function managedFileHash(path, content) {
     if (isBinaryManagedPath(path)) {
         return sha256(content);

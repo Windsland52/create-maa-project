@@ -7,6 +7,7 @@ import type {
   ManagedFileInput,
   ManagedFileState,
   PendingItem,
+  ReleaseChannel,
 } from './types.js'
 import { exists, nowIso, readText, sha256, stableJson, writeText } from './utils.js'
 
@@ -19,7 +20,60 @@ export async function readProjectConfig(root: string): Promise<MaaProjectConfig>
   if (!(await exists(configPath))) {
     throw new Error(`No ${CONFIG_FILE} found. Run this command in a MaaFW project root.`)
   }
-  return JSON.parse(await readText(configPath)) as MaaProjectConfig
+  const config = JSON.parse(await readText(configPath)) as MaaProjectConfig
+  return migrateProjectConfig(config)
+}
+
+function migrateProjectConfig(config: MaaProjectConfig): MaaProjectConfig {
+  if (config.schemaVersion !== 1 && config.schemaVersion !== 2) {
+    throw new Error(`Unsupported maa-project.json schemaVersion: ${String(config.schemaVersion)}`)
+  }
+  if (config.schemaVersion === 1) {
+    migrateReleaseSelector(config.maafw)
+    migrateReleaseSelector(config.runtime.mfa)
+    if (config.runtime.mxu) migrateReleaseSelector(config.runtime.mxu)
+    config.schemaVersion = 2
+  }
+  normalizeReleaseSelector(config.maafw, 'maafw')
+  normalizeReleaseSelector(config.runtime.mfa, 'runtime.mfa')
+  if (config.runtime.mxu) normalizeReleaseSelector(config.runtime.mxu, 'runtime.mxu')
+  return config
+}
+
+function normalizeReleaseSelector(selector: { channel: string; version?: string }, path: string): void {
+  selector.channel = selector.channel.trim()
+  selector.version = selector.version?.trim() ?? ''
+  if (!isReleaseChannel(selector.channel)) {
+    throw new Error(`${path}.channel must be one of: stable, beta, alpha`)
+  }
+}
+
+function migrateReleaseSelector(selector: { channel: string; version?: string }): void {
+  const legacy = selector.channel.trim()
+  if (legacy === 'latest') {
+    selector.channel = 'stable'
+    selector.version = ''
+    return
+  }
+  if (isReleaseChannel(legacy)) {
+    selector.channel = legacy
+    selector.version = ''
+    return
+  }
+  selector.channel = inferReleaseChannel(legacy)
+  selector.version = legacy
+}
+
+function isReleaseChannel(value: string): value is ReleaseChannel {
+  return value === 'stable' || value === 'beta' || value === 'alpha'
+}
+
+function inferReleaseChannel(version: string): ReleaseChannel {
+  const lower = version.toLowerCase()
+  if (/(?:^|[.-])alpha(?:[.-]|$)/.test(lower)) return 'alpha'
+  if (/(?:^|[.-])beta(?:[.-]|$)/.test(lower)) return 'beta'
+  if (/(?:^|[.-])rc(?:[.-]|$)/.test(lower)) return 'beta'
+  return 'stable'
 }
 
 export async function readProjectLock(root: string): Promise<MaaProjectLock> {
@@ -27,12 +81,17 @@ export async function readProjectLock(root: string): Promise<MaaProjectLock> {
   if (!(await exists(lockPath))) {
     return emptyLock('unknown')
   }
-  return JSON.parse(await readText(lockPath)) as MaaProjectLock
+  const lock = JSON.parse(await readText(lockPath)) as MaaProjectLock
+  if (lock.schemaVersion !== 1 && lock.schemaVersion !== 2) {
+    throw new Error(`Unsupported maa-project.lock.json schemaVersion: ${String(lock.schemaVersion)}`)
+  }
+  if (lock.schemaVersion === 1) lock.schemaVersion = 2
+  return lock
 }
 
 export function emptyLock(version: string): MaaProjectLock {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     template: {
       createdBy: 'create-maa-project',
       lastUpdatedBy: 'create-maa-project',
@@ -45,6 +104,9 @@ export function emptyLock(version: string): MaaProjectLock {
 }
 
 export async function writeProjectState(root: string, config: MaaProjectConfig, lock: MaaProjectLock): Promise<void> {
+  if (config.schemaVersion !== lock.schemaVersion) {
+    throw new Error('maa-project.json and maa-project.lock.json schemaVersion must match')
+  }
   const configContent = stableJson(config)
   delete lock.managedFiles[CONFIG_FILE]
   delete lock.managedFiles[LOCK_FILE]

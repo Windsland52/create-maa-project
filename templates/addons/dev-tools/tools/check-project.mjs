@@ -6,6 +6,10 @@ const project = JSON.parse(readFileSync("maa-project.json", "utf8"));
 const lock = JSON.parse(readFileSync("maa-project.lock.json", "utf8"));
 const imports = interfaceJson.import ?? [];
 
+if (project.schemaVersion !== lock.schemaVersion) {
+    throw new Error("maa-project.json and maa-project.lock.json schemaVersion must match");
+}
+
 if (interfaceJson.name !== project.project?.slug) {
     console.warn("[INFO] interface.json name differs from maa-project.json project.slug; this is allowed.");
 }

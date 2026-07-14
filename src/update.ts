@@ -198,6 +198,7 @@ export async function recordUpdateRequests(
               {
                 product: 'MaaFramework',
                 channel: config.maafw.channel,
+                version: config.maafw.version ?? '',
               },
               environment,
             ),
@@ -219,6 +220,7 @@ export async function recordUpdateRequests(
               {
                 product: 'MFAAvalonia',
                 channel: config.runtime.mfa.channel,
+                version: config.runtime.mfa.version ?? '',
               },
               environment,
             ),
@@ -244,6 +246,7 @@ export async function recordUpdateRequests(
               {
                 product: 'MXU',
                 channel: config.runtime.mxu.channel,
+                version: config.runtime.mxu.version ?? '',
               },
               environment,
             ),

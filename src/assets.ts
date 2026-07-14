@@ -28,6 +28,7 @@ export type ProductAssetManifest = Omit<AssetManifest, 'assets'> & {
 export type ProductAssetManifestRequest = {
   product: string
   channel?: string
+  version?: string
   platform?: string
 }
 
@@ -167,8 +168,12 @@ export async function resolveProductAssetManifestFromGithubRelease(
   const requestedPlatform = resolveRequestedRuntimePlatform(request.platform)
   if (!requestedPlatform) return undefined
   const selectedPlatform = requestedPlatform === 'all' ? undefined : requestedPlatform
-  const release = await fetchGithubRelease(config, request.channel ?? 'latest', options.fetchJson)
-  return parseGithubReleaseManifest(config, release, request.channel ?? 'latest', selectedPlatform)
+  const channel = normalizeReleaseChannel(request.channel)
+  const version = request.version?.trim()
+  const release = version
+    ? await fetchGithubReleaseByTag(config, version, options.fetchJson)
+    : await fetchGithubReleaseByChannel(config, channel, options.fetchJson)
+  return parseGithubReleaseManifest(config, release, channel, selectedPlatform)
 }
 
 export async function downloadManifestAssets(
@@ -567,15 +572,60 @@ function isIgnoredArchiveEntry(path: string): boolean {
   return lower === '.ds_store' || lower.endsWith('/.ds_store') || lower.startsWith('__macosx/')
 }
 
-async function fetchGithubRelease(
+async function fetchGithubReleaseByTag(
+  config: ProductReleaseConfig,
+  tag: string,
+  fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
+): Promise<unknown> {
+  return fetchJson(
+    `https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tag)}`,
+    {
+      headers: githubRequestHeaders(),
+    },
+  )
+}
+
+async function fetchGithubReleaseByChannel(
   config: ProductReleaseConfig,
   channel: string,
   fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
 ): Promise<unknown> {
-  const releasePath = channel === 'latest' ? 'latest' : `tags/${encodeURIComponent(channel)}`
-  return fetchJson(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/${releasePath}`, {
-    headers: githubRequestHeaders(),
-  })
+  if (channel === 'stable') {
+    return fetchJson(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
+      headers: githubRequestHeaders(),
+    })
+  }
+  if (channel !== 'beta' && channel !== 'alpha') {
+    return fetchGithubReleaseByTag(config, channel, fetchJson)
+  }
+  const releases = await fetchJson(
+    `https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=100`,
+    { headers: githubRequestHeaders() },
+  )
+  if (!Array.isArray(releases)) throw new Error(`Invalid GitHub releases payload for ${config.product}.`)
+  const release = releases.find((value) => isReleaseAllowedForChannel(value, channel))
+  if (!release) throw new Error(`No ${config.product} release found for channel ${channel}.`)
+  return release
+}
+
+function normalizeReleaseChannel(channel: string | undefined): string {
+  const value = channel?.trim() || 'stable'
+  return value === 'latest' ? 'stable' : value
+}
+
+function isReleaseAllowedForChannel(value: unknown, channel: 'beta' | 'alpha'): boolean {
+  if (!isRecord(value) || value.draft === true || typeof value.tag_name !== 'string') return false
+  const maturity = releaseMaturity(value.tag_name)
+  const priority = { stable: 2, beta: 1, alpha: 0 }
+  return priority[maturity] >= priority[channel]
+}
+
+function releaseMaturity(tag: string): 'stable' | 'beta' | 'alpha' {
+  const lower = tag.toLowerCase()
+  if (/(?:^|[.-])alpha(?:[.-]|$)/.test(lower)) return 'alpha'
+  if (/(?:^|[.-])beta(?:[.-]|$)/.test(lower)) return 'beta'
+  if (/(?:^|[.-])rc(?:[.-]|$)/.test(lower)) return 'beta'
+  return 'stable'
 }
 
 async function defaultGithubReleaseJsonFetch(

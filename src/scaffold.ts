@@ -646,7 +646,7 @@ function createConfig(input: {
   const includeDevTools = input.resolvedAddons.includes('dev-tools')
   const includeGithub = input.resolvedAddons.includes('github')
   const config: MaaProjectConfig = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     project: {
       slug: input.slug,
       displayName: input.displayName,
@@ -665,11 +665,13 @@ function createConfig(input: {
     },
     resources: initialResources(input.options),
     maafw: {
-      channel: 'latest',
+      channel: 'stable',
+      version: '',
     },
     runtime: {
       mfa: {
-        channel: 'latest',
+        channel: 'stable',
+        version: '',
         enabled: includeGithub,
       },
     },

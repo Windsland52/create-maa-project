@@ -3,8 +3,9 @@ export type ControllerKind = 'Adb' | 'Win32' | 'MacOS' | 'PlayCover' | 'Gamepad'
 export type LicenseKind = 'AGPL-3.0-or-later' | 'MIT' | 'None'
 export type NetworkMode = 'auto' | 'official'
 export type CliLanguage = 'auto' | 'en' | 'zh-CN'
+export type ReleaseChannel = 'stable' | 'beta' | 'alpha'
 export type MaaProjectConfig = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   project: {
     slug: string
     displayName: string
@@ -25,7 +26,8 @@ export type MaaProjectConfig = {
   }
   resources: ResourcePackConfig[]
   maafw: {
-    channel: 'latest' | string
+    channel: ReleaseChannel | string
+    version?: string
   }
   runtime: {
     mfa: RuntimeGuiConfig
@@ -46,7 +48,8 @@ export type MaaProjectConfig = {
 }
 
 export type RuntimeGuiConfig = {
-  channel: 'latest' | string
+  channel: ReleaseChannel | string
+  version?: string
   enabled: boolean
 }
 
@@ -68,7 +71,7 @@ export type ResourcePackConfig = {
 }
 
 export type MaaProjectLock = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   template: {
     createdBy: string
     lastUpdatedBy: string

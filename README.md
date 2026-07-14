@@ -181,7 +181,7 @@ CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`
 
 进入 Git 的状态文件：
 
-- `maa-project.json`：用户意图，包括项目元数据、功能/插件选择、资源包、runtime channel、网络模式、license 和 Agent 配置。
+- `maa-project.json`：用户意图，包括项目元数据、功能/插件选择、资源包、runtime channel/version、网络模式、license 和 Agent 配置。`version` 非空时精确版本优先；为空时按 `stable`、`beta`（含 rc）或 `alpha` channel 解析。
 - `maa-project.lock.json`：resolved 状态、pending actions、模板版本和 managed file hash。
 
 本机状态放在 `.create-maa-project/`，生成项目默认忽略该目录：

@@ -19,7 +19,15 @@ import {
 } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
 import { previewTemplateUpdate, recordUpdateRequests } from '../src/update.js'
-import { acceptManagedChanges, cleanCache, diffManagedFiles, managedFileHash, restoreBackup } from '../src/project.js'
+import {
+  acceptManagedChanges,
+  cleanCache,
+  diffManagedFiles,
+  managedFileHash,
+  readProjectConfig,
+  readProjectLock,
+  restoreBackup,
+} from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
@@ -266,6 +274,11 @@ describe('scaffold', () => {
       ]),
     })
     expect(await readJson(join(root, 'Maa Test', 'maa-project.json'))).toMatchObject({
+      schemaVersion: 2,
+      maafw: {
+        channel: 'stable',
+        version: '',
+      },
       controller: {
         kinds: [
           'Adb',
@@ -314,7 +327,7 @@ describe('scaffold', () => {
       pending: Array<{ kind: string; command: string }>
     }
     expect(lock).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
     })
     expect(lock.pending.some((item) => item.kind === 'runtime')).toBe(false)
     for (const path of [
@@ -413,6 +426,46 @@ describe('scaffold', () => {
     expect(doctorOutput).toContain('create-maa-project --update node-deps')
     expect(doctorOutput).toContain('create-maa-project --update ocr-models')
     expect(doctorOutput).not.toContain('create-maa-project --sync ocr-model')
+  })
+
+  it('migrates v1 release tags into v2 channel and version selectors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-migrate-selector' }))
+    const projectRoot = join(root, 'maa-migrate-selector')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const lockPath = join(projectRoot, 'maa-project.lock.json')
+    const legacy = (await readJson(configPath)) as Record<string, unknown> & {
+      maafw: Record<string, unknown>
+      runtime: { mfa: Record<string, unknown> }
+    }
+    legacy.schemaVersion = 1
+    legacy.maafw = { channel: 'v5.11.0-rc.1' }
+    legacy.runtime.mfa = { channel: 'latest', enabled: true }
+    await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8')
+    const legacyLock = (await readJson(lockPath)) as Record<string, unknown>
+    legacyLock.schemaVersion = 1
+    await writeFile(lockPath, `${JSON.stringify(legacyLock, null, 2)}\n`, 'utf8')
+
+    await expect(readProjectConfig(projectRoot)).resolves.toMatchObject({
+      schemaVersion: 2,
+      maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
+      runtime: { mfa: { channel: 'stable', version: '' } },
+    })
+    await expect(readProjectLock(projectRoot)).resolves.toMatchObject({ schemaVersion: 2 })
+  })
+
+  it('rejects unsupported v2 release channels', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-invalid-channel' }))
+    const projectRoot = join(root, 'maa-invalid-channel')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = (await readJson(configPath)) as Record<string, unknown> & { maafw: Record<string, unknown> }
+    config.maafw.channel = 'preview'
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+
+    await expect(readProjectConfig(projectRoot)).rejects.toThrow('maafw.channel must be one of: stable, beta, alpha')
   })
 
   it('creates MIT license text when selected', async () => {
@@ -2656,7 +2709,7 @@ jobs:
 
   it('resolves MaaFramework, MFAAvalonia, and Python assets from GitHub release metadata', async () => {
     const mfa = await resolveProductAssetManifestFromGithubRelease(
-      { product: 'MFAAvalonia', channel: 'latest', platform: 'win-x64' },
+      { product: 'MFAAvalonia', channel: 'stable', version: '', platform: 'win-x64' },
       {
         fetchJson: async (url, options) => {
           expect(url).toBe('https://api.github.com/repos/MaaXYZ/MFAAvalonia/releases/latest')
@@ -2701,7 +2754,7 @@ jobs:
     })
 
     const maafw = await resolveProductAssetManifestFromGithubRelease(
-      { product: 'MaaFramework', channel: 'v5.10.5', platform: 'linux-x64' },
+      { product: 'MaaFramework', channel: 'beta', version: 'v5.10.5', platform: 'linux-x64' },
       {
         fetchJson: async (url) => {
           expect(url).toBe('https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/v5.10.5')
@@ -2737,6 +2790,32 @@ jobs:
         },
       ],
     })
+
+    const beta = await resolveProductAssetManifestFromGithubRelease(
+      { product: 'MaaFramework', channel: 'beta', version: '', platform: 'linux-x64' },
+      {
+        fetchJson: async (url) => {
+          expect(url).toBe('https://api.github.com/repos/MaaXYZ/MaaFramework/releases?per_page=100')
+          return [
+            { tag_name: 'v5.11.0-alpha.1', prerelease: true, assets: [] },
+            {
+              tag_name: 'v5.11.0-rc.1',
+              prerelease: true,
+              assets: [
+                {
+                  name: 'MAA-linux-x86_64-v5.11.0-rc.1.zip',
+                  browser_download_url: 'https://example.test/maafw-rc.zip',
+                  digest: `sha256:${'f'.repeat(64)}`,
+                  size: 1,
+                },
+              ],
+            },
+          ]
+        },
+      },
+    )
+
+    expect(beta).toMatchObject({ tag: 'v5.11.0-rc.1', channel: 'beta' })
 
     const python = await resolveProductAssetManifestFromGithubRelease(
       { product: 'Python', channel: '20260610', platform: 'osx-arm64' },
@@ -3004,7 +3083,7 @@ jobs:
     )
 
     expect(requests).toEqual([
-      { product: 'MFAAvalonia', channel: 'latest' },
+      { product: 'MFAAvalonia', channel: 'stable', version: '' },
     ])
     expect(result.written).toEqual(
       expect.arrayContaining([

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.metadata
 import json
@@ -8,14 +9,19 @@ import runpy
 import shutil
 import subprocess
 import sys
+import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 PYTHON_MIN = (3, 13)
 PYTHON_MAX = (3, 14)
 VENV_NAME = ".venv"
 REQUIREMENTS_MARKER = ".create-maa-project-requirements.sha256"
+REQUIREMENTS_LOCK = ".create-maa-project-requirements.lock"
+REQUIREMENTS_LOCK_TIMEOUT_SECONDS = 300.0
 DEFAULT_PIP_CONFIG = {
     "enable_pip_install": True,
     "mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",
@@ -172,23 +178,26 @@ def find_requirements_file(project_root: Path) -> Path:
 
 
 def ensure_requirements_installed(project_root: Path, requirements: Path, digest: str) -> None:
-    if not needs_requirement_install(project_root, digest):
-        return
+    with requirements_install_lock(project_root):
+        # Another Agent may have completed the installation while this process
+        # waited for the shared environment lock.
+        if not needs_requirement_install(project_root, digest):
+            return
 
-    pip_config = read_pip_config(project_root)
-    if not pip_config.get("enable_pip_install", True):
-        warn(project_root, "pip install is disabled by config/pip_config.json")
-        return
+        pip_config = read_pip_config(project_root)
+        if not pip_config.get("enable_pip_install", True):
+            warn(project_root, "pip install is disabled by config/pip_config.json")
+            return
 
-    if install_from_local_wheels(project_root, requirements) or install_from_indexes(
-        project_root,
-        requirements,
-        pip_config,
-    ):
-        write_requirements_marker(project_root, digest)
-        return
+        if install_from_local_wheels(project_root, requirements) or install_from_indexes(
+            project_root,
+            requirements,
+            pip_config,
+        ):
+            write_requirements_marker(project_root, digest)
+            return
 
-    warn(project_root, "Python dependencies were not installed successfully")
+        warn(project_root, "Python dependencies were not installed successfully")
 
 
 def needs_requirement_install(project_root: Path, digest: str) -> bool:
@@ -203,16 +212,121 @@ def needs_requirement_install(project_root: Path, digest: str) -> bool:
 def requirements_marker(project_root: Path) -> Path:
     if is_running_in_project_venv(project_root):
         return venv_dir(project_root) / REQUIREMENTS_MARKER
+    if is_running_in_embedded_python(project_root):
+        return project_root / "python" / REQUIREMENTS_MARKER
     return project_root / "debug" / REQUIREMENTS_MARKER
+
+
+def is_running_in_embedded_python(project_root: Path) -> bool:
+    try:
+        return Path(sys.executable).resolve().is_relative_to((project_root / "python").resolve())
+    except OSError:
+        return False
+
+
+def requirements_lock_path(project_root: Path) -> Path:
+    return requirements_marker(project_root).with_name(REQUIREMENTS_LOCK)
+
+
+@contextmanager
+def requirements_install_lock(
+    project_root: Path,
+    timeout_seconds: float = REQUIREMENTS_LOCK_TIMEOUT_SECONDS,
+) -> Generator[None]:
+    lock_path = requirements_lock_path(project_root)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+b")
+    except OSError as error:
+        warn(project_root, "failed to open Python requirements install lock: " + str(error))
+        raise SystemExit(1) from error
+
+    with handle:
+        try:
+            ensure_lock_file_byte(handle)
+        except OSError as error:
+            warn(project_root, "failed to initialize Python requirements install lock: " + str(error))
+            raise SystemExit(1) from error
+
+        deadline = time.monotonic() + timeout_seconds
+        waiting_logged = False
+        while True:
+            try:
+                acquired = try_lock_file(handle)
+            except OSError as error:
+                warn(project_root, "failed to acquire Python requirements install lock: " + str(error))
+                raise SystemExit(1) from error
+            if acquired:
+                break
+            if not waiting_logged:
+                log(project_root, "waiting for Python requirements install lock: " + str(lock_path))
+                waiting_logged = True
+            if time.monotonic() >= deadline:
+                warn(project_root, "timed out waiting for Python requirements install lock: " + str(lock_path))
+                raise SystemExit(1)
+            time.sleep(0.1)
+
+        log(project_root, "acquired Python requirements install lock: " + str(lock_path))
+        try:
+            yield
+        finally:
+            try:
+                unlock_file(handle)
+            except OSError as error:
+                warn(project_root, "failed to release Python requirements install lock: " + str(error))
+
+
+def ensure_lock_file_byte(handle: BinaryIO) -> None:
+    handle.seek(0, 2)
+    if handle.tell() == 0:
+        handle.write(b"\0")
+        handle.flush()
+    handle.seek(0)
+
+
+def try_lock_file(handle: BinaryIO) -> bool:
+    handle.seek(0)
+    try:
+        if sys.platform.startswith("win"):
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        if error.errno in (errno.EACCES, errno.EAGAIN):
+            return False
+        raise
+    return True
+
+
+def unlock_file(handle: BinaryIO) -> None:
+    handle.seek(0)
+    if sys.platform.startswith("win"):
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def write_requirements_marker(project_root: Path, digest: str) -> None:
     marker = requirements_marker(project_root)
+    temp_marker = marker.with_name(marker.name + ".tmp")
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(digest + "\n", encoding="utf8")
+        temp_marker.write_text(digest + "\n", encoding="utf8")
+        temp_marker.replace(marker)
     except OSError as error:
         warn(project_root, "failed to write requirements marker: " + str(error))
+        try:
+            temp_marker.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def install_from_local_wheels(project_root: Path, requirements: Path) -> bool:
@@ -320,15 +434,18 @@ def check_maafw(project_root: Path) -> None:
     except importlib.metadata.PackageNotFoundError:
         warn(project_root, "Python package maafw is not installed")
         return
+    if not version:
+        warn(project_root, "Python package maafw has invalid or incomplete metadata")
+        return
     log(project_root, "maafw " + version)
 
 
 def is_package_installed(name: str) -> bool:
     try:
-        importlib.metadata.version(name)
+        version = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return False
-    return True
+    return bool(version)
 
 
 def command_output(error: subprocess.CalledProcessError) -> str:

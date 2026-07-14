@@ -2465,6 +2465,12 @@ jobs:
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
       } else {
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
+        const packagedRequirements = await readFile(join(projectRoot, 'dist/package-mfaa/requirements.txt'))
+        const packagedMarker = await readFile(
+          join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256'),
+          'utf8',
+        )
+        expect(packagedMarker).toBe(`${sha256(packagedRequirements)}\n`)
       }
       if (!runtimePlatform.startsWith('win-') && process.platform !== 'win32') {
         expect(

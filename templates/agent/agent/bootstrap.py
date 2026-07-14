@@ -98,6 +98,41 @@ def ensure_venv_and_relaunch(project_root: Path) -> None:
         warn(project_root, "Python executable is missing in .venv: " + str(python))
         raise SystemExit(1)
 
+    try:
+        result = subprocess.run(
+            [str(python), "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf8",
+            errors="replace",
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        warn(project_root, "failed to check venv Python version: " + str(error))
+        raise SystemExit(1) from error
+
+    if result.returncode != 0:
+        warn(project_root, "venv Python is not working: " + (result.stderr or "unknown error"))
+        raise SystemExit(1)
+
+    try:
+        parts = result.stdout.strip().split()[1].split(".")
+        major, minor = int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):
+        warn(project_root, "unexpected venv Python version output: " + result.stdout.strip())
+        raise SystemExit(1) from None
+
+    if (major, minor) < PYTHON_MIN or (major, minor) >= PYTHON_MAX:
+        warn(
+            project_root,
+            f"venv Python is {result.stdout.strip()}, but Python >=3.13,<3.14 is required. "
+            "This usually happens when the .venv was created with an older Python version. "
+            "Delete .venv and run again:\n"
+            "    rm -rf .venv\n"
+            "    python3.13 agent/bootstrap.py",
+        )
+        raise SystemExit(1)
+
     log(project_root, "relaunching with virtual environment Python: " + str(python))
     result = subprocess.run(
         [str(python), str(Path(__file__).resolve()), *sys.argv[1:]],

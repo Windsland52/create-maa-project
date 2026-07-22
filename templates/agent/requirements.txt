@@ -1,1 +1,2 @@
-maafw>=0.0.0
+# Dependabot: use --universal when updating this file.
+maafw

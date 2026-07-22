@@ -766,6 +766,13 @@ describe('scaffold', () => {
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-agent-test' }))
     process.chdir(join(root, 'maa-agent-test'))
+    await addDependabot(
+      defaultOptions({
+        add: [
+          'dependabot',
+        ],
+      }),
+    )
 
     const result = await addAgent(
       defaultOptions({
@@ -787,6 +794,7 @@ describe('scaffold', () => {
         'agent/utils/runtime_paths.py',
         'agent/utils/maa_types.py',
         '.vscode/launch.json',
+        '.github/dependabot.yml',
       ]),
     )
     expect(result.written).not.toContain('config/pip_config.json')
@@ -809,6 +817,7 @@ describe('scaffold', () => {
     expect(pyproject).toContain('[tool.pyright]')
     expect(pyproject).toContain('extraPaths = ["agent"]')
     expect(pyproject).toContain('typeCheckingMode = "strict"')
+    expect(pyproject).toContain('reportAttributeAccessIssue = "none"')
     expect(await pathExists(join(root, 'maa-agent-test', 'ruff.toml'))).toBe(false)
     expect(await pathExists(join(root, 'maa-agent-test', 'pyrightconfig.json'))).toBe(false)
     const bootstrap = await readFile(join(root, 'maa-agent-test', 'agent/bootstrap.py'), 'utf8')
@@ -846,6 +855,9 @@ describe('scaffold', () => {
     expect(await pathExists(join(root, 'maa-agent-test', 'config/pip_config.json'))).toBe(false)
     expect(gitignore).toContain('config/')
     expect(gitignore).toContain('__pycache__/')
+    const agentDependabot = await readFile(join(root, 'maa-agent-test', '.github/dependabot.yml'), 'utf8')
+    expect(agentDependabot).toContain('package-ecosystem: uv')
+    expect(agentDependabot).toContain('versioning-strategy: lockfile-only')
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
       icon: 'logo.ico',
@@ -855,7 +867,15 @@ describe('scaffold', () => {
         },
       ],
     })
+    const pnpmWorkspace = await readFile(join(root, 'maa-agent-test', 'pnpm-workspace.yaml'), 'utf8')
+    expect(pnpmWorkspace).toContain('minimumReleaseAgeExclude:')
+    expect(pnpmWorkspace).toContain('- create-maa-project')
+    expect(pnpmWorkspace).not.toContain('prettier@')
     expect(await readJson(join(root, 'maa-agent-test', 'package.json'))).toMatchObject({
+      devDependencies: {
+        prettier: '3.9.5',
+        'prettier-plugin-multiline-arrays': '4.1.10',
+      },
       scripts: {
         'format:py': 'uv run --frozen ruff format .',
         'lint:py': 'uv run --frozen ruff check .',
@@ -901,7 +921,6 @@ describe('scaffold', () => {
       ]),
     })
     expect(await readJson(join(root, 'maa-agent-test', '.vscode/settings.json'))).toMatchObject({
-      'python.defaultInterpreterPath': '${workspaceFolder}/.venv',
       '[jsonc]': {
         'editor.defaultFormatter': 'esbenp.prettier-vscode',
       },
@@ -930,7 +949,7 @@ describe('scaffold', () => {
           args: [
             '{AGENT_ID}',
           ],
-          env: '{AGENT_ENV}',
+          env: {},
         }),
       ]),
     })
@@ -1170,9 +1189,11 @@ describe('scaffold', () => {
       '验证 / Validation',
     )
     expect(dependabotResult.written).toContain('.github/dependabot.yml')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')).toContain(
-      'package-ecosystem: npm',
-    )
+    const pipelineDependabot = await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')
+    expect(pipelineDependabot).toContain('package-ecosystem: npm')
+    expect(pipelineDependabot).toContain('interval: daily')
+    expect(pipelineDependabot).toContain('default-days: 1')
+    expect(pipelineDependabot).not.toContain('package-ecosystem: uv')
     expect(await readJson(join(root, 'maa-addon-test', 'maa-project.json'))).toMatchObject({
       addons: {
         gitCliff: { enabled: true },
@@ -1193,6 +1214,25 @@ describe('scaffold', () => {
         '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object),
       },
     })
+  })
+
+  it('adds uv updates when adding dependabot to an existing agent project', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-agent-dependabot', template: 'agent' }))
+    process.chdir(join(root, 'maa-agent-dependabot'))
+
+    await addDependabot(
+      defaultOptions({
+        add: [
+          'dependabot',
+        ],
+      }),
+    )
+
+    const dependabot = await readFile(join(root, 'maa-agent-dependabot', '.github/dependabot.yml'), 'utf8')
+    expect(dependabot).toContain('package-ecosystem: uv')
+    expect(dependabot).toContain('versioning-strategy: lockfile-only')
   })
 
   it('does not mark release-only Python runtime as pending when adding GitHub automation', async () => {
@@ -1273,6 +1313,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const result = await createProject(
       defaultOptions({
         name: 'maa-create-addons',
+        template: 'agent',
         add: [
           'git-cliff',
           'community',
@@ -1319,6 +1360,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(await readFile(join(root, 'maa-create-addons', '.github/ISSUE_TEMPLATE/other_issue.yml'), 'utf8')).toContain(
       'maa-create-addons 版本 / maa-create-addons Version',
     )
+    const createdAgentDependabot = await readFile(join(root, 'maa-create-addons', '.github/dependabot.yml'), 'utf8')
+    expect(createdAgentDependabot).toContain('package-ecosystem: uv')
+    expect(createdAgentDependabot).toContain('versioning-strategy: lockfile-only')
     expect(await readJson(join(root, 'maa-create-addons', 'maa-project.json'))).toMatchObject({
       addons: {
         gitCliff: { enabled: true },
@@ -3588,6 +3632,13 @@ jobs:
           if (command === 'uv' && args[0] === 'lock') {
             await writeFile(join(cwd, 'uv.lock'), '# updated uv lock\n', 'utf8')
           }
+          if (command === 'uv' && args[0] === 'run') {
+            await writeFile(
+              join(cwd, 'requirements.in'),
+              '# Generated from [project].dependencies in pyproject.toml.\nloguru\nmaafw\n',
+              'utf8',
+            )
+          }
           if (command === 'uv' && args[0] === 'export') {
             await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\r\n', 'utf8')
           }
@@ -3607,6 +3658,18 @@ jobs:
         root: projectRoot,
         command: 'uv',
         args: [
+          'run',
+          '--no-project',
+          '--python',
+          '3.13',
+          'python',
+          '.create-maa-project/sync-requirements-in.py',
+        ],
+      },
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
           'lock',
         ],
       },
@@ -3619,15 +3682,22 @@ jobs:
           'requirements-txt',
           '--no-hashes',
           '--no-emit-project',
+          '--no-group',
+          'dev',
+          '--no-annotate',
           '--output-file',
           'requirements.txt',
         ],
       },
     ])
+    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toContain(
+      '# Dependabot: use --universal when updating this file.',
+    )
     expect(result.written).toEqual(
       expect.arrayContaining([
         'pnpm-lock.yaml',
         'uv.lock',
+        'requirements.in',
         'requirements.txt',
         'maa-project.json',
         'maa-project.lock.json',
@@ -3635,7 +3705,11 @@ jobs:
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
-    await writeFile(join(projectRoot, 'requirements.txt'), 'maa-fw==0.0.0\n', 'utf8')
+    await writeFile(
+      join(projectRoot, 'requirements.txt'),
+      '# Dependabot: use --universal when updating this file.\nmaa-fw==0.0.0\n',
+      'utf8',
+    )
     await clearPending(projectRoot)
     expect(await diffManagedFiles(projectRoot)).toEqual([
       'No managed file changes.',
@@ -3649,9 +3723,12 @@ jobs:
       }),
     )
     expect(templateUpdate.written).not.toContain('uv.lock')
+    expect(templateUpdate.written).not.toContain('requirements.in')
     expect(templateUpdate.written).not.toContain('requirements.txt')
     expect(await readFile(join(projectRoot, 'uv.lock'), 'utf8')).toBe('# updated uv lock\n')
-    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toBe('maa-fw==0.0.0\n')
+    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toBe(
+      '# Dependabot: use --universal when updating this file.\nmaa-fw==0.0.0\n',
+    )
 
     await expect(
       execFileAsync(

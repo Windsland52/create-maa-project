@@ -86,15 +86,7 @@ const ADDONS = [
 let serverRoot = safeProcessCwd('.')
 
 type ToolName =
-  | 'create_project'
-  | 'doctor'
-  | 'diff'
-  | 'sync'
-  | 'update'
-  | 'add'
-  | 'accept_changes'
-  | 'restore'
-  | 'clean_cache'
+  'create_project' | 'doctor' | 'diff' | 'sync' | 'update' | 'add' | 'accept_changes' | 'restore' | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
 

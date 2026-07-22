@@ -10,7 +10,7 @@
                 "{AGENT_ID}"
             ],
             "cwd": "${workspaceFolder}",
-            "env": "{AGENT_ENV}",
+            "env": {},
             "console": "integratedTerminal",
             "justMyCode": false
         }

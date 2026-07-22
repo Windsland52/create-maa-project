@@ -35,6 +35,5 @@
             ],
             "url": "./tools/schema/pipeline.schema.json"
         }
-    ],
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv"
+    ]
 }

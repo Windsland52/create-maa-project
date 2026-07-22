@@ -137,7 +137,7 @@ export async function createProject(
       pythonDevCommand,
       resources: config.resources,
     }),
-    ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName }),
+    ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, includeAgent }),
     configFile(config),
   ]
   const lock = emptyLock(CLI_VERSION)
@@ -361,7 +361,6 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
     'ms-python.vscode-pylance',
   ])
   const vscodeSettings = await readJsonObject(root, '.vscode/settings.json')
-  vscodeSettings['python.defaultInterpreterPath'] = '${workspaceFolder}/.venv'
   vscodeSettings['[python]'] = {
     'editor.defaultFormatter': 'charliermarsh.ruff',
   }
@@ -410,6 +409,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
       }),
     )
   }
+  if (Boolean(config.addons.dependabot)) files.push(dependabotFile(true))
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
@@ -578,7 +578,7 @@ export async function addDependabot(options: CliOptions): Promise<ScaffoldResult
     config,
     lock,
     [
-      dependabotFile(),
+      dependabotFile(config.python !== undefined),
       configFile(config),
     ],
     options,
@@ -784,7 +784,7 @@ function initialResources(options: CliOptions): MaaProjectConfig['resources'] {
 function addonFilesForCreate(
   options: CliOptions,
   resources: MaaProjectConfig['resources'],
-  input: { displayName: string },
+  input: { displayName: string; includeAgent: boolean },
 ): ManagedFileInput[] {
   const files: ManagedFileInput[] = []
   for (const pack of resources.slice(1)) {
@@ -802,7 +802,7 @@ function addonFilesForCreate(
     )
   }
   const addons = options.add
-  if (addons.includes('dependabot')) files.push(dependabotFile())
+  if (addons.includes('dependabot')) files.push(dependabotFile(input.includeAgent))
   if (addons.includes('community')) files.push(...communityFiles(input))
   return files
 }

@@ -13,7 +13,7 @@ import {
 } from './project.js'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { chmod, copyFile, cp, mkdir, readdir, rm } from 'node:fs/promises'
+import { chmod, copyFile, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import {
   downloadDefaultOcrZip,
   downloadUrl,
@@ -39,6 +39,16 @@ import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
 
 const CLI_VERSION = '0.1.0'
+const SYNC_REQUIREMENTS_IN_SCRIPT = `from pathlib import Path
+import tomllib
+
+pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+dependencies = pyproject["project"]["dependencies"]
+assert isinstance(dependencies, list) and all(isinstance(dependency, str) for dependency in dependencies)
+content = "# Generated from [project].dependencies in pyproject.toml.\\n" + "\\n".join(dependencies) + "\\n"
+Path("requirements.in").write_text(content, encoding="utf-8")
+`
+const SYNC_REQUIREMENTS_IN_SCRIPT_PATH = '.create-maa-project/sync-requirements-in.py'
 
 const UPDATE_PENDING: Record<string, PendingItem> = {
   schema: {
@@ -163,6 +173,7 @@ export async function recordUpdateRequests(
           lock.pending = removePending(lock.pending, 'python-deps')
           for (const path of await refreshManagedFileState(root, lock, [
             'uv.lock',
+            'requirements.in',
             'requirements.txt',
           ])) {
             written.add(path)
@@ -404,6 +415,21 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
   if (!(await exists(join(root, 'pyproject.toml')))) {
     throw new Error('--update python-deps requires an Agent project with pyproject.toml.')
   }
+  const syncScriptPath = join(root, SYNC_REQUIREMENTS_IN_SCRIPT_PATH)
+  await mkdir(join(root, '.create-maa-project'), { recursive: true })
+  await writeFile(syncScriptPath, SYNC_REQUIREMENTS_IN_SCRIPT, 'utf8')
+  try {
+    await commandRunner(root, 'uv', [
+      'run',
+      '--no-project',
+      '--python',
+      '3.13',
+      'python',
+      SYNC_REQUIREMENTS_IN_SCRIPT_PATH,
+    ])
+  } finally {
+    await rm(syncScriptPath, { force: true })
+  }
   await commandRunner(root, 'uv', [
     'lock',
   ])
@@ -413,9 +439,19 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
     'requirements-txt',
     '--no-hashes',
     '--no-emit-project',
+    '--no-group',
+    'dev',
+    '--no-annotate',
     '--output-file',
     'requirements.txt',
   ])
+
+  const requirementsPath = join(root, 'requirements.txt')
+  const requirements = await readText(requirementsPath)
+  const lines = requirements.split('\n')
+  const headerEnd = lines.findIndex((line) => !line.startsWith('#'))
+  lines.splice(headerEnd < 0 ? lines.length : headerEnd, 0, '# Dependabot: use --universal when updating this file.')
+  await writeFile(requirementsPath, lines.join('\n'), 'utf8')
 }
 
 async function updatePythonRuntime(
@@ -1010,6 +1046,6 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     resources: config.resources,
   })
     .filter((file) => file.managed && file.path !== 'maa-project.json')
-    .filter((file) => file.path !== 'uv.lock' && file.path !== 'requirements.txt')
+    .filter((file) => file.path !== 'uv.lock' && file.path !== 'requirements.in' && file.path !== 'requirements.txt')
     .filter((file) => !file.path.startsWith('resource/base/model/ocr/'))
 }

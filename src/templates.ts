@@ -188,6 +188,7 @@ export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version' 
     managed('.python-version', '3.13\n'),
     managed('pyproject.toml', agentPyproject(input)),
     managed('uv.lock', generatedUvLockPlaceholder()),
+    managed('requirements.in', agentRequirementsIn()),
     managed('requirements.txt', agentRequirements()),
     managed('agent/__init__.py', agentTemplate('__init__.py')),
     managed('agent/agent_runtime.py', agentTemplate('agent_runtime.py')),
@@ -235,8 +236,8 @@ export function optimizeImagesFiles(): ManagedFileInput[] {
   ]
 }
 
-export function dependabotFile(): ManagedFileInput {
-  return managed('.github/dependabot.yml', dependabotConfig())
+export function dependabotFile(includeAgent = false): ManagedFileInput {
+  return managed('.github/dependabot.yml', dependabotConfig(includeAgent))
 }
 
 export function releaseWorkflowFile(
@@ -565,11 +566,11 @@ function releaseTargetMatrixYaml(): string {
 function releaseTargetArtifactTuples(): string {
   return (
     RELEASE_TARGETS.map(
-      (target) => `    [
-        ${JSON.stringify(target.artifactOs)},
-        ${JSON.stringify(target.arch)},
-        ${JSON.stringify(target.ext)},
-    ]`,
+      (target) => `        [
+            ${JSON.stringify(target.artifactOs)},
+            ${JSON.stringify(target.arch)},
+            ${JSON.stringify(target.ext)},
+        ]`,
     ).join(',\n') + ','
   )
 }
@@ -612,8 +613,13 @@ function trimTrailingWhitespace(content: string): string {
   return content.replace(/[ \t]+$/gm, '')
 }
 
-function dependabotConfig(): string {
-  return template('addons/dependabot/.github/dependabot.yml')
+function dependabotConfig(includeAgent: boolean): string {
+  const config = template('addons/dependabot/.github/dependabot.yml')
+  if (!includeAgent) return config.replace('# uv-update\n', '')
+  return config.replace(
+    '# uv-update',
+    '  - package-ecosystem: uv\n    directory: /\n    schedule:\n      interval: daily\n    versioning-strategy: lockfile-only',
+  )
 }
 
 function generatedContributing(input: Pick<ProjectTemplateInput, 'displayName'>): string {
@@ -683,6 +689,10 @@ function agentTemplate(path: string): string {
 
 function agentRequirements(): string {
   return template('agent/requirements.txt')
+}
+
+function agentRequirementsIn(): string {
+  return template('agent/requirements.in')
 }
 
 function agentBootstrapPy(): string {

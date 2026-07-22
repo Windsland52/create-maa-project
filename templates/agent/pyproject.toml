@@ -5,7 +5,7 @@ description = "{{displayName}} MaaFW Agent project"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "loguru",
-    "maafw>=5.0",
+    "maafw",
 ]
 
 [dependency-groups]
@@ -41,3 +41,5 @@ reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
+# MaaFW decorators and platform-specific stdlib modules expose attributes that strict Pyright cannot resolve consistently.
+reportAttributeAccessIssue = "none"

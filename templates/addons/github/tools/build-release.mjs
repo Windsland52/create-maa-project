@@ -59,8 +59,14 @@ const GUI_TYPES = {
         runtimeDir: "mfaa",
         entrypointCandidates: (platform) =>
             platform.startsWith("win-")
-                ? ["MFAAvalonia.exe", "MFAAvalonia"]
-                : ["MFAAvalonia", "MFAAvalonia.exe"],
+                ? [
+                      "MFAAvalonia.exe",
+                      "MFAAvalonia",
+                  ]
+                : [
+                      "MFAAvalonia",
+                      "MFAAvalonia.exe",
+                  ],
         flatLayout: true,
         modifyInterface(iface) {
             return iface;
@@ -71,8 +77,14 @@ const GUI_TYPES = {
         runtimeDir: "mxu",
         entrypointCandidates: (platform) =>
             platform.startsWith("win-")
-                ? ["mxu.exe", "mxu"]
-                : ["mxu", "mxu.exe"],
+                ? [
+                      "mxu.exe",
+                      "mxu",
+                  ]
+                : [
+                      "mxu",
+                      "mxu.exe",
+                  ],
         flatLayout: false,
         modifyInterface(iface, slug, ver, platform) {
             const modified = {...iface};
@@ -82,13 +94,15 @@ const GUI_TYPES = {
                     isRecord(agent)
                         ? {
                               ...agent,
-                              child_exec:
-                                  platform.startsWith("win-")
-                                      ? "./python/python.exe"
-                                      : platform.startsWith("osx-")
-                                        ? "./python/bin/python3"
-                                        : "python3",
-                              child_args: ["-u", "./agent/main.py"],
+                              child_exec: platform.startsWith("win-")
+                                  ? "./python/python.exe"
+                                  : platform.startsWith("osx-")
+                                    ? "./python/bin/python3"
+                                    : "python3",
+                              child_args: [
+                                  "-u",
+                                  "./agent/main.py",
+                              ],
                           }
                         : agent,
                 );
@@ -164,7 +178,11 @@ for (const guiKey of enabledGuis) {
     const releaseTargets = [
 {{releaseTargetArtifactTuples}}
     ];
-    for (const [os, arch, ext] of releaseTargets) {
+    for (const [
+        os,
+        arch,
+        ext,
+    ] of releaseTargets) {
         artifacts.push(`${releaseArtifactName}-${os}-${arch}-${version}-${gui.suffix}.${ext}`);
     }
 }
@@ -173,7 +191,11 @@ const suffixPattern = enabledGuis.map((g) => GUI_TYPES[g].suffix).join("|");
 for (const artifact of artifacts) {
     if (
         !new RegExp(
-            "^" + escapeRegExp(releaseArtifactName) + "-(win|linux|macos)-(x86_64|aarch64)-v.+-(" + suffixPattern + ")\\.(zip|tar\\.gz)$",
+            "^" +
+                escapeRegExp(releaseArtifactName) +
+                "-(win|linux|macos)-(x86_64|aarch64)-v.+-(" +
+                suffixPattern +
+                ")\\.(zip|tar\\.gz)$",
         ).test(artifact)
     ) {
         throw new Error(`invalid artifact name: ${artifact}`);
@@ -209,7 +231,13 @@ function interfaceResourcePaths(value) {
 
 function isProjectRelativePath(path) {
     const stripped = path.startsWith("./") ? path.slice(2) : path;
-    return stripped !== "" && stripped !== "." && !stripped.startsWith("/") && !/^[A-Za-z]:/.test(stripped) && !stripped.split("/").includes("..");
+    return (
+        stripped !== "" &&
+        stripped !== "." &&
+        !stripped.startsWith("/") &&
+        !/^[A-Za-z]:/.test(stripped) &&
+        !stripped.split("/").includes("..")
+    );
 }
 
 function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {
@@ -335,7 +363,11 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         if (!existsSync(join(root, "maafw"))) {
             throw new Error("release package smoke failed: MXU package is missing maafw");
         }
-        for (const path of ["runtimes", "libs", "plugins"]) {
+        for (const path of [
+            "runtimes",
+            "libs",
+            "plugins",
+        ]) {
             if (existsSync(join(root, path))) {
                 throw new Error(`release package smoke failed: MXU package includes top-level ${path}`);
             }
@@ -375,7 +407,9 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
             const expectedDigest = requirementsDigest(join(root, "requirements.txt"));
             const actualDigest = readFileSync(markerPath, "utf8").trim();
             if (actualDigest !== expectedDigest) {
-                throw new Error("release package smoke failed: Python requirements marker does not match requirements.txt");
+                throw new Error(
+                    "release package smoke failed: Python requirements marker does not match requirements.txt",
+                );
             }
         }
     }

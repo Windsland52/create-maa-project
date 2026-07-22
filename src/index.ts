@@ -10,19 +10,10 @@ import {
   type DownloadProgress,
   type DownloadProgressReporter,
 } from './assets.js'
-import {
-  acceptManagedChanges,
-  cleanCache,
-  diffManagedFiles,
-  listChangedManagedFiles,
-  readProjectLock,
-  restoreBackup,
-  withProjectWriteLock,
-} from './project.js'
+import { cleanCache, restoreBackup, withProjectWriteLock } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
   assertReportSupportedOptions,
-  createDiffJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -37,7 +28,7 @@ import {
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { ScaffoldResult } from './types.js'
-import { previewTemplateUpdate, recordUpdateRequests } from './update.js'
+import { recordUpdateRequests } from './update.js'
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
@@ -63,7 +54,7 @@ async function main(): Promise<void> {
     if (options.report) {
       assertReportSupportedOptions(options)
     }
-    if (options.doctor || options.diff || options.acceptChangesRequested || options.logFile) {
+    if (options.doctor || options.logFile) {
       await logger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
     }
     if (options.assist || options.from) {
@@ -77,40 +68,10 @@ async function main(): Promise<void> {
       if (options.doctor) {
         const root = process.cwd()
         const doctor = await runDoctor(root)
-        const lock = await readProjectLock(root)
         const report = createDoctorJsonReport({
           context: createReportContext(command, startTimeMs, executionId, logger),
           root,
           doctor,
-          pending: lock.pending,
-          changedManagedFiles: await listChangedManagedFiles(root),
-        })
-        writeJsonReport(report)
-        process.exitCode = report.exitCode
-        return
-      }
-
-      if (options.diff && options.update.length > 0) {
-        const lines = await previewTemplateUpdate(options)
-        const report = createDiffJsonReport({
-          context: createReportContext(command, startTimeMs, executionId, logger),
-          root: process.cwd(),
-          lines,
-          changedManagedFiles: [],
-        })
-        writeJsonReport(report)
-        process.exitCode = report.exitCode
-        return
-      }
-
-      if (options.diff) {
-        const root = process.cwd()
-        const lines = await diffManagedFiles(root)
-        const report = createDiffJsonReport({
-          context: createReportContext(command, startTimeMs, executionId, logger),
-          root,
-          lines,
-          changedManagedFiles: await listChangedManagedFiles(root),
         })
         writeJsonReport(report)
         process.exitCode = report.exitCode
@@ -184,37 +145,11 @@ async function main(): Promise<void> {
       return
     }
 
-    if (options.acceptChangesRequested) {
-      const accepted = await withProjectWriteLock(
-        process.cwd(),
-        process.argv.join(' '),
-        () => acceptManagedChanges(process.cwd(), options.acceptChanges),
-        { clearStale: options.clearStaleLock },
-      )
-      console.log(`Accepted managed changes: ${accepted.join(', ')}`)
-      console.log(`Log: ${logger.path}`)
-      return
-    }
-
     if (options.doctor) {
       const report = await runDoctor(process.cwd())
       console.log(options.report ? JSON.stringify(report, null, 4) : report.lines.join('\n'))
       console.log(`Log: ${logger.path}`)
       process.exitCode = report.ok ? 0 : 1
-      return
-    }
-
-    if (options.diff && options.update.length > 0) {
-      const diff = await previewTemplateUpdate(options)
-      console.log(diff.join('\n'))
-      console.log(`Log: ${logger.path}`)
-      return
-    }
-
-    if (options.diff) {
-      const diff = await diffManagedFiles(process.cwd())
-      console.log(diff.join('\n'))
-      console.log(`Log: ${logger.path}`)
       return
     }
 

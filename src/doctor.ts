@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { managedFileHash, readProjectConfig, readProjectLock } from './project.js'
-import type { MaaProjectConfig, MaaProjectLock } from './types.js'
+import { readProjectConfig } from './project.js'
+import type { MaaProjectConfig } from './types.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
 import { exists, readText } from './utils.js'
 
@@ -14,29 +13,17 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
   const lines: string[] = []
   let ok = true
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
 
   lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
   ok = (await checkInterfaceMetadata(root, config, lines)) && ok
   if (hasDevTools(config)) {
     ok = (await checkNodeToolingFiles(root, config, lines)) && ok
     if (config.features.vscode.enabled) ok = (await checkVscodeSettings(root, lines)) && ok
-    ok = (await checkNodeLockfile(root, lock, lines)) && ok
+    ok = (await checkNodeLockfile(root, lines)) && ok
   }
   ok = (await checkResourcePaths(root, config, lines)) && ok
   ok = (await checkReferencedPaths(root, lines)) && ok
   ok = (await checkMaatoolsConfig(root, config, lines)) && ok
-  ok = (await checkManagedFiles(root, lock, lines)) && ok
-
-  if (lock.pending.length === 0) {
-    lines.push('[OK] No pending actions.')
-  } else {
-    ok = false
-    for (const item of lock.pending) {
-      lines.push(`[WARN] Pending ${item.kind}: ${item.reason}`)
-      lines.push(`       To fix: ${item.command}`)
-    }
-  }
 
   return { ok, lines }
 }
@@ -45,7 +32,7 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
   const interfacePath = join(root, 'interface.json')
   if (!(await exists(interfacePath))) {
     lines.push('[ERR] interface.json is missing.')
-    lines.push('      To fix: restore it from backup or re-run create-maa-project --update template')
+    lines.push('      To fix: restore it from version control or a project backup.')
     return false
   }
 
@@ -81,8 +68,7 @@ async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, li
   return ok
 }
 
-async function checkNodeLockfile(root: string, lock: MaaProjectLock, lines: string[]): Promise<boolean> {
-  if (lock.pending.some((item) => item.kind === 'node-deps')) return true
+async function checkNodeLockfile(root: string, lines: string[]): Promise<boolean> {
   if (await exists(join(root, 'pnpm-lock.yaml'))) {
     lines.push('[OK] pnpm lockfile is present.')
     return true
@@ -94,14 +80,27 @@ async function checkNodeLockfile(root: string, lock: MaaProjectLock, lines: stri
 
 async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
   let ok = true
+  for (const path of [
+    'package.json',
+    'pnpm-workspace.yaml',
+    'tools/check-project.mjs',
+    'tools/validate-schema.mjs',
+    'tools/schema/interface.schema.json',
+  ]) {
+    if (await exists(join(root, path))) continue
+    lines.push(`[ERR] Required project file is missing: ${path}`)
+    lines.push('      To fix: restore it from version control or a project backup.')
+    ok = false
+  }
+
   const nodeVersionPath = join(root, '.node-version')
   if (!(await exists(nodeVersionPath))) {
     lines.push('[ERR] .node-version is missing.')
-    lines.push('      To fix: restore it from backup or run create-maa-project --update template')
+    lines.push('      To fix: restore it from version control or a project backup.')
     ok = false
   } else if ((await readText(nodeVersionPath)).trim() !== '24') {
     lines.push('[ERR] .node-version must pin Node 24.')
-    lines.push('      To fix: create-maa-project --update template')
+    lines.push('      To fix: set .node-version to 24.')
     ok = false
   }
 
@@ -117,13 +116,13 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
     const workflowPath = join(root, workflow)
     if (!(await exists(workflowPath))) {
       lines.push(`[ERR] ${workflow} is missing.`)
-      lines.push('      To fix: restore it from backup or run create-maa-project --update template')
+      lines.push('      To fix: restore it from version control or a project backup.')
       ok = false
       continue
     }
     if (!workflowPinsNode24(await readText(workflowPath))) {
       lines.push(`[ERR] ${workflow} must use Node 24 in actions/setup-node.`)
-      lines.push('      To fix: create-maa-project --update template')
+      lines.push('      To fix: update the workflow to use Node 24.')
       ok = false
     }
   }
@@ -136,7 +135,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
   const settingsPath = join(root, '.vscode/settings.json')
   if (!(await exists(settingsPath))) {
     lines.push('[ERR] .vscode/settings.json is missing.')
-    lines.push('      To fix: restore it from backup or run create-maa-project --update template')
+    lines.push('      To fix: restore it from version control or a project backup.')
     return false
   }
 
@@ -144,17 +143,17 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
   let ok = true
   if (settings['editor.formatOnSave'] !== true) {
     lines.push('[ERR] .vscode/settings.json editor.formatOnSave must be true.')
-    lines.push('      To fix: create-maa-project --update template')
+    lines.push('      To fix: set editor.formatOnSave to true.')
     ok = false
   }
   if (settings['files.eol'] !== '\n') {
     lines.push('[ERR] .vscode/settings.json files.eol must be LF.')
-    lines.push('      To fix: create-maa-project --update template')
+    lines.push('      To fix: set files.eol to LF.')
     ok = false
   }
   if (!hasJsoncFileAssociations(settings['files.associations'])) {
     lines.push('[ERR] .vscode/settings.json files.associations must map *.json and *.jsonc to jsonc.')
-    lines.push('      To fix: create-maa-project --update template')
+    lines.push('      To fix: restore the generated JSON/JSONC file associations.')
     ok = false
   }
   for (const language of [
@@ -163,7 +162,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
   ]) {
     if (editorDefaultFormatter(settings[language]) !== 'esbenp.prettier-vscode') {
       lines.push(`[ERR] .vscode/settings.json ${language} editor.defaultFormatter must be esbenp.prettier-vscode.`)
-      lines.push('      To fix: create-maa-project --update template')
+      lines.push('      To fix: set the formatter to esbenp.prettier-vscode.')
       ok = false
     }
   }
@@ -171,7 +170,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
     lines.push(
       '[ERR] .vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json.',
     )
-    lines.push('      To fix: create-maa-project --update template')
+    lines.push('      To fix: restore the interface.json schema mapping.')
     ok = false
   }
   if (ok) lines.push('[OK] VS Code settings configure Prettier and interface schema.')
@@ -260,41 +259,6 @@ function hasMaatoolsRequiredFields(content: string): boolean {
     /\binterfacePath\s*:\s*['"]interface\.json['"]/.test(content) &&
     /\bcheck\s*:\s*\{/.test(content)
   )
-}
-
-async function checkManagedFiles(root: string, lock: MaaProjectLock, lines: string[]): Promise<boolean> {
-  let ok = true
-  const entries = Object.entries(lock.managedFiles)
-  for (const [
-    path,
-    state,
-  ] of entries) {
-    const fullPath = join(root, path)
-    if (!(await exists(fullPath))) {
-      lines.push(`[ERR] Managed file is missing: ${path}`)
-      lines.push('      To fix: restore it from backup or run create-maa-project --update template')
-      ok = false
-      continue
-    }
-    const currentHash = managedFileHash(path, await readManagedFileForDoctor(fullPath, path))
-    if (currentHash !== state.hash) {
-      lines.push(`[WARN] Managed file changed since last accepted baseline: ${path}`)
-      lines.push(`       To accept: create-maa-project --accept-changes ${path}`)
-      if (state.acceptedAt) {
-        lines.push('       Future template updates may conflict with this accepted local baseline.')
-      }
-      ok = false
-    } else if (state.acceptedAt) {
-      lines.push(`[INFO] Managed file has accepted local changes: ${path}`)
-      lines.push('       Future template updates may conflict with this file.')
-    }
-  }
-  if (ok) lines.push(`[OK] Managed files match baselines (${entries.length}).`)
-  return ok
-}
-
-async function readManagedFileForDoctor(fullPath: string, managedPath: string): Promise<string | Buffer> {
-  return managedPath.endsWith('.onnx') ? readFile(fullPath) : readText(fullPath)
 }
 
 function arrayOfStrings(value: unknown): string[] {

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,8 +28,6 @@ type JsonReport = {
   exitCode: number
   root: string
   pending: Array<{ kind: string; reason: string; command: string }>
-  changedManagedFiles: Array<{ path: string; status: string }>
-  changedUserFiles: Array<{ path: string; status: string }>
   doctor?: { lines: string[] }
   error?: { message: string; code?: string }
 }
@@ -100,11 +98,9 @@ describe('MCP server', () => {
       expect(tools.map((tool) => tool.name)).toEqual([
         'create_project',
         'doctor',
-        'diff',
         'sync',
         'update',
         'add',
-        'accept_changes',
         'restore',
         'clean_cache',
       ])
@@ -165,7 +161,6 @@ describe('MCP server', () => {
       })
       expect(report.doctor?.lines.join('\n')).toContain('[OK] Project:')
       expect(report.pending).toEqual([])
-      expect(report.changedUserFiles).toEqual([])
     },
     MCP_TEST_TIMEOUT_MS,
   )
@@ -331,10 +326,7 @@ async function createValidProject(name: string): Promise<string> {
     },
   )
   const projectRoot = join(root, name)
-  const lockPath = join(projectRoot, 'maa-project.lock.json')
-  const lock = JSON.parse(await readFile(lockPath, 'utf8')) as { pending?: unknown[] }
-  lock.pending = []
-  await writeFile(lockPath, `${JSON.stringify(lock, null, 4)}\n`, 'utf8')
+  await writeFile(join(projectRoot, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
   return projectRoot
 }
 

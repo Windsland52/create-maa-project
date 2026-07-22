@@ -11,23 +11,15 @@ import {
   addAgent,
   addCommunity,
   addDependabot,
-  addGithub,
   addGitCliff,
+  addGithub,
   addResourcePack,
   assertCanCreateTarget,
   type GitRunner,
 } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
-import { previewTemplateUpdate, recordUpdateRequests } from '../src/update.js'
-import {
-  acceptManagedChanges,
-  cleanCache,
-  diffManagedFiles,
-  managedFileHash,
-  readProjectConfig,
-  readProjectLock,
-  restoreBackup,
-} from '../src/project.js'
+import { recordUpdateRequests } from '../src/update.js'
+import { cleanCache, readProjectConfig, restoreBackup } from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
@@ -158,6 +150,7 @@ describe('scaffold', () => {
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/schema/interface.schema.json'))).toBe(false)
+    expect(await pathExists(join(projectRoot, 'maa-project.lock.json'))).toBe(false)
     expect(result.pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -167,292 +160,6 @@ describe('scaffold', () => {
       ]),
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
-  })
-
-  it('creates repository tooling project under resource/base', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-
-    const result = await createProject(defaultOptions({ name: 'Maa Test' }))
-
-    expect(result.config.project.slug).toBe('maa-test')
-    expect(result.written).toContain('interface.json')
-    expect(result.written).toContain('tasks/tutorial.json')
-    expect(result.written).toContain('resource/base/pipeline/tutorial.json')
-    expect(result.written).toContain('tools/schema/interface.schema.json')
-    expect(result.written).toContain('tools/schema/schema-manifest.json')
-    expect(result.written).not.toContain('tools/sync-schema.mjs')
-    expect(result.written).not.toContain('.github/workflows/schema-sync.yml')
-    expect(result.written).toContain('resource/base/model/ocr/det.onnx')
-    expect(result.written).toContain('resource/base/model/ocr/rec.onnx')
-    expect(result.written).toContain('resource/base/model/ocr/keys.txt')
-    expect(result.written).toContain('resource/base/model/ocr/README.md')
-    const tutorial = await readFile(join(root, 'Maa Test', 'resource/base/pipeline/tutorial.json'), 'utf8')
-    const defaultPipeline = await readFile(join(root, 'Maa Test', 'resource/base/default_pipeline.json'), 'utf8')
-    const readme = await readFile(join(root, 'Maa Test', 'README.md'), 'utf8')
-    const readmeEn = await readFile(join(root, 'Maa Test', 'README.en.md'), 'utf8')
-    const license = await readFile(join(root, 'Maa Test', 'LICENSE'), 'utf8')
-    const syncRuntime = await readFile(join(root, 'Maa Test', 'tools/sync-runtime.mjs'), 'utf8')
-    const emptyImage = await readFile(join(root, 'Maa Test', 'resource/base/image/empty.png'))
-    const interfaceSchema = await readJson(join(root, 'Maa Test', 'tools/schema/interface.schema.json'))
-    const vscodeSettings = await readJson(join(root, 'Maa Test', '.vscode/settings.json'))
-    expect(readme).toContain('由 create-maa-project 生成')
-    expect(readme).toContain('README.en.md')
-    expect(readmeEn).toContain('MaaFW project generated')
-    expect(readmeEn).toContain('README.md')
-    expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
-    expect(license).toContain('Version 3, 19 November 2007')
-    expect(license).not.toContain('Replace this placeholder')
-    expect(syncRuntime).toContain('create-maa-project@latest')
-    expect(syncRuntime).toContain('"maafw"')
-    expect(syncRuntime).toContain('"runtime:mfa"')
-    expect(emptyImage.subarray(0, 8)).toEqual(
-      Buffer.from([
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        0x0d,
-        0x0a,
-        0x1a,
-        0x0a,
-      ]),
-    )
-    expect(defaultPipeline).toContain('"rate_limit": 1000')
-    expect(defaultPipeline).toContain('"recognition": "OCR"')
-    expect(defaultPipeline).not.toMatch(/"next"\s*:/)
-    expect(tutorial.indexOf('"recognition"')).toBeLessThan(tutorial.indexOf('"roi"'))
-    expect(tutorial.indexOf('"roi"')).toBeLessThan(tutorial.indexOf('"expected"'))
-    expect(tutorial.indexOf('"expected"')).toBeLessThan(tutorial.indexOf('"action"'))
-    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).toMatchObject({
-      name: 'maa-test',
-      label: 'Maa Test',
-      icon: 'logo.ico',
-      controller: [
-        { name: 'Android', label: 'Android / Emulator', type: 'Adb' },
-      ],
-      resource: [
-        {
-          name: 'base',
-          path: [
-            './resource/base',
-          ],
-        },
-      ],
-      import: [
-        './tasks/tutorial.json',
-      ],
-    })
-    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('task')
-    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('$schema')
-    expect(interfaceSchema).toMatchObject({
-      title: 'MaaFramework Project Interface V2',
-      properties: {
-        interface_version: {
-          const: 2,
-        },
-      },
-    })
-    expect(vscodeSettings).toMatchObject({
-      '[json]': {
-        'editor.defaultFormatter': 'esbenp.prettier-vscode',
-      },
-      '[jsonc]': {
-        'editor.defaultFormatter': 'esbenp.prettier-vscode',
-      },
-      'files.associations': {
-        '*.json': 'jsonc',
-        '*.jsonc': 'jsonc',
-      },
-      'json.schemas': expect.arrayContaining([
-        expect.objectContaining({
-          fileMatch: [
-            '/interface.json',
-          ],
-          url: './tools/schema/interface.schema.json',
-        }),
-      ]),
-    })
-    expect(await readJson(join(root, 'Maa Test', 'maa-project.json'))).toMatchObject({
-      schemaVersion: 2,
-      maafw: {
-        channel: 'stable',
-        version: '',
-      },
-      controller: {
-        kinds: [
-          'Adb',
-        ],
-      },
-      resources: [
-        { path: 'resource/base' },
-      ],
-    })
-    const packageJson = (await readJson(join(root, 'Maa Test', 'package.json'))) as {
-      license?: string
-      scripts?: Record<string, string>
-    }
-    expect(packageJson.license).toBe('AGPL-3.0-or-later')
-    expect(packageJson.scripts).not.toHaveProperty('sync:schema')
-    const customActionSchema = await readJson(join(root, 'Maa Test', 'tools/schema/custom.action.schema.json'))
-    const customRecognitionSchema = await readJson(
-      join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json'),
-    )
-    expect(customActionSchema).toMatchObject({
-      properties: {
-        custom_action: {},
-        custom_action_param: {},
-      },
-    })
-    expect(customActionSchema).not.toHaveProperty('$defs')
-    expect(customRecognitionSchema).toMatchObject({
-      properties: {
-        custom_recognition: {},
-        custom_recognition_param: {},
-      },
-    })
-    expect(customRecognitionSchema).not.toHaveProperty('$defs')
-    const schemaManifest = (await readJson(join(root, 'Maa Test', 'tools/schema/schema-manifest.json'))) as {
-      files: Array<{ path: string }>
-    }
-    expect(schemaManifest.files.map((file: { path: string }) => file.path)).not.toEqual(
-      expect.arrayContaining([
-        'tools/schema/custom.action.schema.json',
-        'tools/schema/custom.recognition.schema.json',
-      ]),
-    )
-    const lock = (await readJson(join(root, 'Maa Test', 'maa-project.lock.json'))) as {
-      managedFiles: Record<string, unknown>
-      createdFiles: Record<string, unknown>
-      pending: Array<{ kind: string; command: string }>
-    }
-    expect(lock).toMatchObject({
-      schemaVersion: 2,
-    })
-    expect(lock.pending.some((item) => item.kind === 'runtime')).toBe(false)
-    for (const path of [
-      '.gitignore',
-      '.prettierignore',
-      '.vscode/extensions.json',
-      '.vscode/settings.json',
-      'interface.json',
-      'maa-project.json',
-      'maatools.config.mts',
-      'package.json',
-      'pnpm-workspace.yaml',
-      'resource/base/default_pipeline.json',
-      'resource/base/image/empty.png',
-      'resource/base/model/ocr/manifest.json',
-      'resource/base/model/ocr/det.onnx',
-      'resource/base/model/ocr/rec.onnx',
-      'resource/base/model/ocr/keys.txt',
-      'resource/base/model/ocr/README.md',
-      'resource/base/pipeline/tutorial.json',
-      'tasks/tutorial.json',
-    ]) {
-      expect(lock.managedFiles).not.toHaveProperty(path)
-      expect(lock.createdFiles).toHaveProperty(path)
-    }
-    expect(lock.managedFiles).not.toHaveProperty('tools/schema/custom.action.schema.json')
-    expect(lock.managedFiles).not.toHaveProperty('tools/schema/custom.recognition.schema.json')
-    expect(lock.createdFiles).toMatchObject({
-      'tools/schema/custom.action.schema.json': { managed: false },
-      'tools/schema/custom.recognition.schema.json': { managed: false },
-    })
-    expect(await readJson(join(root, 'Maa Test', '.vscode/extensions.json'))).toMatchObject({
-      recommendations: expect.arrayContaining([
-        'windsland52.maa-log-analyzer',
-      ]),
-    })
-    const editorconfig = await readFile(join(root, 'Maa Test', '.editorconfig'), 'utf8')
-    expect(editorconfig).toContain('[*.{yml,yaml,json,jsonc}]')
-    const gitattributes = await readFile(join(root, 'Maa Test', '.gitattributes'), 'utf8')
-    expect(gitattributes).toContain('interface.json linguist-language=JSON-with-Comments')
-    expect(gitattributes).toContain('resource/**/default_pipeline.json linguist-language=JSON-with-Comments')
-    expect(gitattributes).toContain('resource/**/pipeline/**/*.json linguist-language=JSON-with-Comments')
-    expect(await pathExists(join(root, 'Maa Test', '.github/workflows/schema-sync.yml'))).toBe(false)
-    expect(await pathExists(join(root, 'Maa Test', 'tools/sync-schema.mjs'))).toBe(false)
-    const checkWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/check.yml'), 'utf8')
-    const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
-    expect(checkWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      checkWorkflow.indexOf('pnpm install --frozen-lockfile'),
-    )
-    expect(releaseWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      releaseWorkflow.indexOf('pnpm install --frozen-lockfile'),
-    )
-    expect(releaseWorkflow).toContain('pnpm release:dry-run')
-    expect(releaseWorkflow).toContain("if: github.event_name == 'workflow_dispatch'")
-    expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
-    expectReleaseWorkflowTargets(releaseWorkflow)
-    expect(releaseWorkflow).toContain(
-      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
-    )
-    expect(releaseWorkflow).toContain('7z a "../$archive" .')
-    expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
-    expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
-    expect(releaseWorkflow).toContain('package_dirs=(dist/package-*/)')
-    expect(releaseWorkflow).toContain('if (( ${#package_dirs[@]} == 0 )); then')
-    expect(releaseWorkflow).toContain('for pkg_dir in "${package_dirs[@]}"; do')
-    expect(releaseWorkflow).toContain('if-no-files-found: error')
-    expect(releaseWorkflow).toContain('- name: Apply app icon')
-    expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
-    expect(releaseWorkflow).toContain('cp logo.ico "$pkg_dir/logo.ico"')
-    expect(releaseWorkflow).toContain('rcedit-x64.exe')
-    expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
-    expect(releaseWorkflow).toContain('actions/download-artifact@v7')
-    expect(releaseWorkflow).toContain('generate_release_notes: true')
-    expect(releaseWorkflow).toContain('release-assets/*.zip')
-    expect(releaseWorkflow).toContain('release-assets/*.tar.gz')
-    expect(releaseWorkflow).toContain('- name: Dispatch post-release hooks')
-    expect(releaseWorkflow).toContain('event_type=create-maa-project-release')
-    expect(releaseWorkflow).toContain('client_payload[tag]="$GITHUB_REF_NAME"')
-    expect(releaseWorkflow).not.toContain('files: release-assets/*')
-    expect(releaseWorkflow).not.toContain('orhun/git-cliff-action@v4')
-    expect(releaseWorkflow).not.toContain('package_paths=')
-    expect(releaseWorkflow).not.toContain('|| true')
-    expect(result.pending).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'node-deps',
-          command: 'create-maa-project --update node-deps',
-        }),
-        expect.objectContaining({
-          kind: 'ocr-model',
-          command: 'create-maa-project --update ocr-models',
-        }),
-      ]),
-    )
-    const doctorOutput = (await runDoctor(join(root, 'Maa Test'))).lines.join('\n')
-    expect(doctorOutput).toContain('create-maa-project --update node-deps')
-    expect(doctorOutput).toContain('create-maa-project --update ocr-models')
-    expect(doctorOutput).not.toContain('create-maa-project --sync ocr-model')
-  })
-
-  it('migrates v1 release tags into v2 channel and version selectors', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-migrate-selector' }))
-    const projectRoot = join(root, 'maa-migrate-selector')
-    const configPath = join(projectRoot, 'maa-project.json')
-    const lockPath = join(projectRoot, 'maa-project.lock.json')
-    const legacy = (await readJson(configPath)) as Record<string, unknown> & {
-      maafw: Record<string, unknown>
-      runtime: { mfa: Record<string, unknown> }
-    }
-    legacy.schemaVersion = 1
-    legacy.maafw = { channel: 'v5.11.0-rc.1' }
-    legacy.runtime.mfa = { channel: 'latest', enabled: true }
-    await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8')
-    const legacyLock = (await readJson(lockPath)) as Record<string, unknown>
-    legacyLock.schemaVersion = 1
-    await writeFile(lockPath, `${JSON.stringify(legacyLock, null, 2)}\n`, 'utf8')
-
-    await expect(readProjectConfig(projectRoot)).resolves.toMatchObject({
-      schemaVersion: 2,
-      maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
-      runtime: { mfa: { channel: 'stable', version: '' } },
-    })
-    await expect(readProjectLock(projectRoot)).resolves.toMatchObject({ schemaVersion: 2 })
   })
 
   it('rejects unsupported v2 release channels', async () => {
@@ -544,137 +251,6 @@ describe('scaffold', () => {
         }),
       ]),
     )
-  })
-
-  it('downloads OCR model assets during project creation and clears OCR pending', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-
-    const assets = new Map([
-      [
-        'https://example.test/det.onnx',
-        Buffer.from([
-          0,
-          1,
-          2,
-          3,
-        ]),
-      ],
-      [
-        'https://example.test/rec.onnx',
-        Buffer.from([
-          4,
-          5,
-          6,
-        ]),
-      ],
-      [
-        'https://example.test/keys.txt',
-        Buffer.from('hello\nworld\n'),
-      ],
-      [
-        'https://example.test/README.md',
-        Buffer.from('# OCR\n'),
-      ],
-    ])
-    const progress: string[] = []
-    const downloadProgress: DownloadProgress[] = []
-    const result = await createProject(defaultOptions({ name: 'maa-create-ocr' }), {
-      downloadOcrModels: true,
-      ocrManifestResolver: async () => ({
-        schemaVersion: 1,
-        assets: [
-          {
-            path: 'det.onnx',
-            url: 'https://example.test/det.onnx',
-            sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-            size: 4,
-          },
-          {
-            path: 'rec.onnx',
-            url: 'https://example.test/rec.onnx',
-            sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
-            size: 3,
-          },
-          {
-            path: 'keys.txt',
-            url: 'https://example.test/keys.txt',
-            sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
-            size: 12,
-          },
-          {
-            path: 'README.md',
-            url: 'https://example.test/README.md',
-            sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
-            size: 6,
-          },
-        ],
-      }),
-      assetDownloader: async (url, options) => {
-        const content = assets.get(url)
-        if (!content) throw new Error(`unexpected URL: ${url}`)
-        const firstChunk = Math.max(1, Math.floor(content.byteLength / 2))
-        options?.onProgress?.({
-          url,
-          downloadedBytes: firstChunk,
-          totalBytes: content.byteLength,
-        })
-        options?.onProgress?.({
-          url,
-          downloadedBytes: content.byteLength,
-          totalBytes: content.byteLength,
-        })
-        return content
-      },
-      onProgress: (message) => progress.push(message),
-      onDownloadProgress: (event) => downloadProgress.push(event),
-    })
-
-    const projectRoot = join(root, 'maa-create-ocr')
-    expect(result.written).toEqual(
-      expect.arrayContaining([
-        'resource/base/model/ocr/det.onnx',
-        'resource/base/model/ocr/rec.onnx',
-        'resource/base/model/ocr/keys.txt',
-        'resource/base/model/ocr/README.md',
-        'resource/base/model/ocr/manifest.json',
-      ]),
-    )
-    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
-    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
-      assets.get('https://example.test/det.onnx'),
-    )
-    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
-      assets: expect.arrayContaining([
-        expect.objectContaining({
-          path: 'det.onnx',
-          sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-          size: 4,
-        }),
-      ]),
-    })
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-    expect(progress).toEqual([
-      'Downloading OCR models...',
-      'OCR models downloaded.',
-    ])
-    expect(downloadProgress).toContainEqual(
-      expect.objectContaining({
-        path: 'det.onnx',
-        downloadedBytes: 2,
-        totalBytes: 25,
-      }),
-    )
-    expect(downloadProgress.at(-1)).toMatchObject({
-      path: 'README.md',
-      downloadedBytes: 25,
-      totalBytes: 25,
-    })
-    const doctorOutput = (await runDoctor(projectRoot)).lines.join('\n')
-    expect(doctorOutput).not.toContain('create-maa-project --update ocr-models')
-    expect(doctorOutput).not.toContain('Managed file changed since last accepted baseline: resource/base/model/ocr')
   })
 
   it('keeps OCR pending when creation download fails', async () => {
@@ -1120,100 +696,6 @@ describe('scaffold', () => {
         }),
       ),
     ).rejects.toThrow('Resource pack label cannot be blank')
-  })
-
-  it('adds git-cliff, community, and dependabot incrementally', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-addon-test' }))
-    process.chdir(join(root, 'maa-addon-test'))
-
-    await writeFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), '# User Changelog\n', 'utf8')
-    await writeFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), '# User Guide\n', 'utf8')
-    const gitCliffResult = await addGitCliff(
-      defaultOptions({
-        add: [
-          'git-cliff',
-        ],
-      }),
-    )
-    const communityResult = await addCommunity(
-      defaultOptions({
-        add: [
-          'community',
-        ],
-      }),
-    )
-    const dependabotResult = await addDependabot(
-      defaultOptions({
-        add: [
-          'dependabot',
-        ],
-      }),
-    )
-
-    expect(gitCliffResult.written).toEqual(
-      expect.arrayContaining([
-        '.github/cliff.toml',
-        '.github/workflows/release.yml',
-      ]),
-    )
-    expect(gitCliffResult.skipped).not.toContain('CHANGELOG.md')
-    expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe('# User Changelog\n')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('新功能 | Features')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'body_path: release-assets/CHANGES.md',
-    )
-    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'GITHUB_REPO: ${{ github.repository }}',
-    )
-    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).not.toContain(
-      'orhun/git-cliff-action@v4',
-    )
-    expect(communityResult.skipped).toContain('CONTRIBUTING.md')
-    expect(communityResult.written).toEqual(
-      expect.arrayContaining([
-        '.github/ISSUE_TEMPLATE/config.yml',
-        '.github/ISSUE_TEMPLATE/bug_report.yml',
-        '.github/ISSUE_TEMPLATE/feature_request.yml',
-        '.github/ISSUE_TEMPLATE/other_issue.yml',
-        '.github/PULL_REQUEST_TEMPLATE.md',
-      ]),
-    )
-    expect(await readFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), 'utf8')).toBe('# User Guide\n')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.yml'), 'utf8')).toContain(
-      'maa-addon-test 版本 / maa-addon-test Version',
-    )
-    expect(await readFile(join(root, 'maa-addon-test', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')).toContain(
-      '验证 / Validation',
-    )
-    expect(dependabotResult.written).toContain('.github/dependabot.yml')
-    const pipelineDependabot = await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')
-    expect(pipelineDependabot).toContain('package-ecosystem: npm')
-    expect(pipelineDependabot).toContain('interval: daily')
-    expect(pipelineDependabot).toContain('default-days: 1')
-    expect(pipelineDependabot).not.toContain('package-ecosystem: uv')
-    expect(await readJson(join(root, 'maa-addon-test', 'maa-project.json'))).toMatchObject({
-      addons: {
-        gitCliff: { enabled: true },
-        community: { enabled: true },
-        dependabot: { enabled: true },
-      },
-    })
-    expect(await readJson(join(root, 'maa-addon-test', 'maa-project.lock.json'))).toMatchObject({
-      managedFiles: {
-        '.github/cliff.toml': expect.any(Object),
-        '.github/dependabot.yml': expect.any(Object),
-      },
-      createdFiles: {
-        '.github/ISSUE_TEMPLATE/config.yml': expect.any(Object),
-        '.github/ISSUE_TEMPLATE/bug_report.yml': expect.any(Object),
-        '.github/ISSUE_TEMPLATE/feature_request.yml': expect.any(Object),
-        '.github/ISSUE_TEMPLATE/other_issue.yml': expect.any(Object),
-        '.github/PULL_REQUEST_TEMPLATE.md': expect.any(Object),
-      },
-    })
   })
 
   it('adds uv updates when adding dependabot to an existing agent project', async () => {
@@ -1965,7 +1447,7 @@ jobs:
     expect(report.ok).toBe(false)
     expect(output).toContain('.node-version must pin Node 24')
     expect(output).toContain('.github/workflows/check.yml must use Node 24')
-    expect(output).toContain('create-maa-project --update template')
+    expect(output).toContain('To fix: set .node-version to 24')
   })
 
   it('doctor reports VS Code settings drift with a repair command', async () => {
@@ -1989,7 +1471,7 @@ jobs:
     expect(output).toContain(
       '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
     )
-    expect(output).toContain('create-maa-project --update template')
+    expect(output).toContain('To fix: restore the interface.json schema mapping')
   })
 
   it('doctor reports path and resource config drift', async () => {
@@ -2085,18 +1567,6 @@ export default defineConfig({
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-lint-test' }))
     const projectRoot = join(root, 'maa-lint-test')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('project has pending actions')
-
-    await clearPending(projectRoot, { writePnpmLock: false })
 
     await expect(
       execFileAsync(
@@ -2248,7 +1718,7 @@ jobs:
 
     const report = await runDoctor(projectRoot)
     expect(report.ok).toBe(false)
-    expect(report.lines.join('\n')).toContain('Managed file is missing: tools/schema/interface.schema.json')
+    expect(report.lines.join('\n')).toContain('Required project file is missing: tools/schema/interface.schema.json')
 
     await expect(
       execFileAsync(
@@ -2258,7 +1728,7 @@ jobs:
         ],
         { cwd: projectRoot },
       ),
-    ).rejects.toThrow('managed file is missing: tools/schema/interface.schema.json')
+    ).rejects.toThrow('required project file is missing: tools/schema/interface.schema.json')
 
     await expect(runSchemaValidator(projectRoot)).rejects.toThrow('interface.schema.json')
   })
@@ -2270,203 +1740,6 @@ jobs:
     const projectRoot = join(root, 'maa-agent-schema-test')
 
     await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
-  })
-
-  it('generated release dry-run smoke checks package references', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-release-test' }))
-    const projectRoot = join(root, 'maa-release-test')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-          '--dry-run',
-        ],
-        {
-          cwd: projectRoot,
-        },
-      ),
-    ).rejects.toThrow('release cannot run while project has pending actions')
-
-    await clearPending(projectRoot)
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-          '--dry-run',
-        ],
-        {
-          cwd: projectRoot,
-        },
-      ),
-    ).resolves.toBeDefined()
-    expectReleaseScriptTargets(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8'))
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF: '', GITHUB_REF_NAME: '' },
-        },
-      ),
-    ).rejects.toThrow('release build requires a SemVer Git tag')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-          '--dry-run',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF: 'refs/tags/nightly', GITHUB_REF_NAME: '' },
-        },
-      ),
-    ).rejects.toThrow('release tag must be a SemVer tag')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
-        },
-      ),
-    ).resolves.toBeDefined()
-
-    const runtimePlatform = currentRuntimePlatformForTest()
-    const guiEntrypoint = mfaaEntrypointForTest('maa-release-test', runtimePlatform)
-    const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
-    await mkdir(join(guiRoot, 'runtimes', runtimePlatform, 'native'), { recursive: true })
-    await writeFile(
-      join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
-      'gui',
-      'utf8',
-    )
-    await writeFile(join(guiRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'gui-fw', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
-        },
-      ),
-    ).rejects.toThrow('release package path is missing: runtimes')
-
-    await mkdir(join(projectRoot, 'runtimes', runtimePlatform, 'native'), { recursive: true })
-    await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
-    await mkdir(join(projectRoot, 'plugins'), { recursive: true })
-    await writeFile(join(projectRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'maafw-fw', 'utf8')
-    await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
-        },
-      ),
-    ).resolves.toBeDefined()
-    const packageInterface = (await readJson(join(projectRoot, 'dist/package-mfaa/interface.json'))) as Record<
-      string,
-      unknown
-    >
-    const sourceInterface = (await readJson(join(projectRoot, 'interface.json'))) as Record<string, unknown>
-    expect(packageInterface.version).toBe('v1.2.3')
-    expect(packageInterface.icon).toBe('logo.ico')
-    expect(packageInterface.$schema).toBeUndefined()
-    expect(sourceInterface.version).toBe('v0.1.0')
-    expect(sourceInterface.$schema).toBeUndefined()
-    expect((await readdir(join(projectRoot, 'dist/package-mfaa'))).sort()).toEqual(
-      [
-        'LICENSE',
-        'README.md',
-        'interface.json',
-        'libs',
-        'logo.ico',
-        guiEntrypoint,
-        'plugins',
-        'resource',
-        'runtimes',
-        'tasks',
-      ].sort(),
-    )
-    for (const devPath of [
-      '.github',
-      '.vscode',
-      'package.json',
-      'pnpm-lock.yaml',
-      'maa-project.json',
-      'maa-project.lock.json',
-      'tools/schema',
-    ]) {
-      expect(await pathExists(join(projectRoot, 'dist/package-mfaa', devPath))).toBe(false)
-    }
-    expect(await readFile(join(projectRoot, 'dist/package-mfaa/tasks/tutorial.json'), 'utf8')).toContain('Tutorial')
-    expect(await readFile(join(projectRoot, 'dist/package-mfaa', guiEntrypoint), 'utf8')).toBe('gui')
-    expect(
-      await readFile(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/libMaaCore.so'), 'utf8'),
-    ).toBe('maafw-fw')
-    expect(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')).toContain(
-      'const version = releaseTag ?? sourceVersion',
-    )
-
-    const interfacePath = join(projectRoot, 'interface.json')
-    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
-    interfaceJson.import = [
-      './maa-project.json',
-    ]
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-        ],
-        {
-          cwd: projectRoot,
-          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
-        },
-      ),
-    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./maa-project.json')
-
-    interfaceJson.import = [
-      './tasks/missing.json',
-    ]
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/build-release.mjs',
-          '--dry-run',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('release referenced path does not exist')
   })
 
   it('generated release staging rewrites agent child exec without changing source interface', async () => {
@@ -2588,65 +1861,7 @@ jobs:
     expect(sourceInterface.version).toBe('v0.1.0')
   })
 
-  it('diffs and accepts managed local changes', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-diff-test' }))
-    const projectRoot = join(root, 'maa-diff-test')
-    const toolPath = join(projectRoot, 'tools/check-project.mjs')
-    await writeFile(toolPath, `${await readFile(toolPath, 'utf8')}\nconsole.log('local check')\n`, 'utf8')
-
-    const diff = await diffManagedFiles(projectRoot)
-    expect(diff.join('\n')).toContain('--- a/tools/check-project.mjs')
-    expect(diff.join('\n')).toContain("+console.log('local check')")
-
-    const accepted = await acceptManagedChanges(projectRoot, [
-      'tools/check-project.mjs',
-    ])
-    const report = await runDoctor(projectRoot)
-
-    expect(accepted).toEqual([
-      'tools/check-project.mjs',
-    ])
-    expect(report.lines.join('\n')).toContain('Managed file has accepted local changes: tools/check-project.mjs')
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-
-    const lock = (await readJson(join(projectRoot, 'maa-project.lock.json'))) as {
-      managedFiles?: Record<string, { acceptedAt?: string }>
-    }
-    const generatedLint = await readFile(join(projectRoot, 'tools/check-project.mjs'), 'utf8')
-    expect(lock.managedFiles?.['tools/check-project.mjs']?.acceptedAt).toEqual(expect.any(String))
-    expect(generatedLint).toContain('Managed file has accepted local changes')
-    expect(generatedLint).toContain('Future template updates may conflict with this file.')
-  })
-
-  it('does not diff or accept project-owned local files as managed files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-project-owned-files' }))
-    const projectRoot = join(root, 'maa-project-owned-files')
-    const packagePath = join(projectRoot, 'package.json')
-    const interfacePath = join(projectRoot, 'interface.json')
-    const packageJson = (await readJson(packagePath)) as Record<string, unknown>
-    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
-    packageJson.private = false
-    interfaceJson.description = 'Local description'
-    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
-
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-    await expect(
-      acceptManagedChanges(projectRoot, [
-        'package.json',
-      ]),
-    ).rejects.toThrow('Not a managed file: package.json')
-  })
-
-  it('doctor reports missing managed files with a repair command', async () => {
+  it('doctor reports missing required project files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-missing-managed' }))
@@ -2657,11 +1872,11 @@ jobs:
     const output = report.lines.join('\n')
 
     expect(report.ok).toBe(false)
-    expect(output).toContain('Managed file is missing: tools/check-project.mjs')
-    expect(output).toContain('restore it from backup or run create-maa-project --update template')
+    expect(output).toContain('Required project file is missing: tools/check-project.mjs')
+    expect(output).toContain('restore it from version control or a project backup')
   })
 
-  it('doctor reports missing pnpm lockfile after node deps pending is cleared', async () => {
+  it('doctor reports a missing pnpm lockfile', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-pnpm-lock-test' }))
@@ -2676,38 +1891,28 @@ jobs:
     expect(output).toContain('To fix: pnpm install')
   })
 
-  it('accepts all changed managed files when no paths are provided', async () => {
+  it('updates schema files explicitly without creating project lock state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-accept-all-test' }))
-    const projectRoot = join(root, 'maa-accept-all-test')
-    const checkPath = join(projectRoot, 'tools/check-project.mjs')
-    const validatePath = join(projectRoot, 'tools/validate-schema.mjs')
-    await writeFile(checkPath, `${await readFile(checkPath, 'utf8')}\nconsole.log('check')\n`, 'utf8')
-    await writeFile(validatePath, `${await readFile(validatePath, 'utf8')}\nconsole.log('schema')\n`, 'utf8')
-
-    const accepted = await acceptManagedChanges(projectRoot, [])
-
-    expect(accepted).toEqual([
-      'tools/check-project.mjs',
-      'tools/validate-schema.mjs',
-    ])
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-  })
-
-  it('backs up project state files before overwriting them', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-backup-test' }))
-    const projectRoot = join(root, 'maa-backup-test')
+    await createProject(defaultOptions({ name: 'maa-schema-update' }))
+    const projectRoot = join(root, 'maa-schema-update')
+    const schemaPath = join(projectRoot, 'tools/schema/interface.schema.json')
+    const expected = await readFile(schemaPath, 'utf8')
+    await writeFile(schemaPath, '{}\n', 'utf8')
     process.chdir(projectRoot)
 
-    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'schema',
+        ],
+      }),
+    )
 
-    expect(await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.lock.json')).toBe(true)
-    expect(await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.json')).toBe(true)
+    expect(await readFile(schemaPath, 'utf8')).toBe(expected)
+    expect(result.written).toContain('tools/schema/interface.schema.json')
+    expect(result.pending).toEqual([])
+    expect(await pathExists(join(projectRoot, 'maa-project.lock.json'))).toBe(false)
   })
 
   it('records remote asset update requests as pending and rejects update all', async () => {
@@ -3438,309 +2643,6 @@ jobs:
     )
   })
 
-  it('downloads OCR model assets from a verified manifest and clears OCR pending', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-ocr-update' }))
-    const projectRoot = join(root, 'maa-ocr-update')
-    process.chdir(projectRoot)
-
-    const assets = new Map([
-      [
-        'https://example.test/det.onnx',
-        Buffer.from([
-          0,
-          1,
-          2,
-          3,
-        ]),
-      ],
-      [
-        'https://example.test/rec.onnx',
-        Buffer.from([
-          4,
-          5,
-          6,
-        ]),
-      ],
-      [
-        'https://example.test/keys.txt',
-        Buffer.from('hello\nworld\n'),
-      ],
-      [
-        'https://example.test/README.md',
-        Buffer.from('# OCR\n'),
-      ],
-    ])
-    const progress: string[] = []
-    const result = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'ocr-models',
-        ],
-      }),
-      {
-        ocrManifestResolver: async () => ({
-          schemaVersion: 1,
-          assets: [
-            {
-              path: 'det.onnx',
-              url: 'https://example.test/det.onnx',
-              sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-              size: 4,
-            },
-            {
-              path: 'rec.onnx',
-              url: 'https://example.test/rec.onnx',
-              sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
-              size: 3,
-            },
-            {
-              path: 'keys.txt',
-              url: 'https://example.test/keys.txt',
-              sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
-              size: 12,
-            },
-            {
-              path: 'README.md',
-              url: 'https://example.test/README.md',
-              sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
-              size: 6,
-            },
-          ],
-        }),
-        assetDownloader: async (url) => {
-          const content = assets.get(url)
-          if (!content) throw new Error(`unexpected URL: ${url}`)
-          return content
-        },
-        onProgress: (message) => progress.push(message),
-      },
-    )
-
-    expect(result.written).toEqual(
-      expect.arrayContaining([
-        'resource/base/model/ocr/det.onnx',
-        'resource/base/model/ocr/rec.onnx',
-        'resource/base/model/ocr/keys.txt',
-        'resource/base/model/ocr/README.md',
-        'resource/base/model/ocr/manifest.json',
-      ]),
-    )
-    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
-    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
-      assets.get('https://example.test/det.onnx'),
-    )
-    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
-      assets: expect.arrayContaining([
-        expect.objectContaining({
-          path: 'det.onnx',
-          sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
-          size: 4,
-        }),
-      ]),
-    })
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-    expect(progress).toEqual([
-      'Downloading OCR models...',
-      'OCR models downloaded.',
-    ])
-  })
-
-  it('updates embedded schema baseline and clears schema pending', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-schema-update' }))
-    const projectRoot = join(root, 'maa-schema-update')
-    const lockPath = join(projectRoot, 'maa-project.lock.json')
-    const lock = (await readJson(lockPath)) as {
-      pending?: Array<{ kind: string; reason: string; command: string }>
-    }
-    lock.pending = [
-      ...(lock.pending ?? []),
-      {
-        kind: 'schema',
-        reason: 'Schema baseline update is pending.',
-        command: 'create-maa-project --update schema',
-      },
-    ]
-    await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
-    await rm(join(projectRoot, 'tools/schema/interface.schema.json'))
-    process.chdir(projectRoot)
-
-    const result = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'schema',
-        ],
-      }),
-    )
-
-    expect(result.written).toContain('tools/schema/interface.schema.json')
-    expect(result.pending.some((item) => item.kind === 'schema')).toBe(false)
-    expect(await readJson(join(projectRoot, 'tools/schema/interface.schema.json'))).toMatchObject({
-      title: 'MaaFramework Project Interface V2',
-    })
-  })
-
-  it('previews schema updates without writing files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-schema-preview' }))
-    const projectRoot = join(root, 'maa-schema-preview')
-    const schemaPath = join(projectRoot, 'tools/schema/interface.schema.json')
-    await writeFile(schemaPath, '{"title":"old schema"}\n', 'utf8')
-    process.chdir(projectRoot)
-
-    const preview = await previewTemplateUpdate(
-      defaultOptions({
-        update: [
-          'schema',
-        ],
-        force: true,
-      }),
-    )
-
-    expect(preview.join('\n')).toContain('--- a/tools/schema/interface.schema.json')
-    expect(preview.join('\n')).toContain('"old schema"')
-    expect(await readFile(schemaPath, 'utf8')).toBe('{"title":"old schema"}\n')
-  })
-
-  it('runs dependency updates and clears resolved pending items', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    const commands: Array<{ root: string; command: string; args: string[] }> = []
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-deps-update', template: 'agent' }))
-    const projectRoot = join(root, 'maa-deps-update')
-    process.chdir(projectRoot)
-
-    const result = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'node-deps',
-          'python-deps',
-        ],
-      }),
-      {
-        commandRunner: async (cwd, command, args) => {
-          commands.push({ root: cwd, command, args })
-          if (command === 'pnpm') {
-            await writeFile(join(cwd, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
-          }
-          if (command === 'uv' && args[0] === 'lock') {
-            await writeFile(join(cwd, 'uv.lock'), '# updated uv lock\n', 'utf8')
-          }
-          if (command === 'uv' && args[0] === 'run') {
-            await writeFile(
-              join(cwd, 'requirements.in'),
-              '# Generated from [project].dependencies in pyproject.toml.\nloguru\nmaafw\n',
-              'utf8',
-            )
-          }
-          if (command === 'uv' && args[0] === 'export') {
-            await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\r\n', 'utf8')
-          }
-        },
-      },
-    )
-
-    expect(commands).toEqual([
-      {
-        root: projectRoot,
-        command: 'pnpm',
-        args: [
-          'install',
-        ],
-      },
-      {
-        root: projectRoot,
-        command: 'uv',
-        args: [
-          'run',
-          '--no-project',
-          '--python',
-          '3.13',
-          'python',
-          '.create-maa-project/sync-requirements-in.py',
-        ],
-      },
-      {
-        root: projectRoot,
-        command: 'uv',
-        args: [
-          'lock',
-        ],
-      },
-      {
-        root: projectRoot,
-        command: 'uv',
-        args: [
-          'export',
-          '--format',
-          'requirements-txt',
-          '--no-hashes',
-          '--no-emit-project',
-          '--no-group',
-          'dev',
-          '--no-annotate',
-          '--output-file',
-          'requirements.txt',
-        ],
-      },
-    ])
-    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toContain(
-      '# Dependabot: use --universal when updating this file.',
-    )
-    expect(result.written).toEqual(
-      expect.arrayContaining([
-        'pnpm-lock.yaml',
-        'uv.lock',
-        'requirements.in',
-        'requirements.txt',
-        'maa-project.json',
-        'maa-project.lock.json',
-      ]),
-    )
-    expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
-    expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
-    await writeFile(
-      join(projectRoot, 'requirements.txt'),
-      '# Dependabot: use --universal when updating this file.\nmaa-fw==0.0.0\n',
-      'utf8',
-    )
-    await clearPending(projectRoot)
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-
-    const templateUpdate = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'template',
-        ],
-      }),
-    )
-    expect(templateUpdate.written).not.toContain('uv.lock')
-    expect(templateUpdate.written).not.toContain('requirements.in')
-    expect(templateUpdate.written).not.toContain('requirements.txt')
-    expect(await readFile(join(projectRoot, 'uv.lock'), 'utf8')).toBe('# updated uv lock\n')
-    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toBe(
-      '# Dependabot: use --universal when updating this file.\nmaa-fw==0.0.0\n',
-    )
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).resolves.toBeDefined()
-  })
-
   it('rejects python dependency updates outside Agent projects', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
@@ -3780,139 +2682,6 @@ jobs:
     ).rejects.toThrow('--update python-runtime requires an Agent project')
   })
 
-  it('previews template updates without writing files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-template-preview' }))
-    const projectRoot = join(root, 'maa-template-preview')
-    process.chdir(projectRoot)
-    const toolPath = join(projectRoot, 'tools/check-project.mjs')
-    await writeFile(toolPath, "console.log('old template')\n", 'utf8')
-    await acceptManagedChanges(projectRoot, [
-      'tools/check-project.mjs',
-    ])
-
-    const preview = await previewTemplateUpdate(
-      defaultOptions({
-        update: [
-          'template',
-        ],
-        force: true,
-      }),
-    )
-
-    expect(preview.join('\n')).toContain('--- a/tools/check-project.mjs')
-    expect(preview.join('\n')).toContain("console.log('old template')")
-    expect(await readFile(toolPath, 'utf8')).toBe("console.log('old template')\n")
-  })
-
-  it('rejects unsupported template diff target combinations before writing', async () => {
-    await expect(
-      previewTemplateUpdate(
-        defaultOptions({
-          update: [
-            'template',
-            'schema',
-          ],
-        }),
-      ),
-    ).rejects.toThrow('--update <target> --diff is only supported for --update template or --update schema')
-    await expect(
-      previewTemplateUpdate(
-        defaultOptions({
-          update: [
-            'maafw',
-          ],
-        }),
-      ),
-    ).rejects.toThrow('--update <target> --diff is only supported for --update template or --update schema')
-  })
-
-  it('skips local template changes unless force is used', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-template-update' }))
-    const projectRoot = join(root, 'maa-template-update')
-    process.chdir(projectRoot)
-    const toolPath = join(projectRoot, 'tools/check-project.mjs')
-    await writeFile(toolPath, "console.log('local change')\n", 'utf8')
-
-    const skipped = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'template',
-        ],
-      }),
-    )
-
-    expect(skipped.written).not.toContain('tools/check-project.mjs')
-    expect(skipped.skipped.join('\n')).toContain('tools/check-project.mjs: local changes')
-    expect(await readFile(toolPath, 'utf8')).toBe("console.log('local change')\n")
-
-    const forced = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'template',
-        ],
-        force: true,
-      }),
-    )
-
-    expect(forced.written).toContain('tools/check-project.mjs')
-    expect(await readFile(toolPath, 'utf8')).toContain('project structure looks valid')
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-  })
-
-  it('refreshes stale template lock entries when files already match the current template', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-template-refresh' }))
-    const projectRoot = join(root, 'maa-template-refresh')
-    process.chdir(projectRoot)
-    const releasePath = '.github/workflows/release.yml'
-    const lockPath = join(projectRoot, 'maa-project.lock.json')
-    const lock = (await readJson(lockPath)) as {
-      managedFiles: Record<string, { hash: string; templateHash?: string }>
-    }
-    lock.managedFiles[releasePath] = {
-      hash: '0'.repeat(64),
-      templateHash: '0'.repeat(64),
-    }
-    await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
-
-    expect(
-      await previewTemplateUpdate(
-        defaultOptions({
-          update: [
-            'template',
-          ],
-        }),
-      ),
-    ).toContain(`[REFRESH] ${releasePath}`)
-
-    const result = await recordUpdateRequests(
-      defaultOptions({
-        update: [
-          'template',
-        ],
-      }),
-    )
-    const nextLock = (await readJson(lockPath)) as {
-      managedFiles: Record<string, { hash: string; templateHash?: string }>
-    }
-    const currentHash = managedFileHash(releasePath, await readFile(join(projectRoot, releasePath), 'utf8'))
-
-    expect(result.skipped.join('\n')).not.toContain(`${releasePath}: local changes`)
-    expect(result.written).toContain(releasePath)
-    expect(nextLock.managedFiles[releasePath]?.hash).toBe(currentHash)
-    expect(nextLock.managedFiles[releasePath]?.templateHash).toBe(currentHash)
-    expect(await diffManagedFiles(projectRoot)).toEqual([
-      'No managed file changes.',
-    ])
-  })
-
   it('protects non-empty target directories without force', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     const target = join(root, 'existing')
@@ -3945,48 +2714,6 @@ jobs:
     expect(result.written).toContain('interface.json')
     expect(await readFile(join(target, 'note.txt'), 'utf8')).toBe('important')
     expect(await findBackedUpFile(join(target, '.create-maa-project/backups'), 'note.txt')).toBe(true)
-  })
-
-  it('preserves one-time files in existing git directories', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    const target = join(root, 'existing-git')
-    await mkdir(join(target, '.git'), { recursive: true })
-    await writeFile(join(target, 'README.md'), '# User README\n', 'utf8')
-    await writeFile(join(target, 'LICENSE'), 'User license\n', 'utf8')
-    await writeFile(join(target, '.gitignore'), 'custom-cache/\n', 'utf8')
-    process.chdir(root)
-
-    const result = await createProject(defaultOptions({ name: 'existing-git', force: true }))
-
-    const gitignore = await readFile(join(target, '.gitignore'), 'utf8')
-    expect(result.skipped).toEqual(
-      expect.arrayContaining([
-        'README.md',
-        'LICENSE',
-      ]),
-    )
-    expect(await readFile(join(target, 'README.md'), 'utf8')).toBe('# User README\n')
-    expect(await readFile(join(target, 'LICENSE'), 'utf8')).toBe('User license\n')
-    expect(gitignore).toBe('custom-cache/\n')
-    expect(await diffManagedFiles(target)).toEqual([
-      'No managed file changes.',
-    ])
-
-    await writeFile(join(target, '.gitignore'), `${gitignore}local-only/\n`, 'utf8')
-    await clearPending(target)
-
-    expect(await diffManagedFiles(target)).toEqual([
-      'No managed file changes.',
-    ])
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: target },
-      ),
-    ).resolves.toBeDefined()
   })
 
   it('initializes git without committing while generated project has pending actions', async () => {
@@ -4130,6 +2857,894 @@ jobs:
     ])
     expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe('# Restored\n')
   })
+  it('creates repository tooling project under resource/base', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const result = await createProject(defaultOptions({ name: 'Maa Test' }))
+
+    expect(result.config.project.slug).toBe('maa-test')
+    expect(result.written).toContain('interface.json')
+    expect(result.written).toContain('tasks/tutorial.json')
+    expect(result.written).toContain('resource/base/pipeline/tutorial.json')
+    expect(result.written).toContain('tools/schema/interface.schema.json')
+    expect(result.written).toContain('tools/schema/schema-manifest.json')
+    expect(result.written).not.toContain('tools/sync-schema.mjs')
+    expect(result.written).not.toContain('.github/workflows/schema-sync.yml')
+    expect(result.written).toContain('resource/base/model/ocr/det.onnx')
+    expect(result.written).toContain('resource/base/model/ocr/rec.onnx')
+    expect(result.written).toContain('resource/base/model/ocr/keys.txt')
+    expect(result.written).toContain('resource/base/model/ocr/README.md')
+    const tutorial = await readFile(join(root, 'Maa Test', 'resource/base/pipeline/tutorial.json'), 'utf8')
+    const defaultPipeline = await readFile(join(root, 'Maa Test', 'resource/base/default_pipeline.json'), 'utf8')
+    const readme = await readFile(join(root, 'Maa Test', 'README.md'), 'utf8')
+    const readmeEn = await readFile(join(root, 'Maa Test', 'README.en.md'), 'utf8')
+    const license = await readFile(join(root, 'Maa Test', 'LICENSE'), 'utf8')
+    const syncRuntime = await readFile(join(root, 'Maa Test', 'tools/sync-runtime.mjs'), 'utf8')
+    const emptyImage = await readFile(join(root, 'Maa Test', 'resource/base/image/empty.png'))
+    const interfaceSchema = await readJson(join(root, 'Maa Test', 'tools/schema/interface.schema.json'))
+    const vscodeSettings = await readJson(join(root, 'Maa Test', '.vscode/settings.json'))
+    expect(readme).toContain('由 create-maa-project 生成')
+    expect(readme).toContain('README.en.md')
+    expect(readmeEn).toContain('MaaFW project generated')
+    expect(readmeEn).toContain('README.md')
+    expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
+    expect(license).toContain('Version 3, 19 November 2007')
+    expect(license).not.toContain('Replace this placeholder')
+    expect(syncRuntime).toContain('create-maa-project@latest')
+    expect(syncRuntime).toContain('"maafw"')
+    expect(syncRuntime).toContain('"runtime:mfa"')
+    expect(emptyImage.subarray(0, 8)).toEqual(
+      Buffer.from([
+        0x89,
+        0x50,
+        0x4e,
+        0x47,
+        0x0d,
+        0x0a,
+        0x1a,
+        0x0a,
+      ]),
+    )
+    expect(defaultPipeline).toContain('"rate_limit": 1000')
+    expect(defaultPipeline).toContain('"recognition": "OCR"')
+    expect(defaultPipeline).not.toMatch(/"next"\s*:/)
+    expect(tutorial.indexOf('"recognition"')).toBeLessThan(tutorial.indexOf('"roi"'))
+    expect(tutorial.indexOf('"roi"')).toBeLessThan(tutorial.indexOf('"expected"'))
+    expect(tutorial.indexOf('"expected"')).toBeLessThan(tutorial.indexOf('"action"'))
+    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).toMatchObject({
+      name: 'maa-test',
+      label: 'Maa Test',
+      icon: 'logo.ico',
+      controller: [
+        { name: 'Android', label: 'Android / Emulator', type: 'Adb' },
+      ],
+      resource: [
+        {
+          name: 'base',
+          path: [
+            './resource/base',
+          ],
+        },
+      ],
+      import: [
+        './tasks/tutorial.json',
+      ],
+    })
+    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('task')
+    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('$schema')
+    expect(interfaceSchema).toMatchObject({
+      title: 'MaaFramework Project Interface V2',
+      properties: {
+        interface_version: {
+          const: 2,
+        },
+      },
+    })
+    expect(vscodeSettings).toMatchObject({
+      '[json]': {
+        'editor.defaultFormatter': 'esbenp.prettier-vscode',
+      },
+      '[jsonc]': {
+        'editor.defaultFormatter': 'esbenp.prettier-vscode',
+      },
+      'files.associations': {
+        '*.json': 'jsonc',
+        '*.jsonc': 'jsonc',
+      },
+      'json.schemas': expect.arrayContaining([
+        expect.objectContaining({
+          fileMatch: [
+            '/interface.json',
+          ],
+          url: './tools/schema/interface.schema.json',
+        }),
+      ]),
+    })
+    expect(await readJson(join(root, 'Maa Test', 'maa-project.json'))).toMatchObject({
+      schemaVersion: 2,
+      maafw: {
+        channel: 'stable',
+        version: '',
+      },
+      controller: {
+        kinds: [
+          'Adb',
+        ],
+      },
+      resources: [
+        { path: 'resource/base' },
+      ],
+    })
+    const packageJson = (await readJson(join(root, 'Maa Test', 'package.json'))) as {
+      license?: string
+      scripts?: Record<string, string>
+    }
+    expect(packageJson.license).toBe('AGPL-3.0-or-later')
+    expect(packageJson.scripts).not.toHaveProperty('sync:schema')
+    const customActionSchema = await readJson(join(root, 'Maa Test', 'tools/schema/custom.action.schema.json'))
+    const customRecognitionSchema = await readJson(
+      join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json'),
+    )
+    expect(customActionSchema).toMatchObject({
+      properties: {
+        custom_action: {},
+        custom_action_param: {},
+      },
+    })
+    expect(customActionSchema).not.toHaveProperty('$defs')
+    expect(customRecognitionSchema).toMatchObject({
+      properties: {
+        custom_recognition: {},
+        custom_recognition_param: {},
+      },
+    })
+    expect(customRecognitionSchema).not.toHaveProperty('$defs')
+    const schemaManifest = (await readJson(join(root, 'Maa Test', 'tools/schema/schema-manifest.json'))) as {
+      files: Array<{ path: string }>
+    }
+    expect(schemaManifest.files.map((file: { path: string }) => file.path)).not.toEqual(
+      expect.arrayContaining([
+        'tools/schema/custom.action.schema.json',
+        'tools/schema/custom.recognition.schema.json',
+      ]),
+    )
+    expect(await pathExists(join(root, 'Maa Test', 'maa-project.lock.json'))).toBe(false)
+    expect(await readJson(join(root, 'Maa Test', '.vscode/extensions.json'))).toMatchObject({
+      recommendations: expect.arrayContaining([
+        'windsland52.maa-log-analyzer',
+      ]),
+    })
+    const editorconfig = await readFile(join(root, 'Maa Test', '.editorconfig'), 'utf8')
+    expect(editorconfig).toContain('[*.{yml,yaml,json,jsonc}]')
+    const gitattributes = await readFile(join(root, 'Maa Test', '.gitattributes'), 'utf8')
+    expect(gitattributes).toContain('interface.json linguist-language=JSON-with-Comments')
+    expect(gitattributes).toContain('resource/**/default_pipeline.json linguist-language=JSON-with-Comments')
+    expect(gitattributes).toContain('resource/**/pipeline/**/*.json linguist-language=JSON-with-Comments')
+    expect(await pathExists(join(root, 'Maa Test', '.github/workflows/schema-sync.yml'))).toBe(false)
+    expect(await pathExists(join(root, 'Maa Test', 'tools/sync-schema.mjs'))).toBe(false)
+    const checkWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/check.yml'), 'utf8')
+    const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
+    expect(checkWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
+      checkWorkflow.indexOf('pnpm install --frozen-lockfile'),
+    )
+    expect(releaseWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
+      releaseWorkflow.indexOf('pnpm install --frozen-lockfile'),
+    )
+    expect(releaseWorkflow).toContain('pnpm release:dry-run')
+    expect(releaseWorkflow).toContain("if: github.event_name == 'workflow_dispatch'")
+    expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
+    expectReleaseWorkflowTargets(releaseWorkflow)
+    expect(releaseWorkflow).toContain(
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
+    )
+    expect(releaseWorkflow).toContain('7z a "../$archive" .')
+    expect(releaseWorkflow).toContain('tar -czf "../$archive" .')
+    expect(releaseWorkflow).toContain('tar -tzvf "../$archive" > "../$archive.manifest"')
+    expect(releaseWorkflow).toContain('package_dirs=(dist/package-*/)')
+    expect(releaseWorkflow).toContain('if (( ${#package_dirs[@]} == 0 )); then')
+    expect(releaseWorkflow).toContain('for pkg_dir in "${package_dirs[@]}"; do')
+    expect(releaseWorkflow).toContain('if-no-files-found: error')
+    expect(releaseWorkflow).toContain('- name: Apply app icon')
+    expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
+    expect(releaseWorkflow).toContain('cp logo.ico "$pkg_dir/logo.ico"')
+    expect(releaseWorkflow).toContain('rcedit-x64.exe')
+    expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
+    expect(releaseWorkflow).toContain('actions/download-artifact@v7')
+    expect(releaseWorkflow).toContain('generate_release_notes: true')
+    expect(releaseWorkflow).toContain('release-assets/*.zip')
+    expect(releaseWorkflow).toContain('release-assets/*.tar.gz')
+    expect(releaseWorkflow).toContain('- name: Dispatch post-release hooks')
+    expect(releaseWorkflow).toContain('event_type=create-maa-project-release')
+    expect(releaseWorkflow).toContain('client_payload[tag]="$GITHUB_REF_NAME"')
+    expect(releaseWorkflow).not.toContain('files: release-assets/*')
+    expect(releaseWorkflow).not.toContain('orhun/git-cliff-action@v4')
+    expect(releaseWorkflow).not.toContain('package_paths=')
+    expect(releaseWorkflow).not.toContain('|| true')
+    expect(result.pending).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'node-deps',
+          command: 'create-maa-project --update node-deps',
+        }),
+        expect.objectContaining({
+          kind: 'ocr-model',
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
+    )
+    const doctorOutput = (await runDoctor(join(root, 'Maa Test'))).lines.join('\n')
+    expect(doctorOutput).toContain('pnpm-lock.yaml is missing')
+    expect(doctorOutput).toContain('To fix: pnpm install')
+  })
+  it('migrates v1 release tags into v2 channel and version selectors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-migrate-selector' }))
+    const projectRoot = join(root, 'maa-migrate-selector')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const legacy = (await readJson(configPath)) as Record<string, unknown> & {
+      maafw: Record<string, unknown>
+      runtime: { mfa: Record<string, unknown> }
+    }
+    legacy.schemaVersion = 1
+    legacy.maafw = { channel: 'v5.11.0-rc.1' }
+    legacy.runtime.mfa = { channel: 'latest', enabled: true }
+    await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8')
+    await expect(readProjectConfig(projectRoot)).resolves.toMatchObject({
+      schemaVersion: 2,
+      maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
+      runtime: { mfa: { channel: 'stable', version: '' } },
+    })
+  })
+  it('downloads OCR model assets during project creation and clears OCR pending', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const assets = new Map([
+      [
+        'https://example.test/det.onnx',
+        Buffer.from([
+          0,
+          1,
+          2,
+          3,
+        ]),
+      ],
+      [
+        'https://example.test/rec.onnx',
+        Buffer.from([
+          4,
+          5,
+          6,
+        ]),
+      ],
+      [
+        'https://example.test/keys.txt',
+        Buffer.from('hello\nworld\n'),
+      ],
+      [
+        'https://example.test/README.md',
+        Buffer.from('# OCR\n'),
+      ],
+    ])
+    const progress: string[] = []
+    const downloadProgress: DownloadProgress[] = []
+    const result = await createProject(defaultOptions({ name: 'maa-create-ocr' }), {
+      downloadOcrModels: true,
+      ocrManifestResolver: async () => ({
+        schemaVersion: 1,
+        assets: [
+          {
+            path: 'det.onnx',
+            url: 'https://example.test/det.onnx',
+            sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
+            size: 4,
+          },
+          {
+            path: 'rec.onnx',
+            url: 'https://example.test/rec.onnx',
+            sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
+            size: 3,
+          },
+          {
+            path: 'keys.txt',
+            url: 'https://example.test/keys.txt',
+            sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
+            size: 12,
+          },
+          {
+            path: 'README.md',
+            url: 'https://example.test/README.md',
+            sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
+            size: 6,
+          },
+        ],
+      }),
+      assetDownloader: async (url, options) => {
+        const content = assets.get(url)
+        if (!content) throw new Error(`unexpected URL: ${url}`)
+        const firstChunk = Math.max(1, Math.floor(content.byteLength / 2))
+        options?.onProgress?.({
+          url,
+          downloadedBytes: firstChunk,
+          totalBytes: content.byteLength,
+        })
+        options?.onProgress?.({
+          url,
+          downloadedBytes: content.byteLength,
+          totalBytes: content.byteLength,
+        })
+        return content
+      },
+      onProgress: (message) => progress.push(message),
+      onDownloadProgress: (event) => downloadProgress.push(event),
+    })
+
+    const projectRoot = join(root, 'maa-create-ocr')
+    expect(result.written).toEqual(
+      expect.arrayContaining([
+        'resource/base/model/ocr/det.onnx',
+        'resource/base/model/ocr/rec.onnx',
+        'resource/base/model/ocr/keys.txt',
+        'resource/base/model/ocr/README.md',
+        'resource/base/model/ocr/manifest.json',
+      ]),
+    )
+    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
+      assets.get('https://example.test/det.onnx'),
+    )
+    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
+      assets: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'det.onnx',
+          sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
+          size: 4,
+        }),
+      ]),
+    })
+    expect(progress).toEqual([
+      'Downloading OCR models...',
+      'OCR models downloaded.',
+    ])
+    expect(downloadProgress).toContainEqual(
+      expect.objectContaining({
+        path: 'det.onnx',
+        downloadedBytes: 2,
+        totalBytes: 25,
+      }),
+    )
+    expect(downloadProgress.at(-1)).toMatchObject({
+      path: 'README.md',
+      downloadedBytes: 25,
+      totalBytes: 25,
+    })
+    const doctorOutput = (await runDoctor(projectRoot)).lines.join('\n')
+    expect(doctorOutput).not.toContain('create-maa-project --update ocr-models')
+    expect(doctorOutput).not.toContain('Managed file changed since last accepted baseline: resource/base/model/ocr')
+  })
+  it('adds git-cliff, community, and dependabot incrementally', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-addon-test' }))
+    process.chdir(join(root, 'maa-addon-test'))
+
+    await writeFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), '# User Changelog\n', 'utf8')
+    await writeFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), '# User Guide\n', 'utf8')
+    const gitCliffResult = await addGitCliff(
+      defaultOptions({
+        add: [
+          'git-cliff',
+        ],
+      }),
+    )
+    const communityResult = await addCommunity(
+      defaultOptions({
+        add: [
+          'community',
+        ],
+      }),
+    )
+    const dependabotResult = await addDependabot(
+      defaultOptions({
+        add: [
+          'dependabot',
+        ],
+      }),
+    )
+
+    expect(gitCliffResult.written).toEqual(
+      expect.arrayContaining([
+        '.github/cliff.toml',
+        '.github/workflows/release.yml',
+      ]),
+    )
+    expect(gitCliffResult.skipped).not.toContain('CHANGELOG.md')
+    expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe('# User Changelog\n')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('新功能 | Features')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'body_path: release-assets/CHANGES.md',
+    )
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
+      'GITHUB_REPO: ${{ github.repository }}',
+    )
+    expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).not.toContain(
+      'orhun/git-cliff-action@v4',
+    )
+    expect(communityResult.skipped).toContain('CONTRIBUTING.md')
+    expect(communityResult.written).toEqual(
+      expect.arrayContaining([
+        '.github/ISSUE_TEMPLATE/config.yml',
+        '.github/ISSUE_TEMPLATE/bug_report.yml',
+        '.github/ISSUE_TEMPLATE/feature_request.yml',
+        '.github/ISSUE_TEMPLATE/other_issue.yml',
+        '.github/PULL_REQUEST_TEMPLATE.md',
+      ]),
+    )
+    expect(await readFile(join(root, 'maa-addon-test', 'CONTRIBUTING.md'), 'utf8')).toBe('# User Guide\n')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/ISSUE_TEMPLATE/bug_report.yml'), 'utf8')).toContain(
+      'maa-addon-test 版本 / maa-addon-test Version',
+    )
+    expect(await readFile(join(root, 'maa-addon-test', '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')).toContain(
+      '验证 / Validation',
+    )
+    expect(dependabotResult.written).toContain('.github/dependabot.yml')
+    const pipelineDependabot = await readFile(join(root, 'maa-addon-test', '.github/dependabot.yml'), 'utf8')
+    expect(pipelineDependabot).toContain('package-ecosystem: npm')
+    expect(pipelineDependabot).toContain('interval: daily')
+    expect(pipelineDependabot).toContain('default-days: 1')
+    expect(pipelineDependabot).not.toContain('package-ecosystem: uv')
+    expect(await readJson(join(root, 'maa-addon-test', 'maa-project.json'))).toMatchObject({
+      addons: {
+        gitCliff: { enabled: true },
+        community: { enabled: true },
+        dependabot: { enabled: true },
+      },
+    })
+  })
+  it('generated release dry-run smoke checks package references', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-release-test' }))
+    const projectRoot = join(root, 'maa-release-test')
+
+    await clearPending(projectRoot)
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+          '--dry-run',
+        ],
+        {
+          cwd: projectRoot,
+        },
+      ),
+    ).resolves.toBeDefined()
+    expectReleaseScriptTargets(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8'))
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF: '', GITHUB_REF_NAME: '' },
+        },
+      ),
+    ).rejects.toThrow('release build requires a SemVer Git tag')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+          '--dry-run',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF: 'refs/tags/nightly', GITHUB_REF_NAME: '' },
+        },
+      ),
+    ).rejects.toThrow('release tag must be a SemVer tag')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
+    ).resolves.toBeDefined()
+
+    const runtimePlatform = currentRuntimePlatformForTest()
+    const guiEntrypoint = mfaaEntrypointForTest('maa-release-test', runtimePlatform)
+    const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
+    await mkdir(join(guiRoot, 'runtimes', runtimePlatform, 'native'), { recursive: true })
+    await writeFile(
+      join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'),
+      'gui',
+      'utf8',
+    )
+    await writeFile(join(guiRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'gui-fw', 'utf8')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
+    ).rejects.toThrow('release package path is missing: runtimes')
+
+    await mkdir(join(projectRoot, 'runtimes', runtimePlatform, 'native'), { recursive: true })
+    await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
+    await mkdir(join(projectRoot, 'plugins'), { recursive: true })
+    await writeFile(join(projectRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'maafw-fw', 'utf8')
+    await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
+    ).resolves.toBeDefined()
+    const packageInterface = (await readJson(join(projectRoot, 'dist/package-mfaa/interface.json'))) as Record<
+      string,
+      unknown
+    >
+    const sourceInterface = (await readJson(join(projectRoot, 'interface.json'))) as Record<string, unknown>
+    expect(packageInterface.version).toBe('v1.2.3')
+    expect(packageInterface.icon).toBe('logo.ico')
+    expect(packageInterface.$schema).toBeUndefined()
+    expect(sourceInterface.version).toBe('v0.1.0')
+    expect(sourceInterface.$schema).toBeUndefined()
+    expect((await readdir(join(projectRoot, 'dist/package-mfaa'))).sort()).toEqual(
+      [
+        'LICENSE',
+        'README.md',
+        'interface.json',
+        'libs',
+        'logo.ico',
+        guiEntrypoint,
+        'plugins',
+        'resource',
+        'runtimes',
+        'tasks',
+      ].sort(),
+    )
+    for (const devPath of [
+      '.github',
+      '.vscode',
+      'package.json',
+      'pnpm-lock.yaml',
+      'maa-project.json',
+      'tools/schema',
+    ]) {
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa', devPath))).toBe(false)
+    }
+    expect(await readFile(join(projectRoot, 'dist/package-mfaa/tasks/tutorial.json'), 'utf8')).toContain('Tutorial')
+    expect(await readFile(join(projectRoot, 'dist/package-mfaa', guiEntrypoint), 'utf8')).toBe('gui')
+    expect(
+      await readFile(join(projectRoot, 'dist/package-mfaa/runtimes', runtimePlatform, 'native/libMaaCore.so'), 'utf8'),
+    ).toBe('maafw-fw')
+    expect(await readFile(join(projectRoot, 'tools/build-release.mjs'), 'utf8')).toContain(
+      'const version = releaseTag ?? sourceVersion',
+    )
+
+    const interfacePath = join(projectRoot, 'interface.json')
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
+    interfaceJson.import = [
+      './maa-project.json',
+    ]
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+        ],
+        {
+          cwd: projectRoot,
+          env: { ...process.env, GITHUB_REF_NAME: 'v1.2.3' },
+        },
+      ),
+    ).rejects.toThrow('release package smoke failed: referenced path is missing: ./maa-project.json')
+
+    interfaceJson.import = [
+      './tasks/missing.json',
+    ]
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/build-release.mjs',
+          '--dry-run',
+        ],
+        { cwd: projectRoot },
+      ),
+    ).rejects.toThrow('release referenced path does not exist')
+  })
+  it('backs up project state files before overwriting them', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-backup-test' }))
+    const projectRoot = join(root, 'maa-backup-test')
+    process.chdir(projectRoot)
+
+    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+
+    expect(await findBackedUpFile(join(projectRoot, '.create-maa-project/backups'), 'maa-project.json')).toBe(true)
+  })
+  it('downloads OCR model assets from a verified manifest and clears OCR pending', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-ocr-update' }))
+    const projectRoot = join(root, 'maa-ocr-update')
+    process.chdir(projectRoot)
+
+    const assets = new Map([
+      [
+        'https://example.test/det.onnx',
+        Buffer.from([
+          0,
+          1,
+          2,
+          3,
+        ]),
+      ],
+      [
+        'https://example.test/rec.onnx',
+        Buffer.from([
+          4,
+          5,
+          6,
+        ]),
+      ],
+      [
+        'https://example.test/keys.txt',
+        Buffer.from('hello\nworld\n'),
+      ],
+      [
+        'https://example.test/README.md',
+        Buffer.from('# OCR\n'),
+      ],
+    ])
+    const progress: string[] = []
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+      {
+        ocrManifestResolver: async () => ({
+          schemaVersion: 1,
+          assets: [
+            {
+              path: 'det.onnx',
+              url: 'https://example.test/det.onnx',
+              sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
+              size: 4,
+            },
+            {
+              path: 'rec.onnx',
+              url: 'https://example.test/rec.onnx',
+              sha256: sha256(assets.get('https://example.test/rec.onnx') as Buffer),
+              size: 3,
+            },
+            {
+              path: 'keys.txt',
+              url: 'https://example.test/keys.txt',
+              sha256: sha256(assets.get('https://example.test/keys.txt') as Buffer),
+              size: 12,
+            },
+            {
+              path: 'README.md',
+              url: 'https://example.test/README.md',
+              sha256: sha256(assets.get('https://example.test/README.md') as Buffer),
+              size: 6,
+            },
+          ],
+        }),
+        assetDownloader: async (url) => {
+          const content = assets.get(url)
+          if (!content) throw new Error(`unexpected URL: ${url}`)
+          return content
+        },
+        onProgress: (message) => progress.push(message),
+      },
+    )
+
+    expect(result.written).toEqual(
+      expect.arrayContaining([
+        'resource/base/model/ocr/det.onnx',
+        'resource/base/model/ocr/rec.onnx',
+        'resource/base/model/ocr/keys.txt',
+        'resource/base/model/ocr/README.md',
+        'resource/base/model/ocr/manifest.json',
+      ]),
+    )
+    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
+      assets.get('https://example.test/det.onnx'),
+    )
+    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
+      assets: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'det.onnx',
+          sha256: sha256(assets.get('https://example.test/det.onnx') as Buffer),
+          size: 4,
+        }),
+      ]),
+    })
+    expect(progress).toEqual([
+      'Downloading OCR models...',
+      'OCR models downloaded.',
+    ])
+  })
+  it('runs dependency updates and clears resolved pending items', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const commands: Array<{ root: string; command: string; args: string[] }> = []
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-deps-update', template: 'agent' }))
+    const projectRoot = join(root, 'maa-deps-update')
+    process.chdir(projectRoot)
+
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'node-deps',
+          'python-deps',
+        ],
+      }),
+      {
+        commandRunner: async (cwd, command, args) => {
+          commands.push({ root: cwd, command, args })
+          if (command === 'pnpm') {
+            await writeFile(join(cwd, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
+          }
+          if (command === 'uv' && args[0] === 'lock') {
+            await writeFile(join(cwd, 'uv.lock'), '# updated uv lock\n', 'utf8')
+          }
+          if (command === 'uv' && args[0] === 'run') {
+            await writeFile(
+              join(cwd, 'requirements.in'),
+              '# Generated from [project].dependencies in pyproject.toml.\nloguru\nmaafw\n',
+              'utf8',
+            )
+          }
+          if (command === 'uv' && args[0] === 'export') {
+            await writeFile(join(cwd, 'requirements.txt'), 'maa-fw==0.0.0\r\n', 'utf8')
+          }
+        },
+      },
+    )
+
+    expect(commands).toEqual([
+      {
+        root: projectRoot,
+        command: 'pnpm',
+        args: [
+          'install',
+        ],
+      },
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'run',
+          '--no-project',
+          '--python',
+          '3.13',
+          'python',
+          '.create-maa-project/sync-requirements-in.py',
+        ],
+      },
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'lock',
+        ],
+      },
+      {
+        root: projectRoot,
+        command: 'uv',
+        args: [
+          'export',
+          '--format',
+          'requirements-txt',
+          '--no-hashes',
+          '--no-emit-project',
+          '--no-group',
+          'dev',
+          '--no-annotate',
+          '--output-file',
+          'requirements.txt',
+        ],
+      },
+    ])
+    expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toContain(
+      '# Dependabot: use --universal when updating this file.',
+    )
+    expect(result.written).toEqual(
+      expect.arrayContaining([
+        'pnpm-lock.yaml',
+        'uv.lock',
+        'requirements.in',
+        'requirements.txt',
+        'maa-project.json',
+      ]),
+    )
+    expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
+    expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs',
+        ],
+        { cwd: projectRoot },
+      ),
+    ).resolves.toBeDefined()
+  })
+  it('preserves one-time files in existing git directories', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const target = join(root, 'existing-git')
+    await mkdir(join(target, '.git'), { recursive: true })
+    await writeFile(join(target, 'README.md'), '# User README\n', 'utf8')
+    await writeFile(join(target, 'LICENSE'), 'User license\n', 'utf8')
+    await writeFile(join(target, '.gitignore'), 'custom-cache/\n', 'utf8')
+    process.chdir(root)
+
+    const result = await createProject(defaultOptions({ name: 'existing-git', force: true }))
+
+    const gitignore = await readFile(join(target, '.gitignore'), 'utf8')
+    expect(result.skipped).toEqual(
+      expect.arrayContaining([
+        'README.md',
+        'LICENSE',
+      ]),
+    )
+    expect(await readFile(join(target, 'README.md'), 'utf8')).toBe('# User README\n')
+    expect(await readFile(join(target, 'LICENSE'), 'utf8')).toBe('User license\n')
+    expect(gitignore).toBe('custom-cache/\n')
+
+    await writeFile(join(target, '.gitignore'), `${gitignore}local-only/\n`, 'utf8')
+    await clearPending(target)
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          'tools/check-project.mjs',
+        ],
+        { cwd: target },
+      ),
+    ).resolves.toBeDefined()
+  })
 })
 
 function expectReleaseWorkflowTargets(releaseWorkflow: string): void {
@@ -4182,7 +3797,6 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     ],
     update: [],
     doctor: false,
-    diff: false,
     yes: true,
     noInteractive: true,
     force: false,
@@ -4194,8 +3808,6 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     noColor: false,
     assist: false,
     dryRun: false,
-    acceptChanges: [],
-    acceptChangesRequested: false,
     cleanCache: false,
     report: false,
     mcp: false,
@@ -4328,10 +3940,6 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 async function clearPending(root: string, options: { writePnpmLock?: boolean } = {}): Promise<void> {
-  const lockPath = join(root, 'maa-project.lock.json')
-  const lock = (await readJson(lockPath)) as { pending?: unknown[] }
-  lock.pending = []
-  await writeFile(lockPath, JSON.stringify(lock, null, 4) + '\n', 'utf8')
   if (options.writePnpmLock ?? true) {
     await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
   }

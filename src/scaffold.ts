@@ -30,15 +30,12 @@ import type {
   PendingItem,
   ScaffoldResult,
 } from './types.js'
-import { assertValidSlug, exists, normalizeSlug, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { assertValidSlug, exists, normalizeSlug, prettyJson, readText, stableJson, stripV } from './utils.js'
 import {
   backupProjectSnapshot,
-  emptyLock,
   listDirectoryEntries,
   mergePending,
   readProjectConfig,
-  readProjectLock,
-  refreshManagedFileContent,
   withProjectWriteLock,
   writeGeneratedFiles,
   writeProjectState,
@@ -54,7 +51,6 @@ import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.
 import { hasDevTools, hasGithubAutomation } from './features.js'
 import { updateOcrModels } from './update.js'
 
-const CLI_VERSION = '0.1.0'
 const execFileAsync = promisify(execFile)
 
 export type GitRunner = (root: string, args: string[]) => Promise<void>
@@ -114,7 +110,7 @@ export async function createProject(
     resolvedAddons,
   })
   const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
-  const pending = defaultPending({
+  let pending = defaultPending({
     includeAgent,
     options,
     includeDevTools,
@@ -140,7 +136,6 @@ export async function createProject(
     ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, includeAgent }),
     configFile(config),
   ]
-  const lock = emptyLock(CLI_VERSION)
   const scaffold = await withProjectWriteLock(
     targetRoot,
     process.argv.join(' '),
@@ -153,47 +148,33 @@ export async function createProject(
         backup: true,
       })
       const written = new Set(result.written)
-      Object.assign(lock.managedFiles, result.lockEntries)
-      for (const file of files) {
-        if (!file.managed && result.written.includes(file.path)) {
-          lock.createdFiles[file.path] = {
-            createdAt: nowIso(),
-            managed: false,
-          }
-        }
-      }
-      lock.pending = pending
       if (shouldDownloadOcrModels) {
         try {
           environment.onProgress?.('Downloading OCR models...')
           const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
           if (ocrResult) {
             for (const path of ocrResult.written) written.add(path)
-            for (const path of await refreshManagedFileContent(targetRoot, lock, ocrResult.files)) {
-              written.add(path)
-            }
             environment.onProgress?.('OCR models downloaded.')
           }
         } catch (error) {
           environment.onProgress?.(
             `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
           )
-          lock.pending = mergePending(lock.pending, [
+          pending = mergePending(pending, [
             ocrDownloadPending(error),
           ])
         }
       }
-      await writeProjectState(targetRoot, config, lock)
+      await writeProjectState(targetRoot, config)
 
       return {
         root: targetRoot,
         config,
-        lock,
         written: [
           ...written,
         ],
         skipped: result.skipped,
-        pending: lock.pending,
+        pending,
       }
     },
     { clearStale: options.clearStaleLock },
@@ -239,15 +220,13 @@ function createOcrUpdateOptions(environment: {
 export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   if (hasDevTools(config)) {
     return {
       root,
       config,
-      lock,
       written: [],
       skipped: [],
-      pending: lock.pending,
+      pending: [],
     }
   }
 
@@ -258,7 +237,7 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
     ...devToolFiles(templateInputFromConfig(config)),
     configFile(config),
   ]
-  return writeAddonFiles(root, config, lock, files, options, {
+  return writeAddonFiles(root, config, files, options, {
     overwriteUnmanaged: true,
     pending: [
       {
@@ -273,7 +252,6 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
 export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   if (!hasDevTools(config)) {
     throw new Error('--add github requires --add dev-tools first.')
   }
@@ -281,10 +259,9 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     return {
       root,
       config,
-      lock,
       written: [],
       skipped: [],
-      pending: lock.pending,
+      pending: [],
     }
   }
 
@@ -311,7 +288,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
     },
     configFile(config),
   ]
-  return writeAddonFiles(root, config, lock, files, options, {
+  return writeAddonFiles(root, config, files, options, {
     overwriteUnmanaged: true,
     pending: [],
   })
@@ -320,15 +297,13 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
 export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   if (config.python) {
     return {
       root,
       config,
-      lock,
       written: [],
       skipped: [],
-      pending: lock.pending,
+      pending: [],
     }
   }
 
@@ -419,20 +394,14 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
         backup: true,
         overwriteUnmanaged: true,
       })
-      Object.assign(lock.managedFiles, result.lockEntries)
-      recordCreatedFiles(lock, files, result.written)
-      lock.pending = mergePending(lock.pending, pythonPending())
-      lock.template.lastUpdatedBy = 'create-maa-project'
-      lock.template.templateVersion = CLI_VERSION
-      await writeProjectState(root, config, lock)
+      await writeProjectState(root, config)
 
       return {
         root,
         config,
-        lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending,
+        pending: pythonPending(),
       }
     },
     { clearStale: _options.clearStaleLock },
@@ -442,7 +411,6 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
 export async function addResourcePack(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   const slug = normalizeSlug(options.resourcePackSlug ?? options.name ?? '')
   assertValidSlug(slug)
   if (config.resources.some((pack) => pack.slug === slug)) {
@@ -487,19 +455,14 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
         backup: true,
         overwriteUnmanaged: true,
       })
-      Object.assign(lock.managedFiles, result.lockEntries)
-      recordCreatedFiles(lock, files, result.written)
-      lock.template.lastUpdatedBy = 'create-maa-project'
-      lock.template.templateVersion = CLI_VERSION
-      await writeProjectState(root, config, lock)
+      await writeProjectState(root, config)
 
       return {
         root,
         config,
-        lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending,
+        pending: [],
       }
     },
     { clearStale: options.clearStaleLock },
@@ -509,7 +472,6 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
 export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.gitCliff = { enabled: true }
   const files: ManagedFileInput[] = [
     ...gitCliffFiles(),
@@ -518,18 +480,16 @@ export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult>
   if (hasGithubAutomation(config)) {
     files.push(releaseWorkflowFile(templateInputFromConfig(config)))
   }
-  return writeAddonFiles(root, config, lock, files, _options)
+  return writeAddonFiles(root, config, files, _options)
 }
 
 export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.autoFormat = { enabled: true }
   return writeAddonFiles(
     root,
     config,
-    lock,
     [
       ...autoFormatFiles(),
       configFile(config),
@@ -541,7 +501,6 @@ export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult
 export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.optimizeImages = { enabled: true }
 
   const packageJson = await readJsonObject(root, 'package.json')
@@ -553,7 +512,6 @@ export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldRe
   return writeAddonFiles(
     root,
     config,
-    lock,
     [
       ...optimizeImagesFiles(),
       {
@@ -571,12 +529,10 @@ export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldRe
 export async function addDependabot(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.dependabot = { enabled: true }
   return writeAddonFiles(
     root,
     config,
-    lock,
     [
       dependabotFile(config.python !== undefined),
       configFile(config),
@@ -588,12 +544,10 @@ export async function addDependabot(options: CliOptions): Promise<ScaffoldResult
 export async function addCommunity(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.community = { enabled: true }
   return writeAddonFiles(
     root,
     config,
-    lock,
     [
       ...communityFiles({
         displayName: config.project.displayName,
@@ -607,7 +561,6 @@ export async function addCommunity(options: CliOptions): Promise<ScaffoldResult>
 export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   config.addons.schemaSync = { enabled: true }
 
   const packageJson = await readJsonObject(root, 'package.json')
@@ -619,7 +572,6 @@ export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult
   return writeAddonFiles(
     root,
     config,
-    lock,
     [
       ...schemaSyncFiles(),
       {
@@ -695,7 +647,6 @@ function createConfig(input: {
 async function writeAddonFiles(
   root: string,
   config: MaaProjectConfig,
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
   files: ManagedFileInput[],
   options: CliOptions,
   writeOptions: { overwriteUnmanaged?: boolean; pending?: PendingItem[] } = {},
@@ -709,41 +660,18 @@ async function writeAddonFiles(
         backup: true,
         ...(writeOptions.overwriteUnmanaged ? { overwriteUnmanaged: true } : {}),
       })
-      Object.assign(lock.managedFiles, result.lockEntries)
-      recordCreatedFiles(lock, files, result.written)
-      if (writeOptions.pending) {
-        lock.pending = mergePending(lock.pending, writeOptions.pending)
-      }
-      lock.template.lastUpdatedBy = 'create-maa-project'
-      lock.template.templateVersion = CLI_VERSION
-      await writeProjectState(root, config, lock)
+      await writeProjectState(root, config)
 
       return {
         root,
         config,
-        lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending,
+        pending: writeOptions.pending ?? [],
       }
     },
     { clearStale: options.clearStaleLock },
   )
-}
-
-function recordCreatedFiles(
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
-  files: ManagedFileInput[],
-  written: string[],
-): void {
-  for (const file of files) {
-    if (!file.managed && written.includes(file.path)) {
-      lock.createdFiles[file.path] = {
-        createdAt: nowIso(),
-        managed: false,
-      }
-    }
-  }
 }
 
 function initialAddons(addons: string[]): Record<string, unknown> {
@@ -950,7 +878,7 @@ async function maybeInstallNodeDependencies(
 
   const root = scaffold.root
   const config = scaffold.config
-  const lock = scaffold.lock
+  let pending = scaffold.pending
   const written = new Set(scaffold.written)
   try {
     onProgress?.('Installing Node dependencies...')
@@ -958,13 +886,13 @@ async function maybeInstallNodeDependencies(
       'install',
     ])
     onProgress?.('Node dependencies installed.')
-    lock.pending = lock.pending.filter((item) => item.kind !== 'node-deps')
+    pending = pending.filter((item) => item.kind !== 'node-deps')
     if (await exists(join(root, 'pnpm-lock.yaml'))) {
       written.add('pnpm-lock.yaml')
     }
   } catch (error) {
     onProgress?.(`Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`)
-    lock.pending = replacePending(lock.pending, {
+    pending = replacePending(pending, {
       kind: 'node-deps',
       reason: `pnpm install failed during project creation: ${errorMessage(error)}`,
       command: 'create-maa-project --update node-deps',
@@ -975,19 +903,17 @@ async function maybeInstallNodeDependencies(
     root,
     process.argv.join(' '),
     async () => {
-      await writeProjectState(root, config, lock)
+      await writeProjectState(root, config)
     },
     { clearStale: options.clearStaleLock },
   )
   written.add('maa-project.json')
-  written.add('maa-project.lock.json')
   return {
     ...scaffold,
-    lock,
     written: [
       ...written,
     ],
-    pending: lock.pending,
+    pending,
   }
 }
 

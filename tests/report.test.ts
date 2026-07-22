@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,11 +20,8 @@ type JsonReport = {
   written: string[]
   skipped: string[]
   pending: Array<{ kind: string; reason: string; command: string }>
-  changedManagedFiles: Array<{ path: string; status: string }>
-  changedUserFiles: Array<{ path: string; status: string }>
   suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
   doctor?: { lines: string[] }
-  diff?: { lines: string[] }
   error?: { message: string; code?: string }
 }
 
@@ -143,47 +140,9 @@ describe('CLI JSON reports', () => {
       expect(report.written).toEqual(
         expect.arrayContaining([
           'maa-project.json',
-          'maa-project.lock.json',
+          'tools/schema/interface.schema.json',
         ]),
       )
-    },
-    CLI_TEST_TIMEOUT_MS,
-  )
-
-  it(
-    'reports diff as pure stdout JSON with managed file status',
-    async () => {
-      const projectRoot = await createReportProject('maa-report-diff')
-      const checkProjectPath = join(projectRoot, 'tools/check-project.mjs')
-      await writeFile(
-        checkProjectPath,
-        `${await readFile(checkProjectPath, 'utf8')}\nconsole.log('local report diff')\n`,
-        'utf8',
-      )
-
-      const result = await runCli(
-        [
-          '--diff',
-          '--report',
-        ],
-        projectRoot,
-      )
-      const report = parseStdoutReport(result.stdout, result.stderr)
-
-      expect(result.exitCode).toBe(0)
-      expect(report).toMatchObject({
-        command: 'diff',
-        ok: true,
-        exitCode: 0,
-        root: projectRoot,
-      })
-      expect(report.changedManagedFiles).toEqual([
-        {
-          path: 'tools/check-project.mjs',
-          status: 'modified',
-        },
-      ])
-      expect(report.diff?.lines?.join('\n')).toContain('local report diff')
     },
     CLI_TEST_TIMEOUT_MS,
   )
@@ -193,11 +152,7 @@ describe('CLI JSON reports', () => {
     async () => {
       const projectRoot = await createReportProject('maa-report-doctor')
       const checkProjectPath = join(projectRoot, 'tools/check-project.mjs')
-      await writeFile(
-        checkProjectPath,
-        `${await readFile(checkProjectPath, 'utf8')}\nconsole.log('local report doctor')\n`,
-        'utf8',
-      )
+      await rm(checkProjectPath)
 
       const result = await runCli(
         [
@@ -215,19 +170,7 @@ describe('CLI JSON reports', () => {
         exitCode: 1,
         root: projectRoot,
       })
-      expect(report.changedManagedFiles).toEqual([
-        {
-          path: 'tools/check-project.mjs',
-          status: 'modified',
-        },
-      ])
-      expect(report.suggestedCommands).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            command: 'create-maa-project --accept-changes tools/check-project.mjs',
-          }),
-        ]),
-      )
+      expect(report.doctor?.lines.join('\n')).toContain('Required project file is missing: tools/check-project.mjs')
     },
     CLI_TEST_TIMEOUT_MS,
   )
@@ -364,6 +307,5 @@ function parseStdoutReport(stdout: string, stderr: string): JsonReport {
   expect(report.durationMs).toEqual(expect.any(Number))
   expect(report.executionId).toEqual(expect.any(String))
   expect(report.logPath === null || typeof report.logPath === 'string').toBe(true)
-  expect(report.changedUserFiles).toEqual([])
   return report
 }

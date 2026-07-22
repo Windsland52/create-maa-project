@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { DoctorReport } from './doctor.js'
-import type { ChangedFileReport, CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
+import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
-export type CliReportCommand = 'create' | 'sync' | 'update' | 'diff' | 'doctor'
+export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor'
 
 export type SuggestedCommand = {
   command: string
@@ -24,14 +24,9 @@ export type CliJsonReport = {
   written: string[]
   skipped: string[]
   pending: PendingItem[]
-  changedManagedFiles: ChangedFileReport[]
-  changedUserFiles: ChangedFileReport[]
   suggestedCommands: SuggestedCommand[]
   git?: GitInitResult
   doctor?: {
-    lines: string[]
-  }
-  diff?: {
     lines: string[]
   }
   error?: {
@@ -57,7 +52,6 @@ export function reportRequested(argv: string[]): boolean {
 
 export function inferReportCommandFromArgv(argv: string[]): CliReportCommand {
   if (argv.includes('--doctor')) return 'doctor'
-  if (argv.includes('--diff')) return 'diff'
   if (argv.includes('--sync')) return 'sync'
   if (argv.includes('--update')) return 'update'
   return 'create'
@@ -65,24 +59,16 @@ export function inferReportCommandFromArgv(argv: string[]): CliReportCommand {
 
 export function reportCommandFromOptions(options: CliOptions): CliReportCommand {
   if (options.doctor) return 'doctor'
-  if (options.diff) return 'diff'
   if (options.sync) return 'sync'
   if (options.update.length > 0) return 'update'
   return 'create'
 }
 
 export function assertReportSupportedOptions(options: CliOptions): void {
-  if (options.cleanCache || options.restore || options.acceptChangesRequested) {
-    throw new Error('--report is only supported for create, sync, update, diff, and doctor.')
+  if (options.cleanCache || options.restore) {
+    throw new Error('--report is only supported for create, sync, update, and doctor.')
   }
-  if (
-    options.add.length > 0 &&
-    !options.name &&
-    !options.sync &&
-    options.update.length === 0 &&
-    !options.diff &&
-    !options.doctor
-  ) {
+  if (options.add.length > 0 && !options.name && !options.sync && options.update.length === 0 && !options.doctor) {
     throw new Error('--report does not support incremental --add commands in this version.')
   }
 }
@@ -106,44 +92,17 @@ export function createDoctorJsonReport(input: {
   context: ReportContext
   root: string
   doctor: DoctorReport
-  pending: PendingItem[]
-  changedManagedFiles: ChangedFileReport[]
 }): CliJsonReport {
-  const suggestedCommands = uniqueSuggestedCommands([
-    ...suggestedCommandsFromPending(input.pending),
-    ...suggestedCommandsFromLines(input.doctor.lines),
-  ])
+  const suggestedCommands = uniqueSuggestedCommands(suggestedCommandsFromLines(input.doctor.lines))
   const report = createBaseReport({
     context: input.context,
     ok: input.doctor.ok,
     exitCode: input.doctor.ok ? 0 : 1,
     root: input.root,
-    pending: input.pending,
-    changedManagedFiles: input.changedManagedFiles,
     suggestedCommands,
   })
   report.doctor = {
     lines: input.doctor.lines,
-  }
-  return report
-}
-
-export function createDiffJsonReport(input: {
-  context: ReportContext
-  root: string
-  lines: string[]
-  changedManagedFiles: ChangedFileReport[]
-}): CliJsonReport {
-  const report = createBaseReport({
-    context: input.context,
-    ok: true,
-    exitCode: 0,
-    root: input.root,
-    changedManagedFiles: input.changedManagedFiles,
-    suggestedCommands: suggestedCommandsFromLines(input.lines),
-  })
-  report.diff = {
-    lines: input.lines,
   }
   return report
 }
@@ -179,8 +138,6 @@ function createBaseReport(input: {
   written?: string[]
   skipped?: string[]
   pending?: PendingItem[]
-  changedManagedFiles?: ChangedFileReport[]
-  changedUserFiles?: ChangedFileReport[]
   suggestedCommands?: SuggestedCommand[]
 }): CliJsonReport {
   return {
@@ -197,8 +154,6 @@ function createBaseReport(input: {
     written: input.written ?? [],
     skipped: input.skipped ?? [],
     pending: input.pending ?? [],
-    changedManagedFiles: input.changedManagedFiles ?? [],
-    changedUserFiles: input.changedUserFiles ?? [],
     suggestedCommands: uniqueSuggestedCommands(input.suggestedCommands ?? []),
   }
 }

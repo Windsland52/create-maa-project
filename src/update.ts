@@ -1,12 +1,6 @@
 import {
-  createUnifiedDiff,
-  managedFileHash,
   mergePending,
-  prepareManagedFileContent,
   readProjectConfig,
-  readProjectLock,
-  refreshManagedFileContent,
-  refreshManagedFileState,
   withProjectWriteLock,
   writeGeneratedFiles,
   writeProjectState,
@@ -38,7 +32,6 @@ import { exists, readText, sha256 } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
 
-const CLI_VERSION = '0.1.0'
 const SYNC_REQUIREMENTS_IN_SCRIPT = `from pathlib import Path
 import tomllib
 
@@ -91,11 +84,6 @@ const UPDATE_PENDING: Record<string, PendingItem> = {
     reason: 'Python release runtime and Agent release dependencies are pending.',
     command: 'create-maa-project --update python-runtime',
   },
-  template: {
-    kind: 'template',
-    reason: 'Template update is pending.',
-    command: 'create-maa-project --update template',
-  },
 }
 
 export type UpdateCommandRunner = (root: string, command: string, args: string[]) => Promise<void>
@@ -114,7 +102,6 @@ export async function recordUpdateRequests(
 ): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   const commandRunner = environment.commandRunner ?? runCommand
   const targets = options.update.map(validateUpdateTarget)
 
@@ -126,57 +113,29 @@ export async function recordUpdateRequests(
       const skipped: string[] = []
       let pendingToAdd: PendingItem[] = []
 
-      if (targets.includes('template')) {
-        const plan = await planTemplateUpdate(root, config, lock, options.force)
-        const result = await writeGeneratedFiles(root, plan.files, {
-          force: true,
-          backup: true,
-        })
-        Object.assign(lock.managedFiles, result.lockEntries)
-        for (const path of result.written) written.add(path)
-        for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
-          template: true,
-        })) {
-          written.add(path)
-        }
-        skipped.push(...plan.skipped, ...result.skipped)
-        lock.pending = removePending(lock.pending, 'template')
-      }
-
       for (const target of targets) {
-        if (target === 'template') continue
         if (target === 'schema') {
-          const plan = await planSchemaUpdate(root, config, lock, options.force)
-          const result = await writeGeneratedFiles(root, plan.files, {
+          const result = await writeGeneratedFiles(root, schemaFilesForConfig(config), {
             force: true,
             backup: true,
           })
-          Object.assign(lock.managedFiles, result.lockEntries)
           for (const path of result.written) written.add(path)
-          for (const path of await refreshManagedFileContent(root, lock, plan.refreshed, {
-            template: true,
-          })) {
-            written.add(path)
-          }
-          skipped.push(...plan.skipped, ...result.skipped)
-          lock.pending = removePending(lock.pending, 'schema')
+          skipped.push(...result.skipped)
           continue
         }
         if (target === 'node-deps') {
           await updateNodeDeps(root, commandRunner)
-          lock.pending = removePending(lock.pending, 'node-deps')
           if (await exists(join(root, 'pnpm-lock.yaml'))) written.add('pnpm-lock.yaml')
           continue
         }
         if (target === 'python-deps') {
           await updatePythonDeps(root, commandRunner)
-          lock.pending = removePending(lock.pending, 'python-deps')
-          for (const path of await refreshManagedFileState(root, lock, [
+          for (const path of [
             'uv.lock',
             'requirements.in',
             'requirements.txt',
-          ])) {
-            written.add(path)
+          ]) {
+            if (await exists(join(root, path))) written.add(path)
           }
           continue
         }
@@ -197,7 +156,6 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
-          lock.pending = removePending(lock.pending, 'python-runtime')
           environment.onProgress?.('Python release runtime synchronized.')
           continue
         }
@@ -219,7 +177,6 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
-          lock.pending = removePending(lock.pending, 'maafw')
           environment.onProgress?.('MaaFramework assets downloaded.')
           continue
         }
@@ -241,7 +198,6 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
-          lock.pending = removePending(lock.pending, 'runtime')
           environment.onProgress?.('MFAAvalonia runtime assets downloaded.')
           continue
         }
@@ -267,7 +223,6 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
-          lock.pending = removePending(lock.pending, 'runtime')
           environment.onProgress?.('MXU runtime assets downloaded.')
           continue
         }
@@ -290,7 +245,6 @@ export async function recordUpdateRequests(
               await cp(subRoot, ocrDest, { recursive: true, force: true })
               written.add('resource/base/model/ocr')
             }
-            lock.pending = removePending(lock.pending, 'ocr-model')
             environment.onProgress?.('OCR models copied from submodule.')
             continue
           }
@@ -301,69 +255,27 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
-          for (const path of await refreshManagedFileContent(root, lock, result.files)) {
-            written.add(path)
-          }
-          lock.pending = removePending(lock.pending, 'ocr-model')
           environment.onProgress?.('OCR models downloaded.')
           continue
         }
         pendingToAdd.push(toPendingUpdate(target))
       }
 
-      lock.pending = mergePending(lock.pending, pendingToAdd)
-      lock.template.lastUpdatedBy = 'create-maa-project'
-      lock.template.templateVersion = CLI_VERSION
-      await writeProjectState(root, config, lock)
+      pendingToAdd = mergePending([], pendingToAdd)
+      await writeProjectState(root, config)
       written.add('maa-project.json')
-      written.add('maa-project.lock.json')
       return {
         root,
         config,
-        lock,
         written: [
           ...written,
         ],
         skipped,
-        pending: lock.pending,
+        pending: pendingToAdd,
       }
     },
     { clearStale: options.clearStaleLock },
   )
-}
-
-export async function previewTemplateUpdate(options: CliOptions): Promise<string[]> {
-  const target = options.update[0]
-  if (options.update.length !== 1 || (target !== 'template' && target !== 'schema')) {
-    throw new Error(
-      '--update <target> --diff is only supported for --update template or --update schema in this version.',
-    )
-  }
-  const root = process.cwd()
-  const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
-  const plan =
-    target === 'schema'
-      ? await planSchemaUpdate(root, config, lock, options.force)
-      : await planTemplateUpdate(root, config, lock, options.force)
-  const lines: string[] = []
-  for (const item of plan.preview) {
-    if (item.kind === 'diff') {
-      lines.push(...createUnifiedDiff(item.path, item.current, item.next))
-    } else if (item.kind === 'add') {
-      lines.push(`[ADD] ${item.path}`)
-    } else if (item.kind === 'refresh') {
-      lines.push(`[REFRESH] ${item.path}`)
-    }
-  }
-  for (const skipped of plan.skipped) {
-    lines.push(`[SKIP] ${skipped}`)
-  }
-  return lines.length > 0
-    ? lines
-    : [
-        'No template updates.',
-      ]
 }
 
 function validateUpdateTarget(target: string): string {
@@ -870,10 +782,6 @@ function createDefaultOcrZipDownloadOptions(options: {
   return downloadOptions
 }
 
-function removePending(pending: PendingItem[], kind: string): PendingItem[] {
-  return pending.filter((item) => item.kind !== kind)
-}
-
 async function runCommand(root: string, command: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -909,126 +817,7 @@ async function runCommand(root: string, command: string, args: string[]): Promis
   })
 }
 
-async function planTemplateUpdate(
-  root: string,
-  config: MaaProjectConfig,
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
-  force: boolean,
-): Promise<{
-  files: ManagedFileInput[]
-  skipped: string[]
-  refreshed: Array<{ path: string; content: string | Buffer }>
-  preview: Array<
-    | { kind: 'diff'; path: string; current: string; next: string }
-    | { kind: 'add'; path: string }
-    | { kind: 'refresh'; path: string }
-  >
-}> {
-  return planManagedTemplateFiles(root, lock, force, templateFilesForConfig(config))
-}
-
-async function planSchemaUpdate(
-  root: string,
-  config: MaaProjectConfig,
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
-  force: boolean,
-): Promise<{
-  files: ManagedFileInput[]
-  skipped: string[]
-  refreshed: Array<{ path: string; content: string | Buffer }>
-  preview: Array<
-    | { kind: 'diff'; path: string; current: string; next: string }
-    | { kind: 'add'; path: string }
-    | { kind: 'refresh'; path: string }
-  >
-}> {
-  return planManagedTemplateFiles(
-    root,
-    lock,
-    force,
-    templateFilesForConfig(config).filter((file) => file.path.startsWith('tools/schema/')),
-  )
-}
-
-async function planManagedTemplateFiles(
-  root: string,
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
-  force: boolean,
-  templateFiles: ManagedFileInput[],
-): Promise<{
-  files: ManagedFileInput[]
-  skipped: string[]
-  refreshed: Array<{ path: string; content: string | Buffer }>
-  preview: Array<
-    | { kind: 'diff'; path: string; current: string; next: string }
-    | { kind: 'add'; path: string }
-    | { kind: 'refresh'; path: string }
-  >
-}> {
-  const files: ManagedFileInput[] = []
-  const skipped: string[] = []
-  const refreshed: Array<{ path: string; content: string | Buffer }> = []
-  const preview: Array<
-    | { kind: 'diff'; path: string; current: string; next: string }
-    | { kind: 'add'; path: string }
-    | { kind: 'refresh'; path: string }
-  > = []
-  for (const file of templateFiles) {
-    if (typeof file.content !== 'string') {
-      throw new Error(`Template update preview does not support binary files: ${file.path}`)
-    }
-    const state = lock.managedFiles[file.path]
-    const targetPath = join(root, file.path)
-    const targetExists = await exists(targetPath)
-    const currentContent = targetExists ? await readText(targetPath) : undefined
-    const nextContent =
-      currentContent === undefined ? file.content : prepareManagedFileContent(file.path, currentContent, file.content)
-    const nextHash = managedFileHash(file.path, nextContent)
-
-    if (!state) {
-      if (targetExists && !force) {
-        skipped.push(`${file.path}: file exists but is not managed`)
-        continue
-      }
-      files.push({ ...file, content: nextContent })
-      preview.push({
-        kind: targetExists ? 'diff' : 'add',
-        path: file.path,
-        current: currentContent ?? '',
-        next: nextContent,
-      })
-      continue
-    }
-
-    if (state.acceptedAt && !force) {
-      skipped.push(`${file.path}: accepted local baseline`)
-      continue
-    }
-
-    if (currentContent !== undefined) {
-      const currentHash = managedFileHash(file.path, currentContent)
-      if (currentHash === nextHash) {
-        if (currentHash !== state.hash || state.templateHash !== nextHash) {
-          refreshed.push({ path: file.path, content: nextContent })
-          preview.push({ kind: 'refresh', path: file.path })
-        }
-        continue
-      }
-      if (currentHash !== state.hash && !force) {
-        skipped.push(`${file.path}: local changes`)
-        continue
-      }
-      files.push({ ...file, content: nextContent })
-      preview.push({ kind: 'diff', path: file.path, current: currentContent, next: nextContent })
-    } else {
-      files.push({ ...file, content: nextContent })
-      preview.push({ kind: 'add', path: file.path })
-    }
-  }
-  return { files, skipped, refreshed, preview }
-}
-
-function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
+function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
   return baseProjectFiles({
     slug: config.project.slug,
     displayName: config.project.displayName,
@@ -1044,8 +833,5 @@ function templateFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     includeSchemaSync: Boolean(config.addons.schemaSync),
     pythonDevCommand: config.python?.devCommand,
     resources: config.resources,
-  })
-    .filter((file) => file.managed && file.path !== 'maa-project.json')
-    .filter((file) => file.path !== 'uv.lock' && file.path !== 'requirements.in' && file.path !== 'requirements.txt')
-    .filter((file) => !file.path.startsWith('resource/base/model/ocr/'))
+  }).filter((file) => file.path.startsWith('tools/schema/'))
 }

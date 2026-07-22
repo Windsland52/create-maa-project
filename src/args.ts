@@ -8,7 +8,6 @@ export function parseArgs(argv: string[]): CliOptions {
     add: [],
     update: [],
     doctor: false,
-    diff: false,
     yes: false,
     noInteractive: false,
     force: false,
@@ -21,8 +20,6 @@ export function parseArgs(argv: string[]): CliOptions {
     lang: 'auto',
     assist: false,
     dryRun: false,
-    acceptChanges: [],
-    acceptChangesRequested: false,
     cleanCache: false,
     report: false,
     mcp: false,
@@ -68,9 +65,6 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--mcp':
         options.mcp = true
-        break
-      case '--diff':
-        options.diff = true
         break
       case '--yes':
         options.yes = true
@@ -146,15 +140,6 @@ export function parseArgs(argv: string[]): CliOptions {
           ...(options.controllers ?? []),
           ...parseControllerOption(readValue(argv, ++index, arg)),
         ])
-        break
-      case '--accept-changes':
-        options.acceptChangesRequested = true
-        for (;;) {
-          const next = argv[index + 1]
-          if (!next || next.startsWith('-')) break
-          options.acceptChanges.push(next)
-          index += 1
-        }
         break
       case '--restore':
         options.restore = readValue(argv, ++index, arg)

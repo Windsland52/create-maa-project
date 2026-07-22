@@ -11,19 +11,9 @@ import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from '
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
-import {
-  acceptManagedChanges,
-  cleanCache,
-  diffManagedFiles,
-  listChangedManagedFiles,
-  readProjectConfig,
-  readProjectLock,
-  restoreBackup,
-  withProjectWriteLock,
-} from './project.js'
+import { cleanCache, readProjectConfig, restoreBackup, withProjectWriteLock } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
-  createDiffJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -35,7 +25,7 @@ import {
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { CliOptions, ControllerKind, ScaffoldResult } from './types.js'
-import { previewTemplateUpdate, recordUpdateRequests } from './update.js'
+import { recordUpdateRequests } from './update.js'
 
 const SERVER_VERSION = '0.1.0'
 
@@ -68,7 +58,6 @@ const UPDATE_TARGETS = [
   'node-deps',
   'python-deps',
   'python-runtime',
-  'template',
 ] as const
 const ADDONS = [
   'dev-tools',
@@ -85,8 +74,7 @@ const ADDONS = [
 
 let serverRoot = safeProcessCwd('.')
 
-type ToolName =
-  'create_project' | 'doctor' | 'diff' | 'sync' | 'update' | 'add' | 'accept_changes' | 'restore' | 'clean_cache'
+type ToolName = 'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'restore' | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
 
@@ -155,11 +143,6 @@ const MCP_TOOLS: Tool[] = [
     inputSchema: objectSchema(),
   },
   {
-    name: 'diff',
-    description: 'Show managed file drift',
-    inputSchema: objectSchema(),
-  },
-  {
     name: 'sync',
     description: 'Sync metadata fields',
     inputSchema: objectSchema(
@@ -174,11 +157,10 @@ const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'update',
-    description: 'Update dependencies, runtime assets, schema, or templates',
+    description: 'Update dependencies, runtime assets, or schema',
     inputSchema: objectSchema(
       {
         targets: arraySchema(enumSchema(UPDATE_TARGETS, 'Update target.'), 'Update targets.'),
-        diff: booleanSchema('Preview template/schema changes instead of applying them.'),
       },
       [
         'targets',
@@ -201,13 +183,6 @@ const MCP_TOOLS: Tool[] = [
         'addon',
       ],
     ),
-  },
-  {
-    name: 'accept_changes',
-    description: 'Accept managed file drift as the new baseline',
-    inputSchema: objectSchema({
-      paths: arraySchema(stringSchema('Managed file path.'), 'Specific files to accept.'),
-    }),
   },
   {
     name: 'restore',
@@ -237,23 +212,10 @@ async function callTool(name: string, input: unknown): Promise<CallToolResult> {
       return withReport('doctor', async (context) => {
         const root = currentRoot()
         const doctor = await runDoctor(root)
-        const lock = await readProjectLock(root)
         return createDoctorJsonReport({
           context,
           root,
           doctor,
-          pending: lock.pending,
-          changedManagedFiles: await listChangedManagedFiles(root),
-        })
-      })
-    case 'diff':
-      return withReport('diff', async (context) => {
-        const root = currentRoot()
-        return createDiffJsonReport({
-          context,
-          root,
-          lines: await diffManagedFiles(root),
-          changedManagedFiles: await listChangedManagedFiles(root),
         })
       })
     case 'sync':
@@ -262,8 +224,6 @@ async function callTool(name: string, input: unknown): Promise<CallToolResult> {
       return callUpdate(input)
     case 'add':
       return callAdd(input)
-    case 'accept_changes':
-      return callAcceptChanges(input)
     case 'restore':
       return callRestore(input)
     case 'clean_cache':
@@ -309,16 +269,6 @@ async function callUpdate(input: unknown): Promise<CallToolResult> {
   } catch (error) {
     return errorToolResult('update', error)
   }
-  if (options.diff) {
-    return withReport('diff', async (context) =>
-      createDiffJsonReport({
-        context,
-        root: currentRoot(),
-        lines: await previewTemplateUpdate(options),
-        changedManagedFiles: [],
-      }),
-    )
-  }
   return withReport('update', async (context) => {
     const result = await recordUpdateRequests(options, {
       commandRunner: runMcpChildCommand,
@@ -344,22 +294,6 @@ async function callAdd(input: unknown): Promise<CallToolResult> {
       throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
     }
     return createScaffoldJsonReport(context, result)
-  })
-}
-
-async function callAcceptChanges(input: unknown): Promise<CallToolResult> {
-  let paths: string[]
-  try {
-    paths = optionalStringArray(argsRecord(input), 'paths') ?? []
-  } catch (error) {
-    return errorToolResult('update', error)
-  }
-  return withReport('update', async (context) => {
-    const root = currentRoot()
-    const accepted = await withProjectWriteLock(root, 'create-maa-project --mcp accept_changes', () =>
-      acceptManagedChanges(root, paths),
-    )
-    return createMaintenanceReport(context, root, accepted)
   })
 }
 
@@ -445,14 +379,12 @@ async function createMaintenanceReport(
   affectedPaths: string[],
 ): Promise<CliJsonReport> {
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   const result: ScaffoldResult = {
     root,
     config,
-    lock,
     written: affectedPaths,
     skipped: [],
-    pending: lock.pending,
+    pending: [],
   }
   return createScaffoldJsonReport(context, result)
 }
@@ -472,8 +404,6 @@ function createBaseReport(context: ReportContext, root: string, affectedPaths: s
     written: affectedPaths,
     skipped: [],
     pending: [],
-    changedManagedFiles: [],
-    changedUserFiles: [],
     suggestedCommands: [],
   }
 }
@@ -550,7 +480,6 @@ async function syncOptions(args: JsonObject): Promise<CliOptions> {
 function updateOptions(args: JsonObject): CliOptions {
   return baseOptions({
     update: requiredStringArray(args, 'targets', UPDATE_TARGETS),
-    diff: optionalBoolean(args, 'diff') ?? false,
   })
 }
 
@@ -579,7 +508,6 @@ function baseOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     add: [],
     update: [],
     doctor: false,
-    diff: false,
     yes: true,
     noInteractive: true,
     force: false,
@@ -591,8 +519,6 @@ function baseOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     noColor: true,
     assist: false,
     dryRun: false,
-    acceptChanges: [],
-    acceptChangesRequested: false,
     cleanCache: false,
     report: false,
     mcp: false,

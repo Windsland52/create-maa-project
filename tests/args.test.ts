@@ -138,23 +138,9 @@ describe('parseArgs', () => {
     ).toBe(true)
   })
 
-  it('parses accept changes with optional paths', () => {
-    const all = parseArgs([
-      '--accept-changes',
-    ])
-    const selected = parseArgs([
-      '--accept-changes',
-      'package.json',
-      'interface.json',
-    ])
-
-    expect(all.acceptChangesRequested).toBe(true)
-    expect(all.acceptChanges).toEqual([])
-    expect(selected.acceptChangesRequested).toBe(true)
-    expect(selected.acceptChanges).toEqual([
-      'package.json',
-      'interface.json',
-    ])
+  it('rejects removed managed-file options', () => {
+    expect(() => parseArgs(['--diff'])).toThrow('Unknown option: --diff')
+    expect(() => parseArgs(['--accept-changes'])).toThrow('Unknown option: --accept-changes')
   })
 
   it('parses reserved assist and migration options', () => {

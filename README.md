@@ -8,9 +8,9 @@
 ![node](https://img.shields.io/badge/node-%3E%3D24-green)
 ![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
 
-`create-maa-project` 是用于创建和维护新 MaaFW 应用项目的脚手架 CLI。它可以生成确定性的 Pipeline 或 Python Agent 项目，把项目意图记录在已提交的状态文件中，并提供 update、sync、diff、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。
+`create-maa-project` 是用于创建和维护新 MaaFW 应用项目的脚手架 CLI。它可以生成确定性的 Pipeline 或 Python Agent 项目，把项目意图记录在已提交的配置中，并提供显式 update、sync、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。
 
-CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、锁、hash、pending action 和 JSON report 都能保持一致。
+CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、运行锁、本次操作的 pending action 和 JSON report 都能保持一致。
 
 ## 目录
 
@@ -157,7 +157,6 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 my-project/
 ├── interface.json
 ├── maa-project.json
-├── maa-project.lock.json
 ├── tasks/tutorial.json
 ├── resource/base/
 │   ├── default_pipeline.json
@@ -175,21 +174,19 @@ my-project/
 
 资源结构固定围绕 `resource/base/` 和可选的 `resource/<pack>/`。`interface.json` 的 resource 路径按 `maa-project.json` 中记录的顺序生成；后添加的资源包在 MaaFW 资源查找中有更高覆盖优先级。
 
-CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`resource/`、README、license 等项目自有文件。后续模板更新不会把这些文件当成 managed baseline，除非明确的 `--sync` 或 `--add` 操作需要改写受支持的结构化字段。
+CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`resource/`、README、license 等项目自有文件。之后仅由明确的 `--sync`、`--add` 或具体 `--update` 操作改写对应文件；通用模板升级应通过版本化 migration 实现。
 
 ## 状态与安全
 
 进入 Git 的状态文件：
 
 - `maa-project.json`：用户意图，包括项目元数据、功能/插件选择、资源包、runtime channel/version、网络模式、license 和 Agent 配置。`version` 非空时精确版本优先；为空时按 `stable`、`beta`（含 rc）或 `alpha` channel 解析。
-- `maa-project.lock.json`：resolved 状态、pending actions、模板版本和 managed file hash。
 
 本机状态放在 `.create-maa-project/`，生成项目默认忽略该目录：
 
 ```text
 .create-maa-project/
 ├── backups/
-├── baselines/
 ├── cache/
 ├── logs/
 └── run.lock
@@ -197,15 +194,12 @@ CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`
 
 安全规则：
 
-- 写 config、lock 和 managed 文件前会创建项目写锁。
+- 写配置或生成文件前会创建项目运行锁。
 - 覆盖文件前会先备份。
 - `--force` 跳过确认，但不跳过备份。
 - `--yes` 不等于 `--force`。
 - 非空且不在 Git 仓库中的目标目录需要显式 `--force --allow-non-git-dir`。
-- `--doctor` 和 `--diff` 只读。
-- `--accept-changes [path...]` 表示接受当前 managed 文件内容为新的本地基线，不表示恢复官方模板。
-
-Managed files 是工具拥有的文件，例如 workflows、schema baseline、release 脚本和项目检查脚本。如果它们发生漂移，`--diff` 会展示变更，`--doctor` 会给出可执行的修复或接受命令。
+- `--doctor` 只读，并直接检查当前项目文件状态。
 
 ## 命令
 
@@ -261,9 +255,6 @@ create-maa-project --update ocr-models
 create-maa-project --update node-deps
 create-maa-project --update python-deps
 create-maa-project --update python-runtime
-create-maa-project --update template
-create-maa-project --update template --diff
-create-maa-project --update schema --diff
 ```
 
 `--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
@@ -273,8 +264,6 @@ create-maa-project --update schema --diff
 ```bash
 create-maa-project --doctor
 create-maa-project --doctor --report
-create-maa-project --diff
-create-maa-project --accept-changes [path...]
 create-maa-project --restore <backup-id>
 create-maa-project --clean-cache
 ```
@@ -301,7 +290,7 @@ create-maa-project --clean-cache
 资产和依赖操作是显式且可恢复的：
 
 - 创建项目时会在相关场景尝试 OCR 下载和 `pnpm install`。
-- 网络或工具失败会留下已提交的 pending action，并附带修复命令。
+- 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令。
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
 - `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产。
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。
@@ -341,7 +330,7 @@ requirements.txt
 
 ## JSON Report 模式
 
-给 `create`、`sync`、`update`、`diff` 和 `doctor` 传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读 `Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
+给 `create`、`sync`、`update` 和 `doctor` 传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读 `Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
 
 退出码 `0` 表示命令成功完成。退出码 `1` 表示命令失败，或 `doctor` 发现项目问题。JSON 中的 `exitCode` 与进程退出码一致。
 
@@ -349,7 +338,7 @@ requirements.txt
 type CliJsonReport = {
     schemaVersion: 1;
     tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "diff" | "doctor";
+    command: "create" | "sync" | "update" | "doctor";
     ok: boolean;
     timestamp: string;
     durationMs: number;
@@ -360,12 +349,9 @@ type CliJsonReport = {
     written: string[];
     skipped: string[];
     pending: Array<{kind: string; reason: string; command: string}>;
-    changedManagedFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
-    changedUserFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
     suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
     git?: {initialized: boolean; committed: boolean; reason?: string};
     doctor?: {lines: string[]};
-    diff?: {lines: string[]};
     error?: {message: string; code?: string};
 };
 ```
@@ -387,8 +373,6 @@ type CliJsonReport = {
     "written": [],
     "skipped": [],
     "pending": [],
-    "changedManagedFiles": [],
-    "changedUserFiles": [],
     "suggestedCommands": [],
     "error": {
         "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."

@@ -10,11 +10,11 @@ English | [简体中文](https://github.com/Windsland52/create-maa-project/blob/
 
 `create-maa-project` is the scaffold and maintenance CLI for new MaaFW application
 projects. It creates deterministic Pipeline or Python Agent projects, records project
-intent in committed state files, and provides update, sync, diff, doctor, and JSON report
+intent in committed configuration, and provides explicit update, sync, doctor, and JSON report
 interfaces for humans and tool wrappers.
 
 The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
-the CLI, so backups, locks, hashes, pending actions, and JSON reports stay consistent.
+the CLI, so backups, run locks, per-command pending actions, and JSON reports stay consistent.
 
 ## Table of Contents
 
@@ -172,7 +172,6 @@ A full repository/tooling project can include:
 my-project/
 ├── interface.json
 ├── maa-project.json
-├── maa-project.lock.json
 ├── tasks/tutorial.json
 ├── resource/base/
 │   ├── default_pipeline.json
@@ -193,9 +192,9 @@ folders. `interface.json` resource paths are generated in the order recorded in
 `maa-project.json`; later packs have higher override priority in MaaFW resource lookup.
 
 The CLI creates project-owned files such as `interface.json`, `package.json`, `tasks/`,
-`resource/`, README, and license once. Later updates do not treat those as managed
-template baselines unless a specific `--sync` or `--add` operation rewrites a supported
-structured field.
+`resource/`, README, and license once. After creation, only an explicit `--sync`, `--add`,
+or concrete `--update` operation rewrites the corresponding files. General template upgrades
+should use versioned migrations.
 
 ## State and Safety
 
@@ -203,15 +202,12 @@ Committed state:
 
 - `maa-project.json`: user intent, including project metadata, feature/add-on choices,
   resources, runtime channels, network mode, license, and Agent configuration.
-- `maa-project.lock.json`: resolved state, pending actions, template version, and managed
-  file hashes.
 
 Local state lives under `.create-maa-project/` and is ignored by generated projects:
 
 ```text
 .create-maa-project/
 ├── backups/
-├── baselines/
 ├── cache/
 ├── logs/
 └── run.lock
@@ -219,18 +215,12 @@ Local state lives under `.create-maa-project/` and is ignored by generated proje
 
 Safety rules:
 
-- Writes to config, lock, and managed files use a project write lock.
+- Writes to configuration and generated files use a project run lock.
 - Files are backed up before overwrites.
 - `--force` skips prompts but still keeps backups.
 - `--yes` is not the same as `--force`.
 - Non-empty non-Git targets require explicit `--force --allow-non-git-dir`.
-- `--doctor` and `--diff` are read-only.
-- `--accept-changes [path...]` accepts current managed-file contents as the new local
-  baseline; it does not restore the official template.
-
-Managed files are tool-owned files such as workflows, schema baselines, generated release
-scripts, and project checks. If they drift, `--diff` shows the change and `--doctor` gives
-an actionable repair or accept command.
+- `--doctor` is read-only and checks the current project files directly.
 
 ## Commands
 
@@ -287,9 +277,6 @@ create-maa-project --update ocr-models
 create-maa-project --update node-deps
 create-maa-project --update python-deps
 create-maa-project --update python-runtime
-create-maa-project --update template
-create-maa-project --update template --diff
-create-maa-project --update schema --diff
 ```
 
 `--update all` is intentionally unsupported. Run explicit updates so pending actions and
@@ -300,8 +287,6 @@ Diagnostics and maintenance:
 ```bash
 create-maa-project --doctor
 create-maa-project --doctor --report
-create-maa-project --diff
-create-maa-project --accept-changes [path...]
 create-maa-project --restore <backup-id>
 create-maa-project --clean-cache
 ```
@@ -330,7 +315,7 @@ linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python 
 Asset and dependency operations are explicit and recoverable:
 
 - Project creation tries OCR download and `pnpm install` when relevant.
-- Network or tool failures leave committed pending actions with repair commands.
+- Network or tool failures return pending actions for the current command with repair commands.
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` changes download retry attempts.
 - `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip.
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest.
@@ -380,7 +365,7 @@ Windows artifacts are `.zip`; Linux and macOS artifacts are `.tar.gz`.
 
 ## JSON Report Mode
 
-Pass `--report` to make `create`, `sync`, `update`, `diff`, and `doctor` emit a single
+Pass `--report` to make `create`, `sync`, `update`, and `doctor` emit a single
 machine-readable JSON document on stdout. In report mode, `--report` forces
 non-interactive execution. Progress, `Log:`, and human `Error:` text are not written to
 stdout; wrappers may ignore stderr unless they want diagnostics.
@@ -393,7 +378,7 @@ exit code.
 type CliJsonReport = {
     schemaVersion: 1;
     tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "diff" | "doctor";
+    command: "create" | "sync" | "update" | "doctor";
     ok: boolean;
     timestamp: string;
     durationMs: number;
@@ -404,12 +389,9 @@ type CliJsonReport = {
     written: string[];
     skipped: string[];
     pending: Array<{kind: string; reason: string; command: string}>;
-    changedManagedFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
-    changedUserFiles: Array<{path: string; status: "added" | "modified" | "deleted"}>;
     suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
     git?: {initialized: boolean; committed: boolean; reason?: string};
     doctor?: {lines: string[]};
-    diff?: {lines: string[]};
     error?: {message: string; code?: string};
 };
 ```
@@ -431,8 +413,6 @@ Example failure report:
     "written": [],
     "skipped": [],
     "pending": [],
-    "changedManagedFiles": [],
-    "changedUserFiles": [],
     "suggestedCommands": [],
     "error": {
         "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."

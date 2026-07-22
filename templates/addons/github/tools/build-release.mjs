@@ -19,15 +19,6 @@ const releaseArtifactName = {{releaseArtifactName}};
 const requirementsMarker = ".create-maa-project-requirements.sha256";
 mkdirSync("dist", {recursive: true});
 
-const lock = readJson("maa-project.lock.json");
-for (const item of lock.pending ?? []) {
-    console.error(`[ERR] Pending ${item.kind}: ${item.command}`);
-}
-
-if ((lock.pending ?? []).length > 0) {
-    throw new Error("release cannot run while project has pending actions");
-}
-
 const project = readJson("maa-project.json");
 const interfaceJson = readJson("interface.json");
 if (interfaceJson.name !== projectSlug) {
@@ -440,7 +431,6 @@ function releaseDevPaths() {
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "maa-project.json",
-        "maa-project.lock.json",
         "tools/schema",
     ];
 }

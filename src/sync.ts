@@ -2,7 +2,6 @@ import { join } from 'node:path'
 import {
   CONFIG_FILE,
   readProjectConfig,
-  readProjectLock,
   withProjectWriteLock,
   writeGeneratedFiles,
   writeProjectState,
@@ -11,14 +10,11 @@ import { interfaceAgent, interfaceController, interfaceResourceItems, maatoolsCo
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
-import { addV, exists, nowIso, prettyJson, readText, stableJson, stripV } from './utils.js'
-
-const CLI_VERSION = '0.1.0'
+import { addV, exists, prettyJson, readText, stableJson, stripV } from './utils.js'
 
 export async function syncProject(options: CliOptions): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
-  const lock = await readProjectLock(root)
   const sync = options.sync
   if (!sync) throw new Error('Missing --sync target')
   normalizeConfig(config)
@@ -104,37 +100,17 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
         backup: true,
         overwriteUnmanaged: true,
       })
-      Object.assign(lock.managedFiles, result.lockEntries)
-      recordCreatedFiles(lock, files, result.written)
-      lock.template.lastUpdatedBy = 'create-maa-project'
-      lock.template.templateVersion = CLI_VERSION
-      await writeProjectState(root, config, lock)
+      await writeProjectState(root, config)
       return {
         root,
         config,
-        lock,
         written: result.written,
         skipped: result.skipped,
-        pending: lock.pending,
+        pending: [],
       }
     },
     { clearStale: options.clearStaleLock },
   )
-}
-
-function recordCreatedFiles(
-  lock: Awaited<ReturnType<typeof readProjectLock>>,
-  files: ManagedFileInput[],
-  written: string[],
-): void {
-  for (const file of files) {
-    if (!file.managed && written.includes(file.path) && !lock.createdFiles[file.path]) {
-      lock.createdFiles[file.path] = {
-        createdAt: nowIso(),
-        managed: false,
-      }
-    }
-  }
 }
 
 function assertSemver(version: string): void {

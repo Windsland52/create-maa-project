@@ -70,41 +70,10 @@ export type ResourcePackConfig = {
   enabled: boolean
 }
 
-export type MaaProjectLock = {
-  schemaVersion: 1 | 2
-  template: {
-    createdBy: string
-    lastUpdatedBy: string
-    templateVersion: string
-  }
-  pending: PendingItem[]
-  managedFiles: Record<string, ManagedFileState>
-  createdFiles: Record<string, CreatedFileState>
-}
-
 export type PendingItem = {
   kind: string
   reason: string
   command: string
-}
-
-export type ChangedFileStatus = 'added' | 'modified' | 'deleted'
-
-export type ChangedFileReport = {
-  path: string
-  status: ChangedFileStatus
-}
-
-export type ManagedFileState = {
-  hash: string
-  templateHash?: string
-  acceptedAt?: string
-  acceptedBy?: string
-}
-
-export type CreatedFileState = {
-  createdAt: string
-  managed: false
 }
 
 export type CliOptions = {
@@ -116,7 +85,6 @@ export type CliOptions = {
   sync?: string
   syncValue?: string
   doctor: boolean
-  diff: boolean
   yes: boolean
   noInteractive: boolean
   force: boolean
@@ -139,8 +107,6 @@ export type CliOptions = {
   version?: string
   license?: LicenseKind
   controllers?: ControllerKind[]
-  acceptChanges: string[]
-  acceptChangesRequested: boolean
   resourcePackSlug?: string
   restore?: string
   cleanCache: boolean
@@ -159,7 +125,6 @@ export type ManagedFileInput = {
 export type ScaffoldResult = {
   root: string
   config: MaaProjectConfig
-  lock: MaaProjectLock
   written: string[]
   skipped: string[]
   pending: PendingItem[]

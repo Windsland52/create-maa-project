@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import packageJson from '../package.json' with { type: 'json' }
 import { createMcpServer } from '../src/mcp.js'
 import { testChildEnv } from './child-env.js'
 
@@ -76,7 +77,7 @@ describe('MCP server', () => {
       expect(response.result).toMatchObject({
         serverInfo: {
           name: 'create-maa-project',
-          version: '0.1.0',
+          version: packageJson.version,
         },
         capabilities: {
           tools: {},

@@ -7,6 +7,7 @@ import {
   type CallToolResult,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js'
+import packageJson from '../package.json' with { type: 'json' }
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
@@ -26,8 +27,6 @@ import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { CliOptions, ControllerKind, ScaffoldResult } from './types.js'
 import { recordUpdateRequests } from './update.js'
-
-const SERVER_VERSION = '0.1.0'
 
 const TEMPLATE_NAMES = [
   'pipeline',
@@ -80,7 +79,10 @@ type JsonObject = Record<string, unknown>
 
 export function createMcpServer(root = safeProcessCwd('.')): Server {
   serverRoot = root
-  const server = new Server({ name: 'create-maa-project', version: SERVER_VERSION }, { capabilities: { tools: {} } })
+  const server = new Server(
+    { name: 'create-maa-project', version: packageJson.version },
+    { capabilities: { tools: {} } },
+  )
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: MCP_TOOLS,

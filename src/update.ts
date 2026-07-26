@@ -107,7 +107,9 @@ export async function recordUpdateRequests(
   const root = environment.root ?? process.cwd()
   const config = await readProjectConfig(root)
   const commandRunner = environment.commandRunner ?? runCommand
-  const targets = options.update.map(validateUpdateTarget)
+  const targets = [
+    ...new Set(options.update.map(validateUpdateTarget)),
+  ]
 
   return withProjectWriteLock(
     root,

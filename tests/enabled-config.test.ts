@@ -74,13 +74,23 @@ describe('enabled project config semantics', () => {
       throw new Error('disabled runtime must not be resolved')
     })
 
-    const result = await recordUpdateRequests(parseArgs(['--update', 'runtime:mfa']), {
-      root,
-      productManifestResolver: resolver,
-    })
+    const result = await recordUpdateRequests(
+      parseArgs([
+        '--update',
+        'runtime:mfa',
+        '--update',
+        'runtime:mfa',
+      ]),
+      {
+        root,
+        productManifestResolver: resolver,
+      },
+    )
 
     expect(resolver).not.toHaveBeenCalled()
-    expect(result.skipped).toContain('runtime:mfa (disabled in config)')
+    expect(result.skipped).toEqual([
+      'runtime:mfa (disabled in config)',
+    ])
   })
 })
 

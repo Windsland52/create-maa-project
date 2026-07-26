@@ -12,34 +12,63 @@ export type DoctorReport = {
 export async function runDoctor(root: string): Promise<DoctorReport> {
   const lines: string[] = []
   let ok = true
-  const config = await readProjectConfig(root)
+  let config: MaaProjectConfig
+  try {
+    config = await readProjectConfig(root)
+  } catch (error) {
+    lines.push(`[ERR] maa-project.json could not be read: ${errorMessage(error)}`)
+    lines.push(
+      '      To fix: correct the JSON/config values or restore the file from version control or a project backup.',
+    )
+    return { ok: false, lines }
+  }
 
   lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
-  ok = (await checkInterfaceMetadata(root, config, lines)) && ok
+  const interfaceJson = await readInterfaceJson(root, lines)
+  if (interfaceJson) {
+    ok = checkInterfaceMetadata(config, interfaceJson, lines) && ok
+  } else {
+    ok = false
+  }
   if (hasDevTools(config)) {
     ok = (await checkNodeToolingFiles(root, config, lines)) && ok
     if (config.features.vscode.enabled) ok = (await checkVscodeSettings(root, lines)) && ok
     ok = (await checkNodeLockfile(root, lines)) && ok
   }
   ok = (await checkResourcePaths(root, config, lines)) && ok
-  ok = (await checkReferencedPaths(root, lines)) && ok
+  if (interfaceJson) ok = (await checkReferencedPaths(root, interfaceJson, lines)) && ok
   ok = (await checkMaatoolsConfig(root, config, lines)) && ok
 
   return { ok, lines }
 }
 
-async function checkInterfaceMetadata(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
+async function readInterfaceJson(
+  root: string,
+  lines: string[],
+): Promise<{ name?: unknown; github?: unknown; import?: unknown; resource?: unknown } | undefined> {
   const interfacePath = join(root, 'interface.json')
   if (!(await exists(interfacePath))) {
     lines.push('[ERR] interface.json is missing.')
     lines.push('      To fix: restore it from version control or a project backup.')
-    return false
+    return undefined
   }
 
-  const interfaceJson = JSON.parse(await readText(interfacePath)) as {
-    name?: unknown
-    github?: unknown
+  try {
+    const value = JSON.parse(await readText(interfacePath)) as unknown
+    if (!isRecord(value)) throw new Error('the top-level value must be an object')
+    return value
+  } catch (error) {
+    lines.push(`[ERR] interface.json is not valid JSON: ${errorMessage(error)}`)
+    lines.push('      To fix: correct the JSON or restore the file from version control or a project backup.')
+    return undefined
   }
+}
+
+function checkInterfaceMetadata(
+  config: MaaProjectConfig,
+  interfaceJson: { name?: unknown; github?: unknown },
+  lines: string[],
+): boolean {
   let ok = true
   const unmanaged = config.project.interfaceUnmanaged === true
   if (interfaceJson.name !== config.project.slug) {
@@ -139,7 +168,16 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
     return false
   }
 
-  const settings = JSON.parse(await readText(settingsPath)) as Record<string, unknown>
+  let settings: Record<string, unknown>
+  try {
+    const value = JSON.parse(await readText(settingsPath)) as unknown
+    if (!isRecord(value)) throw new Error('the top-level value must be an object')
+    settings = value
+  } catch (error) {
+    lines.push(`[ERR] .vscode/settings.json is not valid JSON: ${errorMessage(error)}`)
+    lines.push('      To fix: correct the JSON or restore the generated VS Code settings.')
+    return false
+  }
   let ok = true
   if (settings['editor.formatOnSave'] !== true) {
     lines.push('[ERR] .vscode/settings.json editor.formatOnSave must be true.')
@@ -194,14 +232,11 @@ async function checkResourcePaths(root: string, config: MaaProjectConfig, lines:
   return true
 }
 
-async function checkReferencedPaths(root: string, lines: string[]): Promise<boolean> {
-  const interfacePath = join(root, 'interface.json')
-  if (!(await exists(interfacePath))) return false
-
-  const interfaceJson = JSON.parse(await readText(interfacePath)) as {
-    import?: unknown
-    resource?: unknown
-  }
+async function checkReferencedPaths(
+  root: string,
+  interfaceJson: { import?: unknown; resource?: unknown },
+  lines: string[],
+): Promise<boolean> {
   let ok = true
   const references = [
     ...interfaceResourcePaths(interfaceJson.resource).map((path) => ({ kind: 'resource', path })),
@@ -310,4 +345,8 @@ function hasJsoncFileAssociations(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

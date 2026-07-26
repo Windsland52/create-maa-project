@@ -332,6 +332,15 @@ describe('validateCommandModes', () => {
 
     expect(environment).toMatchObject({ NO_COLOR: '1', FORCE_COLOR: '0' })
   })
+
+  it.each([
+    { argv: ['--sync', 'display-name', 'One', '--name', 'Two'], option: '--name' },
+    { argv: ['--sync', 'version', '1.0.0', '--version', '2.0.0'], option: '--version' },
+    { argv: ['--sync', 'license', 'MIT', '--license', 'AGPL-3.0-or-later'], option: '--license' },
+    { argv: ['--sync', 'network', 'auto', '--network', 'official'], option: '--network' },
+  ])('rejects duplicate positional and named sync value sources: $argv', ({ argv, option }) => {
+    expect(() => validateCommandModes(parseArgs(argv))).toThrow(`use either its positional value or ${option}`)
+  })
 })
 
 describe('formatCliHelp', () => {

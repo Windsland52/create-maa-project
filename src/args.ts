@@ -326,6 +326,7 @@ function validateOptionApplicability(options: CliOptions, mode: CommandMode): vo
   validateSyncAlias(options.version !== undefined, mode, options.sync, '--version', 'version')
   validateSyncAlias(options.license !== undefined, mode, options.sync, '--license', 'license')
   validateSyncAlias(options.network !== undefined, mode, options.sync, '--network', 'network')
+  validateSyncValueSource(options, mode)
 
   if (
     options.label !== undefined &&
@@ -333,6 +334,19 @@ function validateOptionApplicability(options: CliOptions, mode: CommandMode): vo
   ) {
     throw new Error('--label is only valid when adding a resource-pack.')
   }
+}
+
+function validateSyncValueSource(options: CliOptions, mode: CommandMode): void {
+  if (mode !== '--sync' || options.syncValue === undefined) return
+  let explicitOption: '--name' | '--version' | '--license' | '--network' | undefined
+  if (options.sync === 'display-name' && options.displayName !== undefined) explicitOption = '--name'
+  if (options.sync === 'version' && options.version !== undefined) explicitOption = '--version'
+  if (options.sync === 'license' && options.license !== undefined) explicitOption = '--license'
+  if (options.sync === 'network' && options.network !== undefined) explicitOption = '--network'
+  if (!explicitOption) return
+  throw new Error(
+    `--sync ${options.sync} accepts one value source; use either its positional value or ${explicitOption}.`,
+  )
 }
 
 function validateSyncAlias(

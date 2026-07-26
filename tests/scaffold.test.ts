@@ -3044,6 +3044,17 @@ jobs:
     expect(await readFile(join(target, 'docs/later.txt'), 'utf8')).toBe('later')
   })
 
+  it('does not treat an arbitrary .git directory as repository protection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const target = join(root, 'fake-git')
+    await mkdir(join(target, '.git'), { recursive: true })
+    await writeFile(join(target, 'note.txt'), 'important', 'utf8')
+
+    await expect(assertCanCreateTarget(target, defaultOptions({ force: true }))).rejects.toThrow(
+      'without Git protection',
+    )
+  })
+
   it('keeps local state excluded when initializing git in a forced directory with a custom gitignore', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     const target = join(root, 'existing-gitignore')
@@ -4157,7 +4168,8 @@ jobs:
   it('preserves one-time files in existing git directories', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     const target = join(root, 'existing-git')
-    await mkdir(join(target, '.git'), { recursive: true })
+    await mkdir(target, { recursive: true })
+    await execFileAsync('git', ['init'], { cwd: target })
     await writeFile(join(target, 'README.md'), '# User README\n', 'utf8')
     await writeFile(join(target, 'LICENSE'), 'User license\n', 'utf8')
     await writeFile(join(target, '.gitignore'), 'custom-cache/\n', 'utf8')

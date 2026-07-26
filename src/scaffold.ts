@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -825,12 +825,24 @@ export async function assertCanCreateTarget(
 }
 
 async function isInsideGitTree(path: string): Promise<boolean> {
-  let current = path
+  let current = resolve(path)
   for (;;) {
-    if (await exists(join(current, '.git'))) return true
+    try {
+      if ((await stat(current)).isDirectory()) break
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'ENOENT') return false
+    }
     const parent = resolve(current, '..')
     if (parent === current) return false
     current = parent
+  }
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', current, 'rev-parse', '--is-inside-work-tree'], {
+      windowsHide: true,
+    })
+    return stdout.trim() === 'true'
+  } catch {
+    return false
   }
 }
 
@@ -1109,6 +1121,10 @@ function replacePending(pending: PendingItem[], next: PendingItem): PendingItem[
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error
 }
 
 function defaultPending(input: {

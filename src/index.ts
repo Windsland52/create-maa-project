@@ -23,6 +23,7 @@ import { promptForCreateOptions } from './prompt.js'
 import {
   assertReportSupportedOptions,
   createBackupJsonReport,
+  createCleanCacheJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -84,6 +85,19 @@ async function main(): Promise<void> {
     }
 
     if (options.report) {
+      if (options.cleanCache) {
+        const root = process.cwd()
+        const cachePath = await cleanCache(root)
+        const report = createCleanCacheJsonReport({
+          context: createReportContext(command, startTimeMs, executionId, logger),
+          root,
+          cachePath,
+        })
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
       if (isBackupCommand(options)) {
         const root = process.cwd()
         const backup = await executeBackupCommand(root, options)

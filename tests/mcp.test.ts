@@ -318,6 +318,15 @@ describe('MCP server', () => {
           arguments: { projectPath },
         }),
       )
+      const cacheFile = join(projectRoot, '.create-maa-project', 'cache', 'asset.bin')
+      await mkdir(dirname(cacheFile), { recursive: true })
+      await writeFile(cacheFile, 'cached', 'utf8')
+      const cleaned = parseToolReport(
+        await session.request('tools/call', {
+          name: 'clean_cache',
+          arguments: { projectPath },
+        }),
+      )
 
       expect(created.result.isError).toBeFalsy()
       expect(created.report.root).toBe(projectRoot)
@@ -328,6 +337,16 @@ describe('MCP server', () => {
       expect(diagnosed.result.isError).toBeFalsy()
       expect(diagnosed.report.root).toBe(projectRoot)
       expect(diagnosed.report.doctor?.lines.join('\n')).toContain('[OK] Project: Maintained Child')
+      expect(cleaned.result.isError).toBeFalsy()
+      expect(cleaned.report).toMatchObject({
+        command: 'clean-cache',
+        root: projectRoot,
+        written: [],
+        removed: [
+          '.create-maa-project/cache',
+        ],
+      })
+      await expect(readFile(cacheFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
       await expect(readFile(join(projectRoot, 'CONTRIBUTING.md'), 'utf8')).resolves.toContain('Maintained Child')
     },
     MCP_TEST_TIMEOUT_MS,

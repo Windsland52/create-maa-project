@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import { relative } from 'node:path'
 import type { DoctorReport } from './doctor.js'
 import type { BackupInspection, BackupSummary } from './project.js'
 import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
-export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor' | 'backup'
+export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor' | 'backup' | 'clean-cache'
 
 export type SuggestedCommand = {
   command: string
@@ -65,6 +66,7 @@ export function inferReportCommandFromArgv(argv: string[]): CliReportCommand {
   if (argv.includes('--doctor')) return 'doctor'
   if (argv.includes('--sync')) return 'sync'
   if (argv.includes('--update')) return 'update'
+  if (argv.includes('--clean-cache')) return 'clean-cache'
   return 'create'
 }
 
@@ -73,16 +75,30 @@ export function reportCommandFromOptions(options: CliOptions): CliReportCommand 
   if (options.doctor) return 'doctor'
   if (options.sync) return 'sync'
   if (options.update.length > 0) return 'update'
+  if (options.cleanCache) return 'clean-cache'
   return 'create'
 }
 
 export function assertReportSupportedOptions(options: CliOptions): void {
-  if (options.cleanCache) {
-    throw new Error('--report does not support --clean-cache in this version.')
-  }
   if (options.add.length > 0 && !options.name && !options.sync && options.update.length === 0 && !options.doctor) {
     throw new Error('--report does not support incremental --add commands in this version.')
   }
+}
+
+export function createCleanCacheJsonReport(input: {
+  context: ReportContext
+  root: string
+  cachePath: string
+}): CliJsonReport {
+  return createBaseReport({
+    context: input.context,
+    ok: true,
+    exitCode: 0,
+    root: input.root,
+    removed: [
+      relative(input.root, input.cachePath).replaceAll('\\', '/'),
+    ],
+  })
 }
 
 export function createScaffoldJsonReport(context: ReportContext, result: ScaffoldResult): CliJsonReport {

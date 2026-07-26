@@ -416,7 +416,7 @@ type BackupSummary = {
 type CliJsonReport = {
     schemaVersion: 1;
     tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "doctor" | "backup";
+    command: "create" | "sync" | "update" | "doctor" | "backup" | "clean-cache";
     ok: boolean;
     timestamp: string;
     durationMs: number;

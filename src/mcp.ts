@@ -18,6 +18,7 @@ import { cleanCache, restoreBackup } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
   createBackupJsonReport,
+  createCleanCacheJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -402,12 +403,14 @@ async function callCleanCache(context: McpServerContext, input: unknown): Promis
     const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'clean_cache')
     root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
-    return errorToolResult(context, 'update', error)
+    return errorToolResult(context, 'clean-cache', error)
   }
-  return withReport({ root }, 'update', async (reportContext) => {
-    return createBaseReport(reportContext, root, [
-      await cleanCache(root),
-    ])
+  return withReport({ root }, 'clean-cache', async (reportContext) => {
+    return createCleanCacheJsonReport({
+      context: reportContext,
+      root,
+      cachePath: await cleanCache(root),
+    })
   })
 }
 
@@ -463,26 +466,6 @@ function reportToolResult(report: CliJsonReport, isError = !report.ok): CallTool
       },
     ],
     isError,
-  }
-}
-
-function createBaseReport(context: ReportContext, root: string, affectedPaths: string[]): CliJsonReport {
-  return {
-    schemaVersion: 1,
-    tool: 'create-maa-project',
-    command: context.command,
-    ok: true,
-    timestamp: new Date().toISOString(),
-    durationMs: Math.max(0, Date.now() - context.startTimeMs),
-    exitCode: 0,
-    executionId: context.executionId,
-    root,
-    logPath: context.logPath,
-    written: affectedPaths,
-    removed: [],
-    skipped: [],
-    pending: [],
-    suggestedCommands: [],
   }
 }
 

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, open, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -328,6 +328,33 @@ describe('CLI JSON reports', () => {
           'tools/schema/interface.schema.json',
         ]),
       )
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'reports cache cleanup as a removal',
+    async () => {
+      const root = await tempRoot()
+      const cacheFile = join(root, '.create-maa-project', 'cache', 'asset.bin')
+      await mkdir(dirname(cacheFile), { recursive: true })
+      await writeFile(cacheFile, 'cached', 'utf8')
+
+      const result = await runCli(['--clean-cache', '--report'], root)
+      const report = parseStdoutReport(result.stdout, result.stderr)
+
+      expect(result.exitCode).toBe(0)
+      expect(report).toMatchObject({
+        command: 'clean-cache',
+        ok: true,
+        root,
+        written: [],
+        removed: [
+          '.create-maa-project/cache',
+        ],
+        logPath: null,
+      })
+      await expect(readFile(cacheFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     },
     CLI_TEST_TIMEOUT_MS,
   )

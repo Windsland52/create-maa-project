@@ -13,5 +13,6 @@ describe('release workflow publication ordering', () => {
     expect(workflow).toContain('npm view "$package_name@$package_version" version')
     expect(workflow).toContain('is already published; skipping npm publish.')
     expect(workflow).toContain('skip-existing: true')
+    expect(workflow).toContain('pnpm audit --audit-level high')
   })
 })

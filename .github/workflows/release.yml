@@ -24,6 +24,7 @@ jobs:
           python-version: "3.13"
       - run: node scripts/sync-release-version.mjs
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
       - run: pnpm check
       - name: Pack npm package
         run: mkdir -p dist/npm && pnpm pack --pack-destination dist/npm

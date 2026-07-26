@@ -689,6 +689,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6')
     expect(releaseWorkflow).toContain('astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
+    expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
     expect(releaseWorkflow).toContain('-${gui^^}.${{ matrix.ext }}"')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
@@ -3652,6 +3653,8 @@ jobs:
     expect(checkWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
       checkWorkflow.indexOf('pnpm install --frozen-lockfile'),
     )
+    expect(checkWorkflow).toContain('pnpm audit --audit-level high')
+    expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
       releaseWorkflow.indexOf('pnpm install --frozen-lockfile'),
     )

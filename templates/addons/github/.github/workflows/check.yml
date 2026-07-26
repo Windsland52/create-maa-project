@@ -25,6 +25,7 @@ jobs:
           cache: pnpm
       - run: node tools/check-project.mjs
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
       - run: pnpm check
       - run: pnpm check:py
         if: hashFiles('pyproject.toml') != ''

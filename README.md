@@ -388,7 +388,15 @@ type CliJsonReport = {
     backupId?: string;
     backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
-    doctor?: {lines: string[]};
+    doctor?: {
+        lines: string[];
+        checks: Array<{
+            id: string;
+            status: "pass" | "fail" | "skipped";
+            summary: string;
+            details: string[];
+        }>;
+    };
     backup?:
         | {operation: "list"; backups: BackupSummary[]}
         | {operation: "show" | "restore-preview"; backup: BackupInspection}

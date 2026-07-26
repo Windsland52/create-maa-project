@@ -33,7 +33,10 @@ type JsonReport = {
     removed?: string[]
     preRestoreBackupId?: string
   }
-  doctor?: { lines: string[] }
+  doctor?: {
+    lines: string[]
+    checks: Array<{ id: string; status: 'pass' | 'fail' | 'skipped'; summary: string; details: string[] }>
+  }
   error?: { message: string; code?: string }
 }
 
@@ -462,6 +465,12 @@ describe('CLI JSON reports', () => {
         root: projectRoot,
       })
       expect(report.doctor?.lines.join('\n')).toContain('Required project file is missing: tools/check-project.mjs')
+      expect(report.doctor?.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'node-tooling', status: 'fail' }),
+          expect.objectContaining({ id: 'resource-paths', status: 'pass' }),
+        ]),
+      )
     },
     CLI_TEST_TIMEOUT_MS,
   )

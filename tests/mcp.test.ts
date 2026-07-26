@@ -46,7 +46,10 @@ type JsonReport = {
       entries: Array<{ path: string; action: string }>
     }
   }
-  doctor?: { lines: string[] }
+  doctor?: {
+    lines: string[]
+    checks: Array<{ id: string; status: 'pass' | 'fail' | 'skipped'; summary: string; details: string[] }>
+  }
   error?: { message: string; code?: string }
 }
 
@@ -292,6 +295,12 @@ describe('MCP server', () => {
         root: projectRoot,
       })
       expect(report.doctor?.lines.join('\n')).toContain('[OK] Project:')
+      expect(report.doctor?.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'project-config', status: 'pass' }),
+          expect.objectContaining({ id: 'interface-metadata', status: 'pass' }),
+        ]),
+      )
       expect(report.pending).toEqual([])
     },
     MCP_TEST_TIMEOUT_MS,
@@ -581,6 +590,9 @@ describe('MCP server', () => {
       expect(report).toMatchObject({ command: 'doctor', ok: false, exitCode: 1 })
       expect(report.error).toBeUndefined()
       expect(report.doctor?.lines.join('\n')).toContain('[ERR] maa-project.json could not be read:')
+      expect(report.doctor?.checks).toEqual([
+        expect.objectContaining({ id: 'project-config', status: 'fail' }),
+      ])
     },
     MCP_TEST_TIMEOUT_MS,
   )

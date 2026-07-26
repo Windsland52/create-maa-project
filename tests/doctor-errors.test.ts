@@ -23,6 +23,9 @@ describe('doctor malformed JSON diagnostics', () => {
 
     expect(report.ok).toBe(false)
     expect(report.lines.join('\n')).toContain('[ERR] maa-project.json could not be read:')
+    expect(report.checks).toEqual([
+      expect.objectContaining({ id: 'project-config', status: 'fail' }),
+    ])
   })
 
   it('reports malformed interface JSON and continues checking other files', async () => {
@@ -35,6 +38,14 @@ describe('doctor malformed JSON diagnostics', () => {
     expect(report.ok).toBe(false)
     expect(output).toContain('[ERR] interface.json is not valid JSON:')
     expect(output).toContain('[OK] Resource pack paths are present.')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-json', status: 'fail' }),
+        expect.objectContaining({ id: 'interface-metadata', status: 'skipped' }),
+        expect.objectContaining({ id: 'interface-paths', status: 'skipped' }),
+        expect.objectContaining({ id: 'resource-paths', status: 'pass' }),
+      ]),
+    )
   })
 
   it('reports malformed VS Code settings and continues checking other tooling', async () => {
@@ -49,6 +60,12 @@ describe('doctor malformed JSON diagnostics', () => {
     expect(report.ok).toBe(false)
     expect(output).toContain('[ERR] .vscode/settings.json is not valid JSON: the top-level value must be an object')
     expect(output).toContain('[ERR] pnpm-lock.yaml is missing.')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'vscode-settings', status: 'fail' }),
+        expect.objectContaining({ id: 'node-lockfile', status: 'fail' }),
+      ]),
+    )
   })
 })
 

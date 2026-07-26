@@ -157,7 +157,26 @@ const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
     backupId: { type: 'string' },
     backupScope: { type: 'string', const: 'managed-files' },
     git: { type: 'object' },
-    doctor: { type: 'object' },
+    doctor: {
+      type: 'object',
+      properties: {
+        lines: { type: 'array', items: { type: 'string' } },
+        checks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              status: { type: 'string', enum: ['pass', 'fail', 'skipped'] },
+              summary: { type: 'string' },
+              details: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['id', 'status', 'summary', 'details'],
+          },
+        },
+      },
+      required: ['lines', 'checks'],
+    },
     backup: { type: 'object' },
     error: {
       type: 'object',

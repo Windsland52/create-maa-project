@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { relative } from 'node:path'
-import type { DoctorReport } from './doctor.js'
+import type { DoctorCheck, DoctorReport } from './doctor.js'
 import type { BackupInspection, BackupSummary } from './project.js'
 import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
@@ -38,6 +38,7 @@ export type CliJsonReport = {
   git?: GitInitResult
   doctor?: {
     lines: string[]
+    checks: DoctorCheck[]
   }
   backup?: BackupJsonResult
   error?: {
@@ -130,6 +131,7 @@ export function createDoctorJsonReport(input: {
   })
   report.doctor = {
     lines: input.doctor.lines,
+    checks: input.doctor.checks,
   }
   return report
 }

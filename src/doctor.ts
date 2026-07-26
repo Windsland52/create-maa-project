@@ -7,10 +7,19 @@ import { exists, readText } from './utils.js'
 export type DoctorReport = {
   ok: boolean
   lines: string[]
+  checks: DoctorCheck[]
+}
+
+export type DoctorCheck = {
+  id: string
+  status: 'pass' | 'fail' | 'skipped'
+  summary: string
+  details: string[]
 }
 
 export async function runDoctor(root: string): Promise<DoctorReport> {
   const lines: string[] = []
+  const checks: DoctorCheck[] = []
   let ok = true
   let config: MaaProjectConfig
   try {
@@ -20,26 +29,150 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
     lines.push(
       '      To fix: correct the JSON/config values or restore the file from version control or a project backup.',
     )
-    return { ok: false, lines }
+    recordDoctorCheck(checks, 'project-config', false, 'Project configuration could not be read.', lines)
+    return { ok: false, lines, checks }
   }
 
+  let detailStart = lines.length
   lines.push(`[OK] Project: ${config.project.displayName} (${config.project.slug})`)
+  recordDoctorCheck(checks, 'project-config', true, 'Project configuration is valid.', lines, detailStart)
+
+  detailStart = lines.length
   const interfaceJson = await readInterfaceJson(root, lines)
+  recordDoctorCheck(
+    checks,
+    'interface-json',
+    interfaceJson !== undefined,
+    interfaceJson ? 'interface.json is present and valid.' : 'interface.json is missing or invalid.',
+    lines,
+    detailStart,
+  )
   if (interfaceJson) {
-    ok = checkInterfaceMetadata(config, interfaceJson, lines) && ok
+    detailStart = lines.length
+    const metadataOk = checkInterfaceMetadata(config, interfaceJson, lines)
+    recordDoctorCheck(
+      checks,
+      'interface-metadata',
+      metadataOk,
+      metadataOk ? 'Interface metadata matches project configuration.' : 'Interface metadata has drifted.',
+      lines,
+      detailStart,
+    )
+    ok = metadataOk && ok
   } else {
+    recordSkippedCheck(
+      checks,
+      'interface-metadata',
+      'Interface metadata was not checked because interface.json is unavailable.',
+    )
     ok = false
   }
   if (hasDevTools(config)) {
-    ok = (await checkNodeToolingFiles(root, config, lines)) && ok
-    if (config.features.vscode.enabled) ok = (await checkVscodeSettings(root, lines)) && ok
-    ok = (await checkNodeLockfile(root, lines)) && ok
+    detailStart = lines.length
+    const nodeToolingOk = await checkNodeToolingFiles(root, config, lines)
+    recordDoctorCheck(
+      checks,
+      'node-tooling',
+      nodeToolingOk,
+      nodeToolingOk ? 'Node tooling files are valid.' : 'Node tooling files need repair.',
+      lines,
+      detailStart,
+    )
+    ok = nodeToolingOk && ok
+    if (config.features.vscode.enabled) {
+      detailStart = lines.length
+      const vscodeOk = await checkVscodeSettings(root, lines)
+      recordDoctorCheck(
+        checks,
+        'vscode-settings',
+        vscodeOk,
+        vscodeOk ? 'VS Code settings are valid.' : 'VS Code settings need repair.',
+        lines,
+        detailStart,
+      )
+      ok = vscodeOk && ok
+    } else {
+      recordSkippedCheck(checks, 'vscode-settings', 'VS Code settings are disabled in project configuration.')
+    }
+    detailStart = lines.length
+    const lockfileOk = await checkNodeLockfile(root, lines)
+    recordDoctorCheck(
+      checks,
+      'node-lockfile',
+      lockfileOk,
+      lockfileOk ? 'The pnpm lockfile is present.' : 'The pnpm lockfile is missing.',
+      lines,
+      detailStart,
+    )
+    ok = lockfileOk && ok
+  } else {
+    recordSkippedCheck(checks, 'node-tooling', 'Node tooling is disabled in project configuration.')
+    recordSkippedCheck(checks, 'vscode-settings', 'Node tooling is disabled in project configuration.')
+    recordSkippedCheck(checks, 'node-lockfile', 'Node tooling is disabled in project configuration.')
   }
-  ok = (await checkResourcePaths(root, config, lines)) && ok
-  if (interfaceJson) ok = (await checkReferencedPaths(root, interfaceJson, lines)) && ok
-  ok = (await checkMaatoolsConfig(root, config, lines)) && ok
+  detailStart = lines.length
+  const resourcesOk = await checkResourcePaths(root, config, lines)
+  recordDoctorCheck(
+    checks,
+    'resource-paths',
+    resourcesOk,
+    resourcesOk ? 'Resource pack paths are present.' : 'A resource pack path is invalid or missing.',
+    lines,
+    detailStart,
+  )
+  ok = resourcesOk && ok
+  if (interfaceJson) {
+    detailStart = lines.length
+    const referencesOk = await checkReferencedPaths(root, interfaceJson, lines)
+    recordDoctorCheck(
+      checks,
+      'interface-paths',
+      referencesOk,
+      referencesOk ? 'Interface paths are valid and present.' : 'An interface path is invalid or missing.',
+      lines,
+      detailStart,
+    )
+    ok = referencesOk && ok
+  } else {
+    recordSkippedCheck(
+      checks,
+      'interface-paths',
+      'Interface paths were not checked because interface.json is unavailable.',
+    )
+  }
+  detailStart = lines.length
+  const maatoolsOk = await checkMaatoolsConfig(root, config, lines)
+  recordDoctorCheck(
+    checks,
+    'maatools-config',
+    maatoolsOk,
+    maatoolsOk ? 'Maa tools configuration is valid.' : 'Maa tools configuration needs repair.',
+    lines,
+    detailStart,
+  )
+  ok = maatoolsOk && ok
 
-  return { ok, lines }
+  return { ok, lines, checks }
+}
+
+function recordDoctorCheck(
+  checks: DoctorCheck[],
+  id: string,
+  passed: boolean,
+  summary: string,
+  lines: string[],
+  detailStart = 0,
+): void {
+  checks.push({
+    id,
+    status: passed ? 'pass' : 'fail',
+    summary,
+    details: lines.slice(detailStart),
+  })
+}
+
+function recordSkippedCheck(checks: DoctorCheck[], id: string, summary: string): void {
+  checks.push({ id, status: 'skipped', summary, details: [] })
 }
 
 async function readInterfaceJson(

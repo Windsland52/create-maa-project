@@ -1500,32 +1500,28 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     }
   })
 
-  it(
-    'syncs agent metadata without removing its MaaTools debug configuration',
-    async () => {
-      const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-      process.chdir(root)
-      await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
-      process.chdir(join(root, 'maa-pyproject-sync'))
-      await addAgent(
-        defaultOptions({
-          add: [
-            'agent',
-          ],
-        }),
-      )
+  it('syncs agent metadata without removing its MaaTools debug configuration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
+    process.chdir(join(root, 'maa-pyproject-sync'))
+    await addAgent(
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
+    )
 
-      await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
 
-      expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
-        'name = "maa-pyproject-sync"\nversion = "0.2.0"',
-      )
-      expect(await readFile(join(root, 'maa-pyproject-sync', 'maatools.config.mts'), 'utf8')).toContain(
-        "uv: 'Maa Agent: Debug'",
-      )
-    },
-    15_000,
-  )
+    expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
+      'name = "maa-pyproject-sync"\nversion = "0.2.0"',
+    )
+    expect(await readFile(join(root, 'maa-pyproject-sync', 'maatools.config.mts'), 'utf8')).toContain(
+      "uv: 'Maa Agent: Debug'",
+    )
+  }, 15_000)
 
   it('syncs MIT license metadata and legal text as one operation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
@@ -2848,33 +2844,30 @@ jobs:
 
     let release = 1
     const update = () =>
-      recordUpdateRequests(
-        defaultOptions({ update: ['runtime:mfa'] }),
-        {
-          productManifestResolver: async () => {
-            const files =
-              release === 1
-                ? [
-                    ['MFAAvalonia.exe', 'old-runtime'],
-                    ['obsolete.dll', 'obsolete'],
-                  ]
-                : [['MFAAvalonia.exe', 'new-runtime']]
-            return {
-              schemaVersion: 1,
-              product: 'MFAAvalonia',
-              platform: 'win-x64',
-              assets: files.map(([name, content]) => ({
-                path: `.create-maa-project/runtime/mfaa/win-x64/${name}`,
-                url: `https://example.test/${release}/${name}`,
-                sha256: sha256(Buffer.from(content as string)),
-                size: Buffer.byteLength(content as string),
-              })),
-            }
-          },
-          assetDownloader: async (url) =>
-            Buffer.from(url.includes('/2/') ? 'new-runtime' : url.endsWith('obsolete.dll') ? 'obsolete' : 'old-runtime'),
+      recordUpdateRequests(defaultOptions({ update: ['runtime:mfa'] }), {
+        productManifestResolver: async () => {
+          const files =
+            release === 1
+              ? [
+                  ['MFAAvalonia.exe', 'old-runtime'],
+                  ['obsolete.dll', 'obsolete'],
+                ]
+              : [['MFAAvalonia.exe', 'new-runtime']]
+          return {
+            schemaVersion: 1,
+            product: 'MFAAvalonia',
+            platform: 'win-x64',
+            assets: files.map(([name, content]) => ({
+              path: `.create-maa-project/runtime/mfaa/win-x64/${name}`,
+              url: `https://example.test/${release}/${name}`,
+              sha256: sha256(Buffer.from(content as string)),
+              size: Buffer.byteLength(content as string),
+            })),
+          }
         },
-      )
+        assetDownloader: async (url) =>
+          Buffer.from(url.includes('/2/') ? 'new-runtime' : url.endsWith('obsolete.dll') ? 'obsolete' : 'old-runtime'),
+      })
 
     await update()
     release = 2

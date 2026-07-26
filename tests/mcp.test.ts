@@ -52,6 +52,7 @@ type JsonReport = {
 
 type ToolCallResult = {
   content: Array<{ type: 'text'; text: string }>
+  structuredContent?: JsonReport
   isError?: boolean
 }
 
@@ -63,6 +64,18 @@ type ToolListResult = {
       type: 'object'
       properties?: Record<string, unknown>
       required?: string[]
+    }
+    outputSchema?: {
+      type: 'object'
+      properties?: Record<string, unknown>
+      required?: string[]
+    }
+    annotations?: {
+      title?: string
+      readOnlyHint?: boolean
+      destructiveHint?: boolean
+      idempotentHint?: boolean
+      openWorldHint?: boolean
     }
   }>
 }
@@ -169,6 +182,25 @@ describe('MCP server', () => {
       })
       expect(toolByName(tools, 'show_backup').inputSchema.required).toEqual(['backupId'])
       expect(toolByName(tools, 'restore').inputSchema.properties?.dryRun).toMatchObject({ type: 'boolean' })
+      for (const tool of tools) {
+        expect(tool.outputSchema?.type, tool.name).toBe('object')
+        expect(tool.outputSchema?.required, tool.name).toEqual(expect.arrayContaining([
+          'schemaVersion',
+          'command',
+          'ok',
+          'root',
+        ]))
+        expect(tool.annotations, tool.name).toMatchObject({
+          title: expect.any(String),
+          readOnlyHint: expect.any(Boolean),
+          destructiveHint: expect.any(Boolean),
+          idempotentHint: expect.any(Boolean),
+          openWorldHint: expect.any(Boolean),
+        })
+      }
+      expect(toolByName(tools, 'doctor').annotations).toMatchObject({ readOnlyHint: true })
+      expect(toolByName(tools, 'list_backups').annotations).toMatchObject({ readOnlyHint: true })
+      expect(toolByName(tools, 'restore').annotations).toMatchObject({ destructiveHint: true })
       for (const name of [
         'doctor',
         'sync',
@@ -901,9 +933,11 @@ function parseToolReport(response: JsonRpcResponse): {
   })
   const text = result.content[0]?.text
   expect(text).toEqual(expect.any(String))
+  const report = JSON.parse(text as string) as JsonReport
+  expect(result.structuredContent).toEqual(report)
   return {
     result,
-    report: JSON.parse(text as string) as JsonReport,
+    report,
   }
 }
 

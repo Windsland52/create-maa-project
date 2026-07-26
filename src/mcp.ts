@@ -122,6 +122,91 @@ type ToolName =
 type JsonObject = Record<string, unknown>
 type McpServerContext = { root: string }
 
+const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+  type: 'object',
+  properties: {
+    schemaVersion: { type: 'integer', const: 1 },
+    tool: { type: 'string', const: 'create-maa-project' },
+    command: { type: 'string', enum: ['create', 'sync', 'update', 'add', 'doctor', 'backup', 'clean-cache'] },
+    ok: { type: 'boolean' },
+    timestamp: { type: 'string' },
+    durationMs: { type: 'integer', minimum: 0 },
+    exitCode: { type: 'integer', enum: [0, 1] },
+    executionId: { type: 'string' },
+    root: { type: 'string' },
+    logPath: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    written: { type: 'array', items: { type: 'string' } },
+    removed: { type: 'array', items: { type: 'string' } },
+    skipped: { type: 'array', items: { type: 'string' } },
+    pending: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string' },
+          reason: { type: 'string' },
+          command: { type: 'string' },
+        },
+        required: ['kind', 'reason', 'command'],
+      },
+    },
+    suggestedCommands: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          command: { type: 'string' },
+          description: { type: 'string' },
+          autoRun: { type: 'boolean' },
+        },
+        required: ['command', 'description', 'autoRun'],
+      },
+    },
+    backupId: { type: 'string' },
+    backupScope: { type: 'string', const: 'managed-files' },
+    git: { type: 'object' },
+    doctor: { type: 'object' },
+    backup: { type: 'object' },
+    error: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        code: { type: 'string' },
+      },
+      required: ['message'],
+    },
+  },
+  required: [
+    'schemaVersion',
+    'tool',
+    'command',
+    'ok',
+    'timestamp',
+    'durationMs',
+    'exitCode',
+    'executionId',
+    'root',
+    'logPath',
+    'written',
+    'removed',
+    'skipped',
+    'pending',
+    'suggestedCommands',
+  ],
+}
+
+const TOOL_ANNOTATIONS: Record<ToolName, NonNullable<Tool['annotations']>> = {
+  create_project: toolAnnotations('Create MaaFW Project', false, false, false, true),
+  doctor: toolAnnotations('Diagnose MaaFW Project', true, false, true, false),
+  sync: toolAnnotations('Synchronize Project Metadata', false, true, false, false),
+  update: toolAnnotations('Update Project Dependencies', false, true, false, true),
+  add: toolAnnotations('Add Project Capability', false, true, false, false),
+  list_backups: toolAnnotations('List Project Backups', true, false, true, false),
+  show_backup: toolAnnotations('Inspect Project Backup', true, false, true, false),
+  restore: toolAnnotations('Restore Project Backup', false, true, false, false),
+  clean_cache: toolAnnotations('Clean Project Cache', false, true, true, false),
+}
+
 export function createMcpServer(root = safeProcessCwd('.')): Server {
   const context: McpServerContext = { root: resolve(root) }
   const server = new Server(
@@ -149,7 +234,7 @@ export async function startMcpServer(): Promise<void> {
   await waitForStdinClose()
 }
 
-const MCP_TOOLS: Tool[] = [
+const MCP_TOOL_DEFINITIONS: Tool[] = [
   {
     name: 'create_project',
     description:
@@ -281,6 +366,12 @@ const MCP_TOOLS: Tool[] = [
     }),
   },
 ]
+
+const MCP_TOOLS: Tool[] = MCP_TOOL_DEFINITIONS.map((tool) => ({
+  ...tool,
+  outputSchema: REPORT_OUTPUT_SCHEMA,
+  annotations: TOOL_ANNOTATIONS[tool.name as ToolName],
+}))
 
 async function callTool(context: McpServerContext, name: string, input: unknown): Promise<CallToolResult> {
   const toolName = name as ToolName
@@ -558,6 +649,9 @@ function reportToolResult(report: CliJsonReport, isError = !report.ok): CallTool
         text: JSON.stringify(report),
       },
     ],
+    structuredContent: {
+      ...report,
+    },
     isError,
   }
 }
@@ -953,6 +1047,22 @@ function arraySchema(items: object, description: string): object {
     type: 'array',
     items,
     description,
+  }
+}
+
+function toolAnnotations(
+  title: string,
+  readOnlyHint: boolean,
+  destructiveHint: boolean,
+  idempotentHint: boolean,
+  openWorldHint: boolean,
+): NonNullable<Tool['annotations']> {
+  return {
+    title,
+    readOnlyHint,
+    destructiveHint,
+    idempotentHint,
+    openWorldHint,
   }
 }
 

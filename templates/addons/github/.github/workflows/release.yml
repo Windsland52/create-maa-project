@@ -57,8 +57,10 @@ jobs:
 
             if [[ "${{ matrix.runtime_os }}" == "win" ]]; then
               if [ ! -f rcedit.exe ]; then
-                curl -fsSL https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe -o rcedit.exe
+                rcedit_version="2.0.0"
+                curl -fsSL "https://github.com/electron/rcedit/releases/download/v${rcedit_version}/rcedit-x64.exe" -o rcedit.exe
               fi
+              echo "3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  rcedit.exe" | sha256sum --check --strict
               exe="$(find "$pkg_dir" -maxdepth 1 -type f -name '*.exe' | head -n 1)"
               if [[ -n "$exe" ]]; then
                 ./rcedit.exe "$exe" --set-icon logo.ico

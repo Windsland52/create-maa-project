@@ -3676,6 +3676,8 @@ jobs:
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
     expect(releaseWorkflow).toContain('cp logo.ico "$pkg_dir/logo.ico"')
     expect(releaseWorkflow).toContain('rcedit-x64.exe')
+    expect(releaseWorkflow).toContain('3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  rcedit.exe')
+    expect(releaseWorkflow).toContain('sha256sum --check --strict')
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
     expect(releaseWorkflow).toContain('actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7')
     expect(releaseWorkflow).toContain('generate_release_notes: true')

@@ -6,6 +6,7 @@ import {
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
+import type { ProjectWriteOperation } from './project.js'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -92,25 +93,38 @@ const UPDATE_PENDING: Record<UpdateTarget, PendingItem> = {
 export type UpdateCommandRunner = (root: string, command: string, args: string[]) => Promise<void>
 export type ProgressReporter = (message: string) => void
 
+const updateOperation = Symbol('updateOperation')
+
+type UpdateEnvironment = {
+  commandRunner?: UpdateCommandRunner
+  ocrManifestResolver?: AssetManifestResolver
+  productManifestResolver?: ProductAssetManifestResolver
+  assetDownloader?: AssetDownloader
+  onProgress?: ProgressReporter
+  onDownloadProgress?: DownloadProgressReporter
+  root?: string
+  operationCommand?: string
+  [updateOperation]?: ProjectWriteOperation
+}
+
 export async function recordUpdateRequests(
   options: CliOptions,
-  environment: {
-    commandRunner?: UpdateCommandRunner
-    ocrManifestResolver?: AssetManifestResolver
-    productManifestResolver?: ProductAssetManifestResolver
-    assetDownloader?: AssetDownloader
-    onProgress?: ProgressReporter
-    onDownloadProgress?: DownloadProgressReporter
-    root?: string
-    operationCommand?: string
-  } = {},
+  environment: UpdateEnvironment = {},
 ): Promise<ScaffoldResult> {
   const root = environment.root ?? process.cwd()
-  const config = await readProjectConfig(root)
-  const commandRunner = environment.commandRunner ?? runCommand
   const targets = [
     ...new Set(options.update.map(validateUpdateTarget)),
   ]
+  if (!environment[updateOperation]) {
+    return withProjectWriteLock(
+      root,
+      environment.operationCommand ?? process.argv.join(' '),
+      (operation) => recordUpdateRequests(options, { ...environment, [updateOperation]: operation }),
+      { clearStale: options.clearStaleLock },
+    )
+  }
+  const config = await readProjectConfig(root)
+  const commandRunner = environment.commandRunner ?? runCommand
 
   return withProjectWriteLock(
     root,

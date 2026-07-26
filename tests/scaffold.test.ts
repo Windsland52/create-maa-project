@@ -1343,6 +1343,35 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     }
   })
 
+  it('acquires the project lock before reading update inputs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    const created = await createProject(defaultOptions({ name: 'maa-update-lock-order' }))
+    let markAcquired!: () => void
+    let releaseLock!: () => void
+    const acquired = new Promise<void>((resolve) => {
+      markAcquired = resolve
+    })
+    const release = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    const holding = withProjectWriteLock(created.root, 'hold update inputs', async () => {
+      markAcquired()
+      await release
+    })
+    await acquired
+    await writeFile(join(created.root, 'maa-project.json'), '{ invalid', 'utf8')
+
+    try {
+      await expect(
+        recordUpdateRequests(defaultOptions({ update: ['schema'] }), { root: created.root }),
+      ).rejects.toThrow('Another create-maa-project command is running')
+    } finally {
+      releaseLock()
+      await holding
+    }
+  })
+
   it(
     'syncs agent metadata without removing its MaaTools debug configuration',
     async () => {

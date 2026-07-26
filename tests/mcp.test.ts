@@ -192,12 +192,14 @@ describe('MCP server', () => {
       expect(toolByName(tools, 'restore').inputSchema.properties?.dryRun).toMatchObject({ type: 'boolean' })
       for (const tool of tools) {
         expect(tool.outputSchema?.type, tool.name).toBe('object')
-        expect(tool.outputSchema?.required, tool.name).toEqual(expect.arrayContaining([
-          'schemaVersion',
-          'command',
-          'ok',
-          'root',
-        ]))
+        expect(tool.outputSchema?.required, tool.name).toEqual(
+          expect.arrayContaining([
+            'schemaVersion',
+            'command',
+            'ok',
+            'root',
+          ]),
+        )
         expect(tool.annotations, tool.name).toMatchObject({
           title: expect.any(String),
           readOnlyHint: expect.any(Boolean),
@@ -367,6 +369,15 @@ describe('MCP server', () => {
           },
         }),
       )
+      const updated = parseToolReport(
+        await session.request('tools/call', {
+          name: 'update',
+          arguments: {
+            projectPath,
+            targets: ['schema'],
+          },
+        }),
+      )
       const diagnosed = parseToolReport(
         await session.request('tools/call', {
           name: 'doctor',
@@ -389,6 +400,8 @@ describe('MCP server', () => {
       expect(synchronized.report.root).toBe(projectRoot)
       expect(added.result.isError).toBeFalsy()
       expect(added.report).toMatchObject({ command: 'add', root: projectRoot })
+      expect(updated.result.isError).toBeFalsy()
+      expect(updated.report).toMatchObject({ command: 'update', root: projectRoot })
       expect(diagnosed.result.isError).toBeFalsy()
       expect(diagnosed.report.root).toBe(projectRoot)
       expect(diagnosed.report.doctor?.lines.join('\n')).toContain('[OK] Project: Maintained Child')
@@ -403,6 +416,10 @@ describe('MCP server', () => {
       })
       await expect(readFile(cacheFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
       await expect(readFile(join(projectRoot, 'CONTRIBUTING.md'), 'utf8')).resolves.toContain('Maintained Child')
+      const backupCommands = (await listProjectBackups(projectRoot)).map((backup) => backup.command)
+      for (const tool of ['create_project', 'sync', 'add', 'update']) {
+        expect(backupCommands).toEqual(expect.arrayContaining([expect.stringContaining(`MCP ${tool} `)]))
+      }
     },
     MCP_TEST_TIMEOUT_MS,
   )
@@ -463,7 +480,9 @@ describe('MCP server', () => {
         )
         expect(result.isError, attempt.name).toBe(true)
         expect(report.error?.message, attempt.name).toContain('MCP server root')
-        await expect(readFile(join(attempt.target, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+        await expect(readFile(join(attempt.target, 'maa-project.json'), 'utf8')).rejects.toMatchObject({
+          code: 'ENOENT',
+        })
       }
     },
     MCP_TEST_TIMEOUT_MS,
@@ -868,6 +887,10 @@ describe('MCP server', () => {
       expect(report.written).toEqual([])
       expect(report.removed).toEqual(expect.arrayContaining(['maa-project.json']))
       expect(report.backupId).toBe(report.backup?.preRestoreBackupId)
+      const preRestoreBackup = (await listProjectBackups(root)).find(
+        (backup) => backup.id === report.backup?.preRestoreBackupId,
+      )
+      expect(preRestoreBackup?.command).toContain('MCP restore ')
       await expect(readFile(join(root, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     },
     MCP_TEST_TIMEOUT_MS,

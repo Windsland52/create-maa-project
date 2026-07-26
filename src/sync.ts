@@ -24,6 +24,7 @@ import { assertValidSemVer } from './semver.js'
 type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
   root?: string
+  operationCommand?: string
 }
 
 export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
@@ -32,7 +33,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   if (!sync) throw new Error('Missing --sync target')
   if (sync === 'config') {
     if (options.syncValue !== undefined) throw new Error('--sync config does not accept a value.')
-    return migrateStoredProjectConfig(root, options.clearStaleLock)
+    return migrateStoredProjectConfig(root, options.clearStaleLock, environment.operationCommand)
   }
   const config = await readProjectConfig(root)
 
@@ -141,7 +142,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
 
   return withProjectWriteLock(
     root,
-    process.argv.join(' '),
+    environment.operationCommand ?? process.argv.join(' '),
     async (operation) => {
       const result =
         sync === 'license'

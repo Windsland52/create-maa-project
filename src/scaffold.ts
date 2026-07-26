@@ -76,6 +76,7 @@ export async function createProject(
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
     cwd?: string
+    operationCommand?: string
   } = {},
 ): Promise<ScaffoldResult> {
   assertSupportedCreateAddons(options.add)
@@ -138,11 +139,12 @@ export async function createProject(
     ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, includeAgent }),
     configFile(config),
   ]
+  const operationCommand = environment.operationCommand ?? process.argv.join(' ')
   return withProjectLock(
     targetRoot,
-    process.argv.join(' '),
+    operationCommand,
     async () => {
-      const managedResult = await withProjectWriteLock(targetRoot, process.argv.join(' '), async (operation) => {
+      const managedResult = await withProjectWriteLock(targetRoot, operationCommand, async (operation) => {
         const result = await writeGeneratedFiles(targetRoot, files, {
           force: options.force,
           backup: true,

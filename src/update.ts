@@ -102,6 +102,7 @@ export async function recordUpdateRequests(
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
     root?: string
+    operationCommand?: string
   } = {},
 ): Promise<ScaffoldResult> {
   const root = environment.root ?? process.cwd()
@@ -113,7 +114,7 @@ export async function recordUpdateRequests(
 
   return withProjectWriteLock(
     root,
-    process.argv.join(' '),
+    environment.operationCommand ?? process.argv.join(' '),
     async (operation) => {
       const written = new Set<string>()
       const skipped: string[] = []

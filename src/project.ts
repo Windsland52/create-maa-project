@@ -206,8 +206,12 @@ export async function readProjectConfig(root: string): Promise<MaaProjectConfig>
   return config
 }
 
-export async function migrateStoredProjectConfig(root: string, clearStale = false): Promise<ScaffoldResult> {
-  const command = 'create-maa-project --sync config'
+export async function migrateStoredProjectConfig(
+  root: string,
+  clearStale = false,
+  operationCommand = 'create-maa-project --sync config',
+): Promise<ScaffoldResult> {
+  const command = operationCommand
   return withProjectLock(
     root,
     command,
@@ -272,14 +276,18 @@ export async function cleanCache(root: string): Promise<string> {
   return cachePath
 }
 
-export async function restoreBackup(root: string, backupId: string): Promise<RestoreResult> {
+export async function restoreBackup(
+  root: string,
+  backupId: string,
+  operationCommand = `restore backup ${backupId}`,
+): Promise<RestoreResult> {
   assertValidBackupId(backupId)
   if (!currentWriteLockOwner(root)) {
-    return withProjectLock(root, `restore backup ${backupId}`, () => restoreBackup(root, backupId))
+    return withProjectLock(root, operationCommand, () => restoreBackup(root, backupId, operationCommand))
   }
   if (!currentBackupOperation(root)) {
     await inspectProjectBackup(root, backupId)
-    return withProjectOperation(root, `restore backup ${backupId}`, () => restoreBackup(root, backupId))
+    return withProjectOperation(root, operationCommand, () => restoreBackup(root, backupId, operationCommand))
   }
   const operation = requireBackupOperation(root)
   if (operation.manifest.id === backupId) throw new Error('Cannot restore the backup for the active operation.')

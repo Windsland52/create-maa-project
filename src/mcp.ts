@@ -109,15 +109,7 @@ const PROJECT_PATH_ARGUMENTS = [
 ] as const
 
 type ToolName =
-  | 'create_project'
-  | 'doctor'
-  | 'sync'
-  | 'update'
-  | 'add'
-  | 'list_backups'
-  | 'show_backup'
-  | 'restore'
-  | 'clean_cache'
+  'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'list_backups' | 'show_backup' | 'restore' | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
 type McpServerContext = { root: string }
@@ -407,10 +399,13 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
 async function callCreateProject(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   let targetRoot: string
+  let operationCommand: string
   try {
-    options = createProjectOptions(argsRecord(input, CREATE_PROJECT_ARGUMENTS, 'create_project'))
+    const args = argsRecord(input, CREATE_PROJECT_ARGUMENTS, 'create_project')
+    options = createProjectOptions(args)
     if (!options.name) throw new Error('name is required.')
     targetRoot = await resolveMcpCreateTarget(context.root, options.name)
+    operationCommand = mcpOperationCommand('create_project', args)
   } catch (error) {
     return errorToolResult(context, 'create', error)
   }
@@ -423,6 +418,7 @@ async function callCreateProject(context: McpServerContext, input: unknown): Pro
       downloadOcrModels: true,
       commandRunner: runMcpChildCommand,
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
+      operationCommand,
     })
     return createScaffoldJsonReport(reportContext, result)
   })
@@ -454,31 +450,36 @@ async function callDoctor(context: McpServerContext, input: unknown): Promise<Ca
 async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
+  let operationCommand: string
   try {
     const args = argsRecord(input, SYNC_ARGUMENTS, 'sync')
     options = syncOptions(args)
     root = await resolveMcpProjectRoot(context.root, args)
+    operationCommand = mcpOperationCommand('sync', args)
   } catch (error) {
     return errorToolResult(context, 'sync', error)
   }
   return withReport({ root }, 'sync', async (reportContext) =>
-    createScaffoldJsonReport(reportContext, await syncProject(options, { root })),
+    createScaffoldJsonReport(reportContext, await syncProject(options, { root, operationCommand })),
   )
 }
 
 async function callUpdate(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
+  let operationCommand: string
   try {
     const args = argsRecord(input, UPDATE_ARGUMENTS, 'update')
     options = updateOptions(args)
     root = await resolveMcpProjectRoot(context.root, args)
+    operationCommand = mcpOperationCommand('update', args)
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
   return withReport({ root }, 'update', async (reportContext) => {
     const result = await recordUpdateRequests(options, {
       root,
+      operationCommand,
       commandRunner: runMcpChildCommand,
       productManifestResolver: (request) => resolveProductAssetManifest(request),
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
@@ -490,10 +491,12 @@ async function callUpdate(context: McpServerContext, input: unknown): Promise<Ca
 async function callAdd(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
+  let operationCommand: string
   try {
     const args = argsRecord(input, ADD_ARGUMENTS, 'add')
     options = addOptions(args)
     root = await resolveMcpProjectRoot(context.root, args)
+    operationCommand = mcpOperationCommand('add', args)
   } catch (error) {
     return errorToolResult(context, 'add', error)
   }
@@ -504,6 +507,7 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
         process.stderr.write(`${line}\n`)
       },
       root,
+      operationCommand,
     )
     if (!result) {
       throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
@@ -516,11 +520,13 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
   let backupId: string
   let dryRun: boolean
   let root: string
+  let operationCommand: string
   try {
     const args = argsRecord(input, RESTORE_ARGUMENTS, 'restore')
     backupId = requiredString(args, 'backupId')
     dryRun = optionalBoolean(args, 'dryRun') ?? false
     root = await resolveMcpProjectRoot(context.root, args)
+    operationCommand = mcpOperationCommand('restore', args)
   } catch (error) {
     return errorToolResult(context, 'backup', error)
   }
@@ -533,7 +539,7 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
         backup: { operation: 'restore-preview', backup },
       })
     }
-    const restoreResult = await restoreBackup(root, backupId)
+    const restoreResult = await restoreBackup(root, backupId, operationCommand)
     return createBackupJsonReport({
       context: reportContext,
       root,
@@ -1000,6 +1006,10 @@ function formatCommand(command: string, args: string[]): string {
     command,
     ...args,
   ].join(' ')
+}
+
+function mcpOperationCommand(tool: ToolName, args: JsonObject): string {
+  return `MCP ${tool} ${JSON.stringify(args)}`
 }
 
 function objectSchema(properties: Record<string, object> = {}, required: string[] = []): Tool['inputSchema'] {

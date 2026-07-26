@@ -24,12 +24,13 @@ export async function applyIncrementalAddons(
   options: CliOptions,
   writeLine: (line: string) => void = console.log,
   root = process.cwd(),
+  operationCommand = process.argv.join(' '),
 ): Promise<ScaffoldResult | undefined> {
   const addons = resolveAddonDependencies(options.add)
   if (addons.length === 0) return undefined
   return withProjectWriteLock(
     root,
-    process.argv.join(' '),
+    operationCommand,
     async (operation) => {
       let combinedResult: ScaffoldResult | undefined
       for (const addon of addons) {

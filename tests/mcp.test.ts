@@ -40,6 +40,11 @@ type JsonReport = {
     restored?: string[]
     removed?: string[]
     preRestoreBackupId?: string
+    backups?: Array<{ id: string }>
+    backup?: {
+      id: string
+      entries: Array<{ path: string; action: string }>
+    }
   }
   doctor?: { lines: string[] }
   error?: { message: string; code?: string }
@@ -114,6 +119,8 @@ describe('MCP server', () => {
         'sync',
         'update',
         'add',
+        'list_backups',
+        'show_backup',
         'restore',
         'clean_cache',
       ])
@@ -160,11 +167,15 @@ describe('MCP server', () => {
         type: 'string',
         description: expect.stringContaining('Required when addon is "resource-pack"'),
       })
+      expect(toolByName(tools, 'show_backup').inputSchema.required).toEqual(['backupId'])
+      expect(toolByName(tools, 'restore').inputSchema.properties?.dryRun).toMatchObject({ type: 'boolean' })
       for (const name of [
         'doctor',
         'sync',
         'update',
         'add',
+        'list_backups',
+        'show_backup',
         'restore',
         'clean_cache',
       ]) {
@@ -547,6 +558,8 @@ describe('MCP server', () => {
         { name: 'sync', arguments: { target: 'metadata', force: true } },
         { name: 'update', arguments: { targets: ['schema'], force: true } },
         { name: 'add', arguments: { addon: 'community', force: true } },
+        { name: 'list_backups', arguments: { limit: 1 } },
+        { name: 'show_backup', arguments: { backupId: 'missing', verbose: true } },
         { name: 'restore', arguments: { backupId: 'missing', force: true } },
         { name: 'clean_cache', arguments: { dryRun: true } },
       ]
@@ -672,6 +685,58 @@ describe('MCP server', () => {
       })
       expect(report.error?.message).toContain('resourcePackSlug is required')
       expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'lists, inspects, and previews backups without changing project files',
+    async () => {
+      const root = await createValidProject('maa-mcp-backup-inspection')
+      const configBefore = await readFile(join(root, 'maa-project.json'), 'utf8')
+      const session = await startSession(root)
+      await initialize(session)
+
+      const listed = parseToolReport(
+        await session.request('tools/call', {
+          name: 'list_backups',
+          arguments: {},
+        }),
+      )
+      const backupId = listed.report.backup?.backups?.[0]?.id
+      expect(listed.result.isError).toBeFalsy()
+      expect(listed.report).toMatchObject({
+        command: 'backup',
+        ok: true,
+        backupScope: 'managed-files',
+        backup: { operation: 'list', backups: expect.any(Array) },
+      })
+      expect(backupId).toEqual(expect.any(String))
+
+      const shown = parseToolReport(
+        await session.request('tools/call', {
+          name: 'show_backup',
+          arguments: { backupId },
+        }),
+      )
+      const previewed = parseToolReport(
+        await session.request('tools/call', {
+          name: 'restore',
+          arguments: { backupId, dryRun: true },
+        }),
+      )
+
+      expect(shown.result.isError).toBeFalsy()
+      expect(shown.report.backup).toMatchObject({
+        operation: 'show',
+        backup: { id: backupId, entries: expect.any(Array) },
+      })
+      expect(previewed.result.isError).toBeFalsy()
+      expect(previewed.report.backup).toMatchObject({
+        operation: 'restore-preview',
+        backup: { id: backupId, entries: expect.any(Array) },
+      })
+      expect(await readFile(join(root, 'maa-project.json'), 'utf8')).toBe(configBefore)
     },
     MCP_TEST_TIMEOUT_MS,
   )

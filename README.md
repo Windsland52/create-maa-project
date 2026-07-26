@@ -143,8 +143,10 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 ```
 
 如果 agent 要添加 resource pack，必须传 `resourcePackSlug`，例如 `extra` 或 `cn`；否则 MCP tool 会拒绝调用。
-创建子项目后，agent 可在 `doctor`、`sync`、`update`、`add`、`restore` 和 `clean_cache` 中传相对
-`projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、`..` 或根外符号链接。
+创建子项目后，agent 可在 `doctor`、`sync`、`update`、`add`、`list_backups`、`show_backup`、`restore`
+和 `clean_cache` 中传相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、
+`..` 或根外符号链接。恢复前可先用 `list_backups` 查找备份、用 `show_backup` 检查内容，再以
+`restore { backupId, dryRun: true }` 预演；预演不会修改项目文件。
 
 ## 项目模型
 

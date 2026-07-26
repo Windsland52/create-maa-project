@@ -14,7 +14,7 @@ import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from '
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
-import { cleanCache, restoreBackup } from './project.js'
+import { cleanCache, inspectProjectBackup, listProjectBackups, restoreBackup, withProjectLock } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
   createBackupJsonReport,
@@ -96,15 +96,28 @@ const ADD_ARGUMENTS = [
   'label',
   'projectPath',
 ] as const
-const RESTORE_ARGUMENTS = [
+const BACKUP_ARGUMENTS = [
   'backupId',
   'projectPath',
+] as const
+const RESTORE_ARGUMENTS = [
+  ...BACKUP_ARGUMENTS,
+  'dryRun',
 ] as const
 const PROJECT_PATH_ARGUMENTS = [
   'projectPath',
 ] as const
 
-type ToolName = 'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'restore' | 'clean_cache'
+type ToolName =
+  | 'create_project'
+  | 'doctor'
+  | 'sync'
+  | 'update'
+  | 'add'
+  | 'list_backups'
+  | 'show_backup'
+  | 'restore'
+  | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
 type McpServerContext = { root: string }
@@ -226,11 +239,33 @@ const MCP_TOOLS: Tool[] = [
     ),
   },
   {
+    name: 'list_backups',
+    description: 'List managed-files backups newest first. Git repository state under .git is never included.',
+    inputSchema: objectSchema({
+      projectPath: projectPathSchema(),
+    }),
+  },
+  {
+    name: 'show_backup',
+    description: 'Inspect the paths and restore actions in a managed-files backup without changing the project.',
+    inputSchema: objectSchema(
+      {
+        backupId: stringSchema('Managed-files backup id under .create-maa-project/backups.'),
+        projectPath: projectPathSchema(),
+      },
+      [
+        'backupId',
+      ],
+    ),
+  },
+  {
     name: 'restore',
-    description: 'Restore managed project files from a backup. Git repository state under .git is never included.',
+    description:
+      'Restore managed project files from a backup. Set dryRun=true to preview the same restore without changing files. Git repository state under .git is never included.',
     inputSchema: objectSchema(
       {
         backupId: stringSchema('Managed-files backup id under .create-maa-project/backups; excludes .git state.'),
+        dryRun: booleanSchema('Preview the restore without changing project files.'),
         projectPath: projectPathSchema(),
       },
       [
@@ -260,6 +295,10 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
       return callUpdate(context, input)
     case 'add':
       return callAdd(context, input)
+    case 'list_backups':
+      return callListBackups(context, input)
+    case 'show_backup':
+      return callShowBackup(context, input)
     case 'restore':
       return callRestore(context, input)
     case 'clean_cache':
@@ -379,15 +418,25 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
 
 async function callRestore(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let backupId: string
+  let dryRun: boolean
   let root: string
   try {
     const args = argsRecord(input, RESTORE_ARGUMENTS, 'restore')
     backupId = requiredString(args, 'backupId')
+    dryRun = optionalBoolean(args, 'dryRun') ?? false
     root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'backup', error)
   }
   return withReport({ root }, 'backup', async (reportContext) => {
+    if (dryRun) {
+      const backup = await withProjectLock(root, 'MCP restore preview', () => inspectProjectBackup(root, backupId))
+      return createBackupJsonReport({
+        context: reportContext,
+        root,
+        backup: { operation: 'restore-preview', backup },
+      })
+    }
     const restoreResult = await restoreBackup(root, backupId)
     return createBackupJsonReport({
       context: reportContext,
@@ -399,6 +448,44 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
         removed: restoreResult.removed,
         preRestoreBackupId: restoreResult.backupId,
       },
+    })
+  })
+}
+
+async function callListBackups(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  let root: string
+  try {
+    const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'list_backups')
+    root = await resolveMcpProjectRoot(context.root, args)
+  } catch (error) {
+    return errorToolResult(context, 'backup', error)
+  }
+  return withReport({ root }, 'backup', async (reportContext) => {
+    const backups = await withProjectLock(root, 'MCP list backups', () => listProjectBackups(root))
+    return createBackupJsonReport({
+      context: reportContext,
+      root,
+      backup: { operation: 'list', backups },
+    })
+  })
+}
+
+async function callShowBackup(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  let backupId: string
+  let root: string
+  try {
+    const args = argsRecord(input, BACKUP_ARGUMENTS, 'show_backup')
+    backupId = requiredString(args, 'backupId')
+    root = await resolveMcpProjectRoot(context.root, args)
+  } catch (error) {
+    return errorToolResult(context, 'backup', error)
+  }
+  return withReport({ root }, 'backup', async (reportContext) => {
+    const backup = await withProjectLock(root, 'MCP show backup', () => inspectProjectBackup(root, backupId))
+    return createBackupJsonReport({
+      context: reportContext,
+      root,
+      backup: { operation: 'show', backup },
     })
   })
 }

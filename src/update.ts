@@ -32,7 +32,7 @@ import {
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
-import { copyFileAtomic, exists, readText, sha256, writeFileAtomic } from './utils.js'
+import { copyFileAtomic, exists, readText, sha256, stableJson, writeFileAtomic } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
@@ -343,6 +343,7 @@ const RUNTIME_ASSET_PATH_PREFIXES = [
   'libs/',
   'plugins/',
 ]
+const PROJECT_ASSET_INSTALLATIONS_DIR = '.create-maa-project/runtime/installations/'
 
 function embeddedPythonExecutable(platform: string): string {
   return platform.startsWith('win-')
@@ -476,6 +477,10 @@ async function updatePythonRuntime(
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         },
   )
+  const reserved = assets.find((asset) => asset.path.startsWith(PROJECT_ASSET_INSTALLATIONS_DIR))
+  if (reserved) {
+    throw new Error(`Project asset path is reserved for installation state: ${reserved.path}`)
+  }
   for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
@@ -782,10 +787,93 @@ export async function updateProjectAssets(
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         },
   )
-  for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
-  return {
-    written: await writeDownloadedProjectAssets(root, assets),
+  const reserved = assets.find((asset) => asset.path.startsWith(PROJECT_ASSET_INSTALLATIONS_DIR))
+  if (reserved) {
+    throw new Error(`Project asset path is reserved for installation state: ${reserved.path}`)
   }
+  const installationPath = projectAssetInstallationPath(options.request.product, manifest.platform)
+  const previousPaths = await readProjectAssetInstallation(root, installationPath, options.allowedPathPrefixes)
+  const nextPaths = new Set(assets.map((asset) => asset.path))
+  for (const previousPath of previousPaths) {
+    if (nextPaths.has(previousPath)) continue
+    await trackProjectPathForBackup(root, previousPath)
+    await rm(join(root, previousPath), { recursive: true, force: true })
+  }
+  for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
+  await trackProjectPathForBackup(root, installationPath)
+  const written = await writeDownloadedProjectAssets(root, assets)
+  await writeFileAtomic(
+    join(root, installationPath),
+    stableJson({
+      schemaVersion: 1,
+      product: options.request.product,
+      platform: manifest.platform ?? null,
+      paths: assets.map((asset) => asset.path).sort(),
+    }),
+  )
+  return {
+    written: [
+      ...written,
+      installationPath,
+    ],
+  }
+}
+
+function projectAssetInstallationPath(product: string, platform: string | undefined): string {
+  const productKey = product.toLowerCase().replace(/[^a-z0-9._-]+/g, '-') || 'runtime'
+  const platformKey = platform?.toLowerCase().replace(/[^a-z0-9._-]+/g, '-') || 'default'
+  return `${PROJECT_ASSET_INSTALLATIONS_DIR}${productKey}-${platformKey}.json`
+}
+
+async function readProjectAssetInstallation(
+  root: string,
+  installationPath: string,
+  allowedPathPrefixes: string[],
+): Promise<string[]> {
+  const path = join(root, installationPath)
+  if (!(await exists(path))) return []
+  let value: unknown
+  try {
+    value = JSON.parse(await readText(path)) as unknown
+  } catch (error) {
+    throw new Error(`Invalid project asset installation manifest ${installationPath}: ${errorMessage(error)}`)
+  }
+  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.paths)) {
+    throw new Error(`Invalid project asset installation manifest ${installationPath}.`)
+  }
+  const paths: string[] = []
+  for (const candidate of value.paths) {
+    if (typeof candidate !== 'string' || !allowedPathPrefixes.some((prefix) => candidate.startsWith(prefix))) {
+      throw new Error(`Invalid managed asset path in ${installationPath}: ${String(candidate)}`)
+    }
+    if (candidate.startsWith(PROJECT_ASSET_INSTALLATIONS_DIR)) {
+      throw new Error(`Managed asset path is reserved for installation state in ${installationPath}: ${candidate}`)
+    }
+    assertSafeRelativePath(candidate, `managed asset path in ${installationPath}`)
+    if (
+      paths.some((existing) => {
+        const existingKey = existing.toLowerCase()
+        const candidateKey = candidate.toLowerCase()
+        return (
+          existingKey === candidateKey ||
+          existingKey.startsWith(`${candidateKey}/`) ||
+          candidateKey.startsWith(`${existingKey}/`)
+        )
+      })
+    ) {
+      throw new Error(`Overlapping managed asset paths in ${installationPath}: ${candidate}`)
+    }
+    paths.push(candidate)
+  }
+  return paths
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function createProjectAssetUpdateOptions(

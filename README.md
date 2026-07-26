@@ -306,6 +306,7 @@ create-maa-project --clean-cache
 
 - 创建项目时会在相关场景尝试 OCR 下载和 `pnpm install`。
 - 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令。
+- Runtime 更新会记录工具安装的文件，后续更新只清理其中已从新版本移除的文件；旧文件和安装记录均可通过本次备份恢复。
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
 - `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>` 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值。
 - `CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES=<n>` 调整单个归档的解压体积上限，默认 512 MiB。

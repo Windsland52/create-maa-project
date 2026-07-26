@@ -2780,6 +2780,55 @@ jobs:
     ])
   })
 
+  it('removes stale managed runtime assets and restores them from the update backup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-runtime-replace' }))
+    const projectRoot = join(root, 'maa-runtime-replace')
+    process.chdir(projectRoot)
+
+    let release = 1
+    const update = () =>
+      recordUpdateRequests(
+        defaultOptions({ update: ['runtime:mfa'] }),
+        {
+          productManifestResolver: async () => {
+            const files =
+              release === 1
+                ? [
+                    ['MFAAvalonia.exe', 'old-runtime'],
+                    ['obsolete.dll', 'obsolete'],
+                  ]
+                : [['MFAAvalonia.exe', 'new-runtime']]
+            return {
+              schemaVersion: 1,
+              product: 'MFAAvalonia',
+              platform: 'win-x64',
+              assets: files.map(([name, content]) => ({
+                path: `.create-maa-project/runtime/mfaa/win-x64/${name}`,
+                url: `https://example.test/${release}/${name}`,
+                sha256: sha256(Buffer.from(content as string)),
+                size: Buffer.byteLength(content as string),
+              })),
+            }
+          },
+          assetDownloader: async (url) =>
+            Buffer.from(url.includes('/2/') ? 'new-runtime' : url.endsWith('obsolete.dll') ? 'obsolete' : 'old-runtime'),
+        },
+      )
+
+    await update()
+    release = 2
+    const second = await update()
+    const runtimeRoot = join(projectRoot, '.create-maa-project/runtime/mfaa/win-x64')
+    expect(await readFile(join(runtimeRoot, 'MFAAvalonia.exe'), 'utf8')).toBe('new-runtime')
+    expect(await pathExists(join(runtimeRoot, 'obsolete.dll'))).toBe(false)
+
+    await restoreBackup(projectRoot, second.backupId as string)
+    expect(await readFile(join(runtimeRoot, 'MFAAvalonia.exe'), 'utf8')).toBe('old-runtime')
+    expect(await readFile(join(runtimeRoot, 'obsolete.dll'), 'utf8')).toBe('obsolete')
+  })
+
   it('downloads macOS embedded Python runtime assets and installs Agent requirements', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

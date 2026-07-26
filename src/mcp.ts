@@ -354,9 +354,9 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
     options = addOptions(args)
     root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
-    return errorToolResult(context, 'update', error)
+    return errorToolResult(context, 'add', error)
   }
-  return withReport({ root }, 'update', async (reportContext) => {
+  return withReport({ root }, 'add', async (reportContext) => {
     const result = await applyIncrementalAddons(
       options,
       (line) => {

@@ -360,6 +360,44 @@ describe('CLI JSON reports', () => {
   )
 
   it(
+    'reports incremental add-ons without misclassifying create-time add-ons',
+    async () => {
+      const projectRoot = await createReportProject('maa-report-add')
+
+      const added = await runCli(['--add', 'community', '--report'], projectRoot)
+      const addReport = parseStdoutReport(added.stdout, added.stderr)
+
+      expect(added.exitCode).toBe(0)
+      expect(addReport).toMatchObject({
+        command: 'add',
+        ok: true,
+        root: projectRoot,
+        written: expect.arrayContaining([
+          'CONTRIBUTING.md',
+          'maa-project.json',
+        ]),
+        backupId: expect.any(String),
+        logPath: null,
+      })
+      await expect(readFile(join(projectRoot, 'CONTRIBUTING.md'), 'utf8')).resolves.toContain('maa-report-add')
+
+      const createRoot = await tempRoot()
+      const created = await runCli(
+        [
+          'maa-create-with-addon',
+          '--add',
+          'community',
+          '--skip-download',
+          '--report',
+        ],
+        createRoot,
+      )
+      expect(parseStdoutReport(created.stdout, created.stderr).command).toBe('create')
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'reports doctor failures as pure stdout JSON',
     async () => {
       const projectRoot = await createReportProject('maa-report-doctor')

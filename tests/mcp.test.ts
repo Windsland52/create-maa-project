@@ -333,7 +333,7 @@ describe('MCP server', () => {
       expect(synchronized.result.isError).toBeFalsy()
       expect(synchronized.report.root).toBe(projectRoot)
       expect(added.result.isError).toBeFalsy()
-      expect(added.report.root).toBe(projectRoot)
+      expect(added.report).toMatchObject({ command: 'add', root: projectRoot })
       expect(diagnosed.result.isError).toBeFalsy()
       expect(diagnosed.report.root).toBe(projectRoot)
       expect(diagnosed.report.doctor?.lines.join('\n')).toContain('[OK] Project: Maintained Child')
@@ -633,7 +633,7 @@ describe('MCP server', () => {
 
       expect(result.isError).toBe(true)
       expect(report).toMatchObject({
-        command: 'update',
+        command: 'add',
         ok: false,
         exitCode: 1,
       })

@@ -21,7 +21,6 @@ import {
 } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
-  assertReportSupportedOptions,
   createBackupJsonReport,
   createCleanCacheJsonReport,
   createDoctorJsonReport,
@@ -71,9 +70,6 @@ async function main(): Promise<void> {
     command = reportCommandFromOptions(options)
     logFile = options.logFile
     logger = await createLogger(process.cwd(), options.logFile, options.report ? executionId : undefined)
-    if (options.report) {
-      assertReportSupportedOptions(options)
-    }
     if (options.doctor || options.logFile) {
       await logger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
     }
@@ -144,6 +140,15 @@ async function main(): Promise<void> {
         })
         progress.clear()
         clearActiveProgress = (): void => {}
+        const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
+      if (options.add.length > 0 && !options.name) {
+        const result = await applyIncrementalAddons(options)
+        if (!result) throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
         const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
         writeJsonReport(report)
         process.exitCode = report.exitCode

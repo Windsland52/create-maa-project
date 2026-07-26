@@ -4,7 +4,7 @@ import type { DoctorReport } from './doctor.js'
 import type { BackupInspection, BackupSummary } from './project.js'
 import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
-export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor' | 'backup' | 'clean-cache'
+export type CliReportCommand = 'create' | 'sync' | 'update' | 'add' | 'doctor' | 'backup' | 'clean-cache'
 
 export type SuggestedCommand = {
   command: string
@@ -75,14 +75,9 @@ export function reportCommandFromOptions(options: CliOptions): CliReportCommand 
   if (options.doctor) return 'doctor'
   if (options.sync) return 'sync'
   if (options.update.length > 0) return 'update'
+  if (options.add.length > 0 && options.name === undefined) return 'add'
   if (options.cleanCache) return 'clean-cache'
   return 'create'
-}
-
-export function assertReportSupportedOptions(options: CliOptions): void {
-  if (options.add.length > 0 && !options.name && !options.sync && options.update.length === 0 && !options.doctor) {
-    throw new Error('--report does not support incremental --add commands in this version.')
-  }
 }
 
 export function createCleanCacheJsonReport(input: {

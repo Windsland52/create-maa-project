@@ -22,6 +22,7 @@ export function parseArgs(argv: string[]): CliOptions {
     lang: 'auto',
     assist: false,
     dryRun: false,
+    listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,
@@ -154,6 +155,12 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--restore':
         options.restore = readValue(argv, ++index, arg)
         break
+      case '--list-backups':
+        options.listBackups = true
+        break
+      case '--show-backup':
+        options.showBackup = readValue(argv, ++index, arg)
+        break
       case '--clean-cache':
         options.cleanCache = true
         break
@@ -212,12 +219,17 @@ export function validateCommandModes(options: CliOptions): void {
   if (options.sync !== undefined) modes.push('--sync')
   if (options.update.length > 0) modes.push('--update')
   if (options.add.length > 0 && options.name === undefined) modes.push('--add')
+  if (options.listBackups) modes.push('--list-backups')
+  if (options.showBackup !== undefined) modes.push('--show-backup')
   if (options.restore !== undefined) modes.push('--restore')
   if (options.cleanCache) modes.push('--clean-cache')
   if (options.mcp) modes.push('--mcp')
 
   if (modes.length > 1) {
     throw new Error(`Command modes are mutually exclusive; choose only one: ${modes.join(', ')}`)
+  }
+  if (options.dryRun && options.restore === undefined && options.migrate === undefined) {
+    throw new Error('--dry-run requires --restore <backup-id>.')
   }
 }
 
@@ -231,7 +243,9 @@ Usage:
   create-maa-project --sync <target> [value]
   create-maa-project --update <target>
   create-maa-project --doctor [--report]
-  create-maa-project --restore <backup-id>
+  create-maa-project --list-backups [--report]
+  create-maa-project --show-backup <backup-id> [--report]
+  create-maa-project --restore <backup-id> [--dry-run] [--report]
   create-maa-project --clean-cache
   create-maa-project --mcp
 
@@ -262,12 +276,15 @@ Maintenance modes:
     Targets: schema, maafw, runtime:mfa, runtime:mxu, ocr-models, node-deps,
              python-deps, python-runtime
   --doctor                          Diagnose the current project.
+  --list-backups                    List managed-files backups newest first.
+  --show-backup <backup-id>         Show paths and actions in one backup.
   --restore <backup-id>             Restore managed files; .git is excluded.
+  --dry-run                         Preview --restore without changing files.
   --clean-cache                     Remove the local download cache.
   --mcp                             Start the MCP server over stdio.
 
 Common options:
-  --report                          Emit JSON for create, sync, update, or doctor.
+  --report                          Emit a machine-readable JSON result.
   --clear-stale-lock                Clear a stale project write lock.
   --lang <auto|en|zh-CN>            Select the prompt language.
   --log-file <path>                 Write logs to a specific file.
@@ -282,7 +299,9 @@ Examples:
   create-maa-project --add resource-pack extra --label "Extra Resource"
   create-maa-project --sync version --version 0.2.0
   create-maa-project --update ocr-models
-  create-maa-project --doctor --report`
+  create-maa-project --doctor --report
+  create-maa-project --list-backups
+  create-maa-project --restore <backup-id> --dry-run`
 }
 
 function parseControllerOption(value: string): ControllerKind[] {

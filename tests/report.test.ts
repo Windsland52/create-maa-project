@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, open, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { withProjectLock } from '../src/project.js'
 import { testChildEnv } from './child-env.js'
 
 type JsonReport = {
@@ -23,6 +24,13 @@ type JsonReport = {
   suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
   backupId?: string
   backupScope?: 'managed-files'
+  backup?: {
+    operation: string
+    backups?: Array<{ id: string; entryCount: number; error?: string }>
+    backup?: { id: string; entries: Array<{ path: string; action: string }> }
+    restored?: string[]
+    preRestoreBackupId?: string
+  }
   doctor?: { lines: string[] }
   error?: { message: string; code?: string }
 }
@@ -83,6 +91,90 @@ describe('CLI JSON reports', () => {
           }),
         ]),
       )
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'lists, shows, and previews managed-files backups as JSON without changing the project',
+    async () => {
+      const root = await tempRoot()
+      const created = await runCli(['maa-report-backup', '--skip-download', '--report'], root)
+      const createReport = parseStdoutReport(created.stdout, created.stderr)
+      const projectRoot = join(root, 'maa-report-backup')
+      const backupId = createReport.backupId as string
+      const readmeBefore = await readFile(join(projectRoot, 'README.md'), 'utf8')
+      const backupRoot = join(projectRoot, '.create-maa-project', 'backups')
+      const backupIdsBefore = (await readdir(backupRoot)).sort()
+
+      const listed = await runCli(['--list-backups', '--report'], projectRoot)
+      const listReport = parseStdoutReport(listed.stdout, listed.stderr)
+      expect(listReport).toMatchObject({
+        command: 'backup',
+        ok: true,
+        backup: {
+          operation: 'list',
+          backups: expect.arrayContaining([expect.objectContaining({ id: backupId })]),
+        },
+      })
+
+      const shown = await runCli(['--show-backup', backupId, '--report'], projectRoot)
+      const showReport = parseStdoutReport(shown.stdout, shown.stderr)
+      expect(showReport.backup).toMatchObject({
+        operation: 'show',
+        backup: { id: backupId },
+      })
+
+      const previewed = await runCli(['--restore', backupId, '--dry-run', '--report'], projectRoot)
+      const previewReport = parseStdoutReport(previewed.stdout, previewed.stderr)
+      expect(previewReport).toMatchObject({
+        command: 'backup',
+        ok: true,
+        written: [],
+        backup: {
+          operation: 'restore-preview',
+          backup: {
+            id: backupId,
+            entries: expect.arrayContaining([expect.objectContaining({ path: 'README.md', action: 'remove' })]),
+          },
+        },
+      })
+      expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe(readmeBefore)
+      expect((await readdir(backupRoot)).sort()).toEqual(backupIdsBefore)
+
+      const restored = await runCli(['--restore', backupId, '--report'], projectRoot)
+      const restoreReport = parseStdoutReport(restored.stdout, restored.stderr)
+      expect(restored.exitCode).toBe(0)
+      expect(restoreReport).toMatchObject({
+        command: 'backup',
+        ok: true,
+        backupId: expect.any(String),
+        backupScope: 'managed-files',
+        backup: {
+          operation: 'restore',
+          backupId,
+          restored: expect.arrayContaining(['README.md']),
+          preRestoreBackupId: expect.any(String),
+        },
+      })
+      expect(restoreReport.backupId).not.toBe(backupId)
+      await expect(readFile(join(projectRoot, 'README.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'does not list backups concurrently with an active project operation',
+    async () => {
+      const root = await tempRoot()
+
+      await withProjectLock(root, 'hold backup list', async () => {
+        const listed = await runCli(['--list-backups', '--report'], root)
+        const report = parseStdoutReport(listed.stdout, listed.stderr)
+        expect(listed.exitCode).toBe(1)
+        expect(report).toMatchObject({ command: 'backup', ok: false, exitCode: 1 })
+        expect(report.error?.message).toContain('Another create-maa-project command is running')
+      })
     },
     CLI_TEST_TIMEOUT_MS,
   )

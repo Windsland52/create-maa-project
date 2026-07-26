@@ -4108,6 +4108,7 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     noColor: false,
     assist: false,
     dryRun: false,
+    listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,

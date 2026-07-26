@@ -110,6 +110,8 @@ export type CliOptions = {
   license?: LicenseKind
   controllers?: ControllerKind[]
   resourcePackSlug?: string
+  listBackups: boolean
+  showBackup?: string
   restore?: string
   cleanCache: boolean
   report: boolean

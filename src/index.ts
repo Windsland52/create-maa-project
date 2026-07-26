@@ -11,10 +11,18 @@ import {
   type DownloadProgress,
   type DownloadProgressReporter,
 } from './assets.js'
-import { cleanCache, restoreBackup, withProjectWriteLock } from './project.js'
+import {
+  cleanCache,
+  inspectProjectBackup,
+  listProjectBackups,
+  restoreBackup,
+  withProjectLock,
+  type BackupInspection,
+} from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
   assertReportSupportedOptions,
+  createBackupJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -22,13 +30,14 @@ import {
   inferReportCommandFromArgv,
   reportCommandFromOptions,
   reportRequested,
+  type BackupJsonResult,
   type CliReportCommand,
   type ReportContext,
   writeJsonReport,
 } from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
-import type { ScaffoldResult } from './types.js'
+import type { CliOptions, ScaffoldResult } from './types.js'
 import { recordUpdateRequests } from './update.js'
 
 async function main(): Promise<void> {
@@ -70,11 +79,24 @@ async function main(): Promise<void> {
     if (options.assist || options.from) {
       throw new Error('Agent-assisted creation is reserved for a future version and is not supported in v1.')
     }
-    if (options.migrate || options.target || options.dryRun) {
+    if (options.migrate || options.target) {
       throw new Error('Legacy migration is reserved for a future version and is not supported in v1.')
     }
 
     if (options.report) {
+      if (isBackupCommand(options)) {
+        const root = process.cwd()
+        const backup = await executeBackupCommand(root, options)
+        const report = createBackupJsonReport({
+          context: createReportContext(command, startTimeMs, executionId, logger),
+          root,
+          backup,
+        })
+        writeJsonReport(report)
+        process.exitCode = report.exitCode
+        return
+      }
+
       if (options.doctor) {
         const root = process.cwd()
         const doctor = await runDoctor(root)
@@ -143,16 +165,10 @@ async function main(): Promise<void> {
       return
     }
 
-    if (options.restore) {
-      const restoreResult = await withProjectWriteLock(
-        process.cwd(),
-        process.argv.join(' '),
-        () => restoreBackup(process.cwd(), options.restore as string),
-        { clearStale: options.clearStaleLock },
-      )
-      console.log(`Restored files: ${restoreResult.restored.join(', ')}`)
-      console.log(`Pre-restore managed-files backup: ${restoreResult.backupId}`)
-      console.log(`Log: ${logger.path}`)
+    if (isBackupCommand(options)) {
+      const backup = await executeBackupCommand(process.cwd(), options)
+      printBackupResult(backup)
+      if (backup.operation === 'restore') console.log(`Log: ${logger.path}`)
       return
     }
 
@@ -228,6 +244,96 @@ async function main(): Promise<void> {
     if (logger) console.error(`Log: ${logger.path}`)
     process.exitCode = 1
   }
+}
+
+function isBackupCommand(options: CliOptions): boolean {
+  return options.listBackups || options.showBackup !== undefined || options.restore !== undefined
+}
+
+async function executeBackupCommand(root: string, options: CliOptions): Promise<BackupJsonResult> {
+  if (options.listBackups) {
+    return withProjectLock(
+      root,
+      process.argv.join(' '),
+      async () => ({ operation: 'list', backups: await listProjectBackups(root) }),
+      { clearStale: options.clearStaleLock },
+    )
+  }
+  if (options.showBackup) {
+    return withProjectLock(
+      root,
+      process.argv.join(' '),
+      async () => ({ operation: 'show', backup: await inspectProjectBackup(root, options.showBackup as string) }),
+      { clearStale: options.clearStaleLock },
+    )
+  }
+  if (!options.restore) throw new Error('Missing backup command.')
+  const backupId = options.restore
+  if (options.dryRun) {
+    return withProjectLock(
+      root,
+      process.argv.join(' '),
+      async () => ({ operation: 'restore-preview', backup: await inspectProjectBackup(root, backupId) }),
+      { clearStale: options.clearStaleLock },
+    )
+  }
+  return withProjectLock(
+    root,
+    process.argv.join(' '),
+    async () => {
+      await inspectProjectBackup(root, backupId)
+      const restoreResult = await restoreBackup(root, backupId)
+      return {
+        operation: 'restore',
+        backupId,
+        restored: restoreResult.restored,
+        preRestoreBackupId: restoreResult.backupId,
+      }
+    },
+    { clearStale: options.clearStaleLock },
+  )
+}
+
+function printBackupResult(result: BackupJsonResult): void {
+  if (result.operation === 'list') {
+    if (result.backups.length === 0) {
+      console.log('No managed-files backups found.')
+      return
+    }
+    console.log('Managed-files backups (newest first; .git is excluded):')
+    for (const backup of result.backups) {
+      const createdAt = backup.createdAt || 'unknown time'
+      const command = backup.command ? `; ${backup.command}` : ''
+      const error = backup.error ? `; invalid: ${backup.error}` : ''
+      console.log(`- ${backup.id}: ${createdAt}; ${backup.status}; ${backup.entryCount} path(s)${command}${error}`)
+    }
+    return
+  }
+  if (result.operation === 'restore') {
+    console.log(`Restored managed files: ${result.restored.join(', ') || '(none)'}`)
+    console.log(`Pre-restore managed-files backup: ${result.preRestoreBackupId}`)
+    return
+  }
+  printBackupInspection(
+    result.operation === 'show'
+      ? `Managed-files backup ${result.backup.id} (.git is excluded)`
+      : `Restore preview for ${result.backup.id} (no files changed; .git is excluded)`,
+    result.backup,
+  )
+}
+
+function printBackupInspection(title: string, backup: BackupInspection): void {
+  console.log(title)
+  console.log(`Created: ${backup.createdAt}`)
+  console.log(`Format: ${backup.format}`)
+  console.log(`Status: ${backup.status}`)
+  if (backup.command) console.log(`Command: ${backup.command}`)
+  if (backup.entries.length === 0) {
+    console.log('Paths: (none)')
+    return
+  }
+  console.log('Paths:')
+  for (const entry of backup.entries) console.log(`- ${entry.action}: ${entry.path}`)
 }
 
 function createReportContext(

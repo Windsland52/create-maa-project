@@ -13,9 +13,10 @@ import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from '
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
-import { cleanCache, readProjectConfig, restoreBackup, withProjectWriteLock } from './project.js'
+import { cleanCache, readProjectConfig, restoreBackup } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
+  createBackupJsonReport,
   createDoctorJsonReport,
   createErrorJsonReport,
   createReportExecutionId,
@@ -26,7 +27,7 @@ import {
 } from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
-import type { CliOptions, ControllerKind, ScaffoldResult } from './types.js'
+import type { CliOptions, ControllerKind } from './types.js'
 import { recordUpdateRequests } from './update.js'
 
 const TEMPLATE_NAMES = [
@@ -313,14 +314,21 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
   try {
     backupId = requiredString(argsRecord(input), 'backupId')
   } catch (error) {
-    return errorToolResult(context, 'update', error)
+    return errorToolResult(context, 'backup', error)
   }
-  return withReport(context, 'update', async (reportContext) => {
+  return withReport(context, 'backup', async (reportContext) => {
     const root = context.root
-    const restoreResult = await withProjectWriteLock(root, 'create-maa-project --mcp restore', () =>
-      restoreBackup(root, backupId),
-    )
-    return createMaintenanceReport(reportContext, root, restoreResult.restored, restoreResult.backupId)
+    const restoreResult = await restoreBackup(root, backupId)
+    return createBackupJsonReport({
+      context: reportContext,
+      root,
+      backup: {
+        operation: 'restore',
+        backupId,
+        restored: restoreResult.restored,
+        preRestoreBackupId: restoreResult.backupId,
+      },
+    })
   })
 }
 
@@ -383,24 +391,6 @@ function reportToolResult(report: CliJsonReport): CallToolResult {
     ],
     isError: !report.ok,
   }
-}
-
-async function createMaintenanceReport(
-  context: ReportContext,
-  root: string,
-  affectedPaths: string[],
-  backupId?: string,
-): Promise<CliJsonReport> {
-  const config = await readProjectConfig(root)
-  const result: ScaffoldResult = {
-    root,
-    config,
-    written: affectedPaths,
-    skipped: [],
-    pending: [],
-    ...(backupId ? { backupId } : {}),
-  }
-  return createScaffoldJsonReport(context, result)
 }
 
 function createBaseReport(context: ReportContext, root: string, affectedPaths: string[]): CliJsonReport {
@@ -531,6 +521,7 @@ function baseOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     noColor: true,
     assist: false,
     dryRun: false,
+    listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,

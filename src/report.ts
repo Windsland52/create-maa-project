@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import type { DoctorReport } from './doctor.js'
+import type { BackupInspection, BackupSummary } from './project.js'
 import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
 
-export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor'
+export type CliReportCommand = 'create' | 'sync' | 'update' | 'doctor' | 'backup'
 
 export type SuggestedCommand = {
   command: string
   description: string
   autoRun: boolean
 }
+
+export type BackupJsonResult =
+  | { operation: 'list'; backups: BackupSummary[] }
+  | { operation: 'show' | 'restore-preview'; backup: BackupInspection }
+  | { operation: 'restore'; backupId: string; restored: string[]; preRestoreBackupId: string }
 
 export type CliJsonReport = {
   schemaVersion: 1
@@ -31,6 +37,7 @@ export type CliJsonReport = {
   doctor?: {
     lines: string[]
   }
+  backup?: BackupJsonResult
   error?: {
     message: string
     code?: string
@@ -53,6 +60,7 @@ export function reportRequested(argv: string[]): boolean {
 }
 
 export function inferReportCommandFromArgv(argv: string[]): CliReportCommand {
+  if (argv.includes('--list-backups') || argv.includes('--show-backup') || argv.includes('--restore')) return 'backup'
   if (argv.includes('--doctor')) return 'doctor'
   if (argv.includes('--sync')) return 'sync'
   if (argv.includes('--update')) return 'update'
@@ -60,6 +68,7 @@ export function inferReportCommandFromArgv(argv: string[]): CliReportCommand {
 }
 
 export function reportCommandFromOptions(options: CliOptions): CliReportCommand {
+  if (options.listBackups || options.showBackup || options.restore) return 'backup'
   if (options.doctor) return 'doctor'
   if (options.sync) return 'sync'
   if (options.update.length > 0) return 'update'
@@ -67,8 +76,8 @@ export function reportCommandFromOptions(options: CliOptions): CliReportCommand 
 }
 
 export function assertReportSupportedOptions(options: CliOptions): void {
-  if (options.cleanCache || options.restore) {
-    throw new Error('--report is only supported for create, sync, update, and doctor.')
+  if (options.cleanCache) {
+    throw new Error('--report does not support --clean-cache in this version.')
   }
   if (options.add.length > 0 && !options.name && !options.sync && options.update.length === 0 && !options.doctor) {
     throw new Error('--report does not support incremental --add commands in this version.')
@@ -109,6 +118,27 @@ export function createDoctorJsonReport(input: {
   })
   report.doctor = {
     lines: input.doctor.lines,
+  }
+  return report
+}
+
+export function createBackupJsonReport(input: {
+  context: ReportContext
+  root: string
+  backup: BackupJsonResult
+}): CliJsonReport {
+  const written = input.backup.operation === 'restore' ? input.backup.restored : []
+  const report = createBaseReport({
+    context: input.context,
+    ok: true,
+    exitCode: 0,
+    root: input.root,
+    written,
+  })
+  report.backup = input.backup
+  report.backupScope = 'managed-files'
+  if (input.backup.operation === 'restore') {
+    report.backupId = input.backup.preRestoreBackupId
   }
   return report
 }

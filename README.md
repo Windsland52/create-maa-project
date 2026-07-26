@@ -196,6 +196,7 @@ CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`
 
 - 写配置或生成文件前会创建带唯一所有者标识的项目运行锁；异常退出留下的锁可用 `--clear-stale-lock` 清理。
 - 覆盖或创建受管文件前会先登记到同一次操作备份；失败时自动回滚，成功后也可用输出的 backup id 恢复。
+- `--list-backups` 和 `--show-backup <id>` 可检查备份；`--restore <id> --dry-run` 会列出恢复/删除动作但不改文件。
 - `.git` 属于受保护的仓库状态，不进入受管文件备份。创建项目时 Git 初始化在受管文件事务完成后执行；`git init` 失败产生的新 `.git` 会被安全清理。
 - `--force` 跳过确认，但不跳过备份。
 - `--yes` 不等于 `--force`。
@@ -265,6 +266,9 @@ create-maa-project --update python-runtime
 ```bash
 create-maa-project --doctor
 create-maa-project --doctor --report
+create-maa-project --list-backups
+create-maa-project --show-backup <backup-id>
+create-maa-project --restore <backup-id> --dry-run
 create-maa-project --restore <backup-id>
 create-maa-project --clean-cache
 ```
@@ -331,15 +335,34 @@ requirements.txt
 
 ## JSON Report 模式
 
-给 `create`、`sync`、`update` 和 `doctor` 传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读 `Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
+给 `create`、`sync`、`update`、`doctor` 和备份检查/恢复命令传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读 `Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
 
 退出码 `0` 表示命令成功完成。退出码 `1` 表示命令失败，或 `doctor` 发现项目问题。JSON 中的 `exitCode` 与进程退出码一致。
 
 ```ts
+type BackupInspection = {
+    id: string;
+    format: "managed-files" | "legacy";
+    createdAt: string;
+    command: string | null;
+    status: "in-progress" | "complete" | "rolled-back" | "rollback-failed" | "legacy";
+    entries: Array<{path: string; action: "restore" | "remove"}>;
+};
+
+type BackupSummary = {
+    id: string;
+    format: "managed-files" | "legacy" | "invalid";
+    createdAt: string;
+    command: string | null;
+    status: BackupInspection["status"] | "invalid";
+    entryCount: number;
+    error?: string;
+};
+
 type CliJsonReport = {
     schemaVersion: 1;
     tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "doctor";
+    command: "create" | "sync" | "update" | "doctor" | "backup";
     ok: boolean;
     timestamp: string;
     durationMs: number;
@@ -351,8 +374,14 @@ type CliJsonReport = {
     skipped: string[];
     pending: Array<{kind: string; reason: string; command: string}>;
     suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
+    backupId?: string;
+    backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
     doctor?: {lines: string[]};
+    backup?:
+        | {operation: "list"; backups: BackupSummary[]}
+        | {operation: "show" | "restore-preview"; backup: BackupInspection}
+        | {operation: "restore"; backupId: string; restored: string[]; preRestoreBackupId: string};
     error?: {message: string; code?: string};
 };
 ```

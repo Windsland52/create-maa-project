@@ -75,6 +75,105 @@ export type RestoreResult = {
   backupId: string
 }
 
+export type BackupInspectionEntry = {
+  path: string
+  action: 'restore' | 'remove'
+}
+
+export type BackupInspection = {
+  id: string
+  format: 'managed-files' | 'legacy'
+  createdAt: string
+  command: string | null
+  status: BackupManifest['status'] | 'legacy'
+  entries: BackupInspectionEntry[]
+}
+
+export type BackupSummary = {
+  id: string
+  format: BackupInspection['format'] | 'invalid'
+  createdAt: string
+  command: string | null
+  status: BackupInspection['status'] | 'invalid'
+  entryCount: number
+  error?: string
+}
+
+export async function listProjectBackups(root: string): Promise<BackupSummary[]> {
+  const relativeBackupsRoot = join(LOCAL_STATE_DIR, 'backups')
+  await assertNoSymlinkSegments(root, relativeBackupsRoot)
+  const backupsRoot = join(root, relativeBackupsRoot)
+  if (!(await exists(backupsRoot))) return []
+
+  const entries = await readdir(backupsRoot, { withFileTypes: true })
+  const backups = await Promise.all(
+    entries.map(async (entry): Promise<BackupSummary> => {
+      try {
+        const inspection = await inspectProjectBackup(root, entry.name)
+        const { entries: inspectedEntries, ...summary } = inspection
+        return { ...summary, entryCount: inspectedEntries.length }
+      } catch (error) {
+        let createdAt = ''
+        try {
+          createdAt = (await lstat(join(backupsRoot, entry.name))).mtime.toISOString()
+        } catch {
+          // Keep the invalid entry visible even if its metadata cannot be read.
+        }
+        return {
+          id: entry.name,
+          format: 'invalid',
+          createdAt,
+          command: null,
+          status: 'invalid',
+          entryCount: 0,
+          error: errorMessage(error),
+        }
+      }
+    }),
+  )
+  return backups.sort((left, right) => {
+    const byDate = right.createdAt.localeCompare(left.createdAt)
+    return byDate || right.id.localeCompare(left.id)
+  })
+}
+
+export async function inspectProjectBackup(root: string, backupId: string): Promise<BackupInspection> {
+  const { backupRoot, info } = await existingBackupRoot(root, backupId)
+  const manifestPath = join(backupRoot, BACKUP_MANIFEST_FILE)
+  if (await exists(manifestPath)) {
+    const manifest = await readBackupManifest(root, manifestPath, backupId)
+    await validateBackupPayload(root, backupRoot, manifest)
+    const entries = manifest.entries.map((entry): BackupInspectionEntry => ({
+      path: entry.path,
+      action: entry.state === 'created' ? 'remove' : 'restore',
+    }))
+    await validateBackupRestoreTargets(root, entries)
+    return {
+      id: manifest.id,
+      format: 'managed-files',
+      createdAt: manifest.createdAt,
+      command: manifest.command,
+      status: manifest.status,
+      entries,
+    }
+  }
+
+  const paths: string[] = []
+  await collectBackupFiles(backupRoot, backupRoot, paths)
+  const entries = paths
+    .map((path): BackupInspectionEntry => ({ path: normalizeBackupPath(root, path), action: 'restore' }))
+    .sort(compareInspectionEntries)
+  await validateBackupRestoreTargets(root, entries)
+  return {
+    id: backupId,
+    format: 'legacy',
+    createdAt: info.mtime.toISOString(),
+    command: null,
+    status: 'legacy',
+    entries,
+  }
+}
+
 export async function trackProjectPathForBackup(root: string, filePath: string): Promise<void> {
   await backupPath(root, filePath)
 }
@@ -179,16 +278,16 @@ export async function cleanCache(root: string): Promise<string> {
 
 export async function restoreBackup(root: string, backupId: string): Promise<RestoreResult> {
   assertValidBackupId(backupId)
+  if (!currentWriteLockOwner(root)) {
+    return withProjectLock(root, `restore backup ${backupId}`, () => restoreBackup(root, backupId))
+  }
   if (!currentBackupOperation(root)) {
-    return withProjectWriteLock(root, `restore backup ${backupId}`, () => restoreBackup(root, backupId))
+    await inspectProjectBackup(root, backupId)
+    return withProjectOperation(root, `restore backup ${backupId}`, () => restoreBackup(root, backupId))
   }
   const operation = requireBackupOperation(root)
   if (operation.manifest.id === backupId) throw new Error('Cannot restore the backup for the active operation.')
-  await assertNoSymlinkSegments(root, join(LOCAL_STATE_DIR, 'backups', backupId))
-  const backupRoot = join(root, LOCAL_STATE_DIR, 'backups', backupId)
-  if (!(await exists(backupRoot))) {
-    throw new Error(`Backup does not exist: ${backupId}`)
-  }
+  const { backupRoot } = await existingBackupRoot(root, backupId)
   const manifestPath = join(backupRoot, BACKUP_MANIFEST_FILE)
   if (await exists(manifestPath)) {
     const manifest = await readBackupManifest(root, manifestPath, backupId)
@@ -637,6 +736,30 @@ async function collectBackupFiles(backupRoot: string, current: string, paths: st
   }
 }
 
+async function existingBackupRoot(
+  root: string,
+  backupId: string,
+): Promise<{ backupRoot: string; info: Awaited<ReturnType<typeof lstat>> }> {
+  assertValidBackupId(backupId)
+  const relativeBackupRoot = join(LOCAL_STATE_DIR, 'backups', backupId)
+  await assertNoSymlinkSegments(root, relativeBackupRoot)
+  const backupRoot = join(root, relativeBackupRoot)
+  if (!(await exists(backupRoot))) throw new Error(`Backup does not exist: ${backupId}`)
+  const info = await lstat(backupRoot)
+  if (!info.isDirectory()) throw new Error(`Backup is not a directory: ${backupId}`)
+  return { backupRoot, info }
+}
+
+function compareInspectionEntries(left: BackupInspectionEntry, right: BackupInspectionEntry): number {
+  return left.path.localeCompare(right.path)
+}
+
+async function validateBackupRestoreTargets(root: string, entries: BackupInspectionEntry[]): Promise<void> {
+  for (const entry of entries) {
+    normalizeBackupPath(root, await backupBoundaryPath(root, entry.path))
+  }
+}
+
 async function assertNoSymlinkSegments(root: string, relativePath: string): Promise<void> {
   let current = resolve(root)
   for (const segment of relativePath.replaceAll('\\', '/').split('/')) {
@@ -665,6 +788,10 @@ function isFileNotFoundError(error: unknown): boolean {
 
 function isMissingPathError(error: unknown): boolean {
   return isRecord(error) && error.code === 'ENOENT'
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function normalizeBackupPath(root: string, filePath: string): string {

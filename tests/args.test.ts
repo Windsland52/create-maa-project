@@ -172,6 +172,15 @@ describe('parseArgs', () => {
     expect(migration.target).toBe('./new-project')
     expect(migration.dryRun).toBe(true)
   })
+
+  it('parses backup inspection and restore preview options', () => {
+    expect(parseArgs(['--list-backups']).listBackups).toBe(true)
+    expect(parseArgs(['--show-backup', 'backup-1']).showBackup).toBe('backup-1')
+    expect(parseArgs(['--restore', 'backup-2', '--dry-run'])).toMatchObject({
+      restore: 'backup-2',
+      dryRun: true,
+    })
+  })
 })
 
 describe('validateCommandModes', () => {
@@ -193,6 +202,10 @@ describe('validateCommandModes', () => {
         'backup-1',
       ],
       modes: '--restore, --clean-cache',
+    },
+    {
+      argv: ['--list-backups', '--show-backup', 'backup-1'],
+      modes: '--list-backups, --show-backup',
     },
     {
       argv: [
@@ -268,8 +281,15 @@ describe('validateCommandModes', () => {
         'github',
       ],
     },
+    { argv: ['--list-backups'] },
+    { argv: ['--show-backup', 'backup-1', '--report'] },
+    { argv: ['--restore', 'backup-1', '--dry-run'] },
   ])('accepts a single command mode: $argv', ({ argv }) => {
     expect(() => validateCommandModes(parseArgs(argv))).not.toThrow()
+  })
+
+  it('rejects dry-run without restore', () => {
+    expect(() => validateCommandModes(parseArgs(['--dry-run']))).toThrow('--dry-run requires --restore <backup-id>.')
   })
 })
 
@@ -283,7 +303,10 @@ describe('formatCliHelp', () => {
     expect(help).toContain('--sync <target> [value]')
     expect(help).toContain('--update <target>')
     expect(help).toContain('--doctor')
+    expect(help).toContain('--list-backups')
+    expect(help).toContain('--show-backup <backup-id>')
     expect(help).toContain('--restore <backup-id>')
+    expect(help).toContain('--dry-run')
     expect(help).toContain('--clean-cache')
     expect(help).toContain('--mcp')
     expect(help).toContain('-V, --cli-version')

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,7 @@ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import packageJson from '../package.json' with { type: 'json' }
 import { createMcpServer } from '../src/mcp.js'
+import { inspectProjectBackup, listProjectBackups } from '../src/project.js'
 import { testChildEnv } from './child-env.js'
 
 type JsonRpcResponse = {
@@ -29,6 +30,14 @@ type JsonReport = {
   exitCode: number
   root: string
   pending: Array<{ kind: string; reason: string; command: string }>
+  backupId?: string
+  backupScope?: string
+  backup?: {
+    operation: string
+    backupId?: string
+    restored?: string[]
+    preRestoreBackupId?: string
+  }
   doctor?: { lines: string[] }
   error?: { message: string; code?: string }
 }
@@ -305,6 +314,73 @@ describe('MCP server', () => {
       })
       expect(report.error?.message).toContain('resourcePackSlug is required')
       expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'reports a successful restore even when it removes the project configuration',
+    async () => {
+      const root = await createValidProject('maa-mcp-restore-created-project')
+      let sourceBackupId: string | undefined
+      for (const summary of await listProjectBackups(root)) {
+        const inspection = await inspectProjectBackup(root, summary.id)
+        if (inspection.entries.some((entry) => entry.path === 'maa-project.json' && entry.action === 'remove')) {
+          sourceBackupId = summary.id
+          break
+        }
+      }
+      expect(sourceBackupId).toEqual(expect.any(String))
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'restore',
+        arguments: { backupId: sourceBackupId },
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({
+        command: 'backup',
+        ok: true,
+        backupScope: 'managed-files',
+        backup: {
+          operation: 'restore',
+          backupId: sourceBackupId,
+          restored: expect.arrayContaining([
+            'maa-project.json',
+          ]),
+          preRestoreBackupId: expect.any(String),
+        },
+      })
+      expect(report.backupId).toBe(report.backup?.preRestoreBackupId)
+      await expect(readFile(join(root, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'rejects a malformed restore source before creating a pre-restore backup',
+    async () => {
+      const root = await tempRoot()
+      const backupsRoot = join(root, '.create-maa-project', 'backups')
+      const backupRoot = join(backupsRoot, 'broken-backup')
+      await mkdir(backupRoot, { recursive: true })
+      await writeFile(join(backupRoot, '.create-maa-project-backup.json'), '{broken', 'utf8')
+      const backupIdsBefore = (await readdir(backupsRoot)).sort()
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'restore',
+        arguments: { backupId: 'broken-backup' },
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBe(true)
+      expect(report.error?.message).toContain('malformed')
+      expect((await readdir(backupsRoot)).sort()).toEqual(backupIdsBefore)
     },
     MCP_TEST_TIMEOUT_MS,
   )

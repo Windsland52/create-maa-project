@@ -181,6 +181,7 @@ function createOptions(name: string): CliOptions {
     assist: false,
     initializeGit: true,
     dryRun: false,
+    listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,

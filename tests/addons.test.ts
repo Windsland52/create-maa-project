@@ -117,6 +117,7 @@ function options(add: string[]): CliOptions {
     noColor: false,
     assist: false,
     dryRun: false,
+    listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,

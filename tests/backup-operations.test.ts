@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  inspectProjectBackup,
+  listProjectBackups,
   restoreBackup,
   trackProjectPathForBackup,
   withProjectLock,
@@ -51,6 +53,23 @@ describe('operation backups', () => {
         { path: 'existing.txt', state: 'modified' },
       ],
     })
+    expect(await inspectProjectBackup(root, result.backupId as string)).toMatchObject({
+      id: result.backupId,
+      format: 'managed-files',
+      command: 'test grouped backup',
+      status: 'complete',
+      entries: [
+        { path: 'created.txt', action: 'remove' },
+        { path: 'existing.txt', action: 'restore' },
+      ],
+    })
+    expect(await listProjectBackups(root)).toEqual([
+      expect.objectContaining({
+        id: result.backupId,
+        format: 'managed-files',
+        entryCount: 2,
+      }),
+    ])
     expect(await readFile(backupFile(root, result.backupId as string, 'existing.txt'), 'utf8')).toBe('before')
   })
 
@@ -373,11 +392,52 @@ describe('operation backups', () => {
     await writeFile(join(backupRoot, 'manifest.json'), '{"project":true}\n', 'utf8')
     await writeFile(join(backupRoot, 'README.md'), '# Legacy\n', 'utf8')
 
+    expect(await inspectProjectBackup(root, 'legacy-manifest-project')).toMatchObject({
+      format: 'legacy',
+      status: 'legacy',
+      entries: expect.arrayContaining([
+        { path: 'manifest.json', action: 'restore' },
+        { path: 'README.md', action: 'restore' },
+      ]),
+    })
+
     const result = await restoreBackup(root, 'legacy-manifest-project')
 
     expect(result.restored).toEqual(expect.arrayContaining(['manifest.json', 'README.md']))
     expect(await readFile(join(root, 'manifest.json'), 'utf8')).toBe('{"project":true}\n')
     expect(await readFile(join(root, 'README.md'), 'utf8')).toBe('# Legacy\n')
+  })
+
+  it('keeps malformed backup entries visible without hiding valid backups', async () => {
+    const root = await temporaryRoot()
+    await withProjectWriteLock(root, 'valid backup', () =>
+      writeGeneratedFiles(root, [{ path: 'valid.txt', content: 'value', managed: true }], {
+        force: true,
+        backup: true,
+      }),
+    )
+    const brokenRoot = join(root, '.create-maa-project', 'backups', 'broken-backup')
+    await mkdir(brokenRoot, { recursive: true })
+    await writeFile(join(brokenRoot, '.create-maa-project-backup.json'), '{broken', 'utf8')
+
+    const backups = await listProjectBackups(root)
+
+    expect(backups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ format: 'managed-files', entryCount: 1 }),
+        expect.objectContaining({
+          id: 'broken-backup',
+          format: 'invalid',
+          status: 'invalid',
+          error: expect.stringContaining('malformed'),
+        }),
+      ]),
+    )
+    await expect(inspectProjectBackup(root, 'broken-backup')).rejects.toThrow('malformed')
+    const idsBeforeRestore = await backupIds(root)
+    await expect(restoreBackup(root, 'broken-backup')).rejects.toThrow('malformed')
+    expect(await backupIds(root)).toEqual(idsBeforeRestore)
+    expect(await readFile(join(root, 'valid.txt'), 'utf8')).toBe('value')
   })
 
   it('restores a legacy backup without modifying an external hard link', async () => {
@@ -466,6 +526,35 @@ describe('operation backups', () => {
     await restoreBackup(root, result.backupId as string)
     expect(await readFile(join(root, 'managed.txt'), 'utf8')).toBe('original')
     expect(await readFile(outsideFile, 'utf8')).toBe('original')
+  })
+
+  it('rejects restore previews whose current target is a symbolic link', async () => {
+    const root = await temporaryRoot()
+    const outside = await temporaryRoot()
+    const projectFile = join(root, 'managed.txt')
+    const outsideFile = join(outside, 'sentinel.txt')
+    await writeFile(projectFile, 'before', 'utf8')
+    await writeFile(outsideFile, 'outside', 'utf8')
+    const result = await withProjectWriteLock(root, 'replace managed file', () =>
+      writeGeneratedFiles(root, [{ path: 'managed.txt', content: 'after', managed: true }], {
+        force: true,
+        backup: true,
+      }),
+    )
+    await rm(projectFile)
+    try {
+      await symlink(outsideFile, projectFile, 'file')
+    } catch (error) {
+      if (isPermissionError(error)) return
+      throw error
+    }
+    const idsBeforeRestore = await backupIds(root)
+
+    await expect(inspectProjectBackup(root, result.backupId as string)).rejects.toThrow('symbolic link')
+    await expect(restoreBackup(root, result.backupId as string)).rejects.toThrow('symbolic link')
+
+    expect(await backupIds(root)).toEqual(idsBeforeRestore)
+    expect(await readFile(outsideFile, 'utf8')).toBe('outside')
   })
 
   it('backs up persistent runtime state while protecting internal backup state', async () => {

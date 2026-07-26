@@ -75,10 +75,11 @@ export async function createProject(
     assetDownloader?: AssetDownloader
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
+    cwd?: string
   } = {},
 ): Promise<ScaffoldResult> {
   assertSupportedCreateAddons(options.add)
-  const targetRoot = resolve(process.cwd(), options.name ?? '.')
+  const targetRoot = resolve(environment.cwd ?? process.cwd(), options.name ?? '.')
   const detectGitTree = environment.detectGitTree ?? isInsideGitTree
   const targetInsideGitTree = await detectGitTree(targetRoot)
   const defaultName = options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
@@ -225,8 +226,7 @@ function createOcrUpdateOptions(environment: {
   return options
 }
 
-export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addDevTools(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (hasDevTools(config)) {
     return {
@@ -257,8 +257,7 @@ export async function addDevTools(options: CliOptions): Promise<ScaffoldResult> 
   })
 }
 
-export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addGithub(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (!hasDevTools(config)) {
     throw new Error('--add github requires --add dev-tools first.')
@@ -302,8 +301,7 @@ export async function addGithub(options: CliOptions): Promise<ScaffoldResult> {
   })
 }
 
-export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addAgent(_options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (config.python) {
     return {
@@ -417,8 +415,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   )
 }
 
-export async function addResourcePack(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addResourcePack(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   const slug = normalizeSlug(options.resourcePackSlug ?? options.name ?? '')
   assertValidSlug(slug)
@@ -479,8 +476,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
   )
 }
 
-export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addGitCliff(_options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.gitCliff = { enabled: true }
   const files: ManagedFileInput[] = [
@@ -493,8 +489,7 @@ export async function addGitCliff(_options: CliOptions): Promise<ScaffoldResult>
   return writeAddonFiles(root, config, files, _options)
 }
 
-export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addAutoFormat(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.autoFormat = { enabled: true }
   return writeAddonFiles(
@@ -508,8 +503,7 @@ export async function addAutoFormat(options: CliOptions): Promise<ScaffoldResult
   )
 }
 
-export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addOptimizeImages(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.optimizeImages = { enabled: true }
 
@@ -536,8 +530,7 @@ export async function addOptimizeImages(options: CliOptions): Promise<ScaffoldRe
   )
 }
 
-export async function addDependabot(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addDependabot(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.dependabot = { enabled: true }
   return writeAddonFiles(
@@ -551,8 +544,7 @@ export async function addDependabot(options: CliOptions): Promise<ScaffoldResult
   )
 }
 
-export async function addCommunity(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addCommunity(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.community = { enabled: true }
   return writeAddonFiles(
@@ -568,8 +560,7 @@ export async function addCommunity(options: CliOptions): Promise<ScaffoldResult>
   )
 }
 
-export async function addSchemaSync(options: CliOptions): Promise<ScaffoldResult> {
-  const root = process.cwd()
+export async function addSchemaSync(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.schemaSync = { enabled: true }
 

@@ -100,9 +100,10 @@ export async function recordUpdateRequests(
     assetDownloader?: AssetDownloader
     onProgress?: ProgressReporter
     onDownloadProgress?: DownloadProgressReporter
+    root?: string
   } = {},
 ): Promise<ScaffoldResult> {
-  const root = process.cwd()
+  const root = environment.root ?? process.cwd()
   const config = await readProjectConfig(root)
   const commandRunner = environment.commandRunner ?? runCommand
   const targets = options.update.map(validateUpdateTarget)

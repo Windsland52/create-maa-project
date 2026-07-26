@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { resolve } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -71,14 +72,13 @@ const ADDONS = [
   'schema-sync',
 ] as const
 
-let serverRoot = safeProcessCwd('.')
-
 type ToolName = 'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'restore' | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
+type McpServerContext = { root: string }
 
 export function createMcpServer(root = safeProcessCwd('.')): Server {
-  serverRoot = root
+  const context: McpServerContext = { root: resolve(root) }
   const server = new Server(
     { name: 'create-maa-project', version: packageJson.version },
     { capabilities: { tools: {} } },
@@ -89,7 +89,7 @@ export function createMcpServer(root = safeProcessCwd('.')): Server {
   }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    callTool(request.params.name, request.params.arguments),
+    callTool(context, request.params.name, request.params.arguments),
   )
 
   return server
@@ -205,126 +205,136 @@ const MCP_TOOLS: Tool[] = [
   },
 ]
 
-async function callTool(name: string, input: unknown): Promise<CallToolResult> {
+async function callTool(context: McpServerContext, name: string, input: unknown): Promise<CallToolResult> {
   const toolName = name as ToolName
   switch (toolName) {
     case 'create_project':
-      return callCreateProject(input)
+      return callCreateProject(context, input)
     case 'doctor':
-      return withReport('doctor', async (context) => {
-        const root = currentRoot()
+      return withReport(context, 'doctor', async (reportContext) => {
+        const root = context.root
+        await readProjectConfig(root)
         const doctor = await runDoctor(root)
         return createDoctorJsonReport({
-          context,
+          context: reportContext,
           root,
           doctor,
         })
       })
     case 'sync':
-      return callSync(input)
+      return callSync(context, input)
     case 'update':
-      return callUpdate(input)
+      return callUpdate(context, input)
     case 'add':
-      return callAdd(input)
+      return callAdd(context, input)
     case 'restore':
-      return callRestore(input)
+      return callRestore(context, input)
     case 'clean_cache':
-      return callCleanCache()
+      return callCleanCache(context)
     default:
-      return errorToolResult('create', new Error(`Unknown MCP tool: ${name}`))
+      return errorToolResult(context, 'create', new Error(`Unknown MCP tool: ${name}`))
   }
 }
 
-async function callCreateProject(input: unknown): Promise<CallToolResult> {
+async function callCreateProject(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
     options = createProjectOptions(argsRecord(input))
   } catch (error) {
-    return errorToolResult('create', error)
+    return errorToolResult(context, 'create', error)
   }
-  return withReport('create', async (context) => {
+  return withReport(context, 'create', async (reportContext) => {
     const createOptions = await promptForCreateOptions(options)
     const result = await createProject(createOptions, {
+      cwd: context.root,
       installNodeDeps: true,
       downloadOcrModels: true,
       commandRunner: runMcpChildCommand,
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
     })
-    return createScaffoldJsonReport(context, result)
+    return createScaffoldJsonReport(reportContext, result)
   })
 }
 
-async function callSync(input: unknown): Promise<CallToolResult> {
+async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = await syncOptions(argsRecord(input))
+    options = await syncOptions(argsRecord(input), context.root)
   } catch (error) {
-    return errorToolResult('sync', error)
+    return errorToolResult(context, 'sync', error)
   }
-  return withReport('sync', async (context) => createScaffoldJsonReport(context, await syncProject(options)))
+  return withReport(context, 'sync', async (reportContext) =>
+    createScaffoldJsonReport(reportContext, await syncProject(options, { root: context.root })),
+  )
 }
 
-async function callUpdate(input: unknown): Promise<CallToolResult> {
+async function callUpdate(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
     options = updateOptions(argsRecord(input))
   } catch (error) {
-    return errorToolResult('update', error)
+    return errorToolResult(context, 'update', error)
   }
-  return withReport('update', async (context) => {
+  return withReport(context, 'update', async (reportContext) => {
     const result = await recordUpdateRequests(options, {
+      root: context.root,
       commandRunner: runMcpChildCommand,
       productManifestResolver: (request) => resolveProductAssetManifest(request),
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
     })
-    return createScaffoldJsonReport(context, result)
+    return createScaffoldJsonReport(reportContext, result)
   })
 }
 
-async function callAdd(input: unknown): Promise<CallToolResult> {
+async function callAdd(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
     options = addOptions(argsRecord(input))
   } catch (error) {
-    return errorToolResult('update', error)
+    return errorToolResult(context, 'update', error)
   }
-  return withReport('update', async (context) => {
-    const result = await applyIncrementalAddons(options, (line) => {
-      process.stderr.write(`${line}\n`)
-    })
+  return withReport(context, 'update', async (reportContext) => {
+    const result = await applyIncrementalAddons(
+      options,
+      (line) => {
+        process.stderr.write(`${line}\n`)
+      },
+      context.root,
+    )
     if (!result) {
       throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
     }
-    return createScaffoldJsonReport(context, result)
+    return createScaffoldJsonReport(reportContext, result)
   })
 }
 
-async function callRestore(input: unknown): Promise<CallToolResult> {
+async function callRestore(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let backupId: string
   try {
     backupId = requiredString(argsRecord(input), 'backupId')
   } catch (error) {
-    return errorToolResult('update', error)
+    return errorToolResult(context, 'update', error)
   }
-  return withReport('update', async (context) => {
-    const root = currentRoot()
+  return withReport(context, 'update', async (reportContext) => {
+    const root = context.root
     const restoreResult = await withProjectWriteLock(root, 'create-maa-project --mcp restore', () =>
       restoreBackup(root, backupId),
     )
-    return createMaintenanceReport(context, root, restoreResult.restored, restoreResult.backupId)
+    return createMaintenanceReport(reportContext, root, restoreResult.restored, restoreResult.backupId)
   })
 }
 
-async function callCleanCache(): Promise<CallToolResult> {
-  return withReport('update', async (context) => {
-    const root = currentRoot()
-    return createBaseReport(context, root, [
+async function callCleanCache(context: McpServerContext): Promise<CallToolResult> {
+  return withReport(context, 'update', async (reportContext) => {
+    const root = context.root
+    return createBaseReport(reportContext, root, [
       await cleanCache(root),
     ])
   })
 }
 
 async function withReport(
+  serverContext: McpServerContext,
   command: CliReportCommand,
   action: (context: ReportContext) => Promise<CliJsonReport>,
 ): Promise<CallToolResult> {
@@ -336,7 +346,7 @@ async function withReport(
     return reportToolResult(
       createErrorJsonReport({
         context,
-        root: currentRoot(),
+        root: serverContext.root,
         error,
       }),
     )
@@ -352,12 +362,12 @@ function createMcpReportContext(command: CliReportCommand, startTimeMs: number):
   }
 }
 
-function errorToolResult(command: CliReportCommand, error: unknown): CallToolResult {
+function errorToolResult(context: McpServerContext, command: CliReportCommand, error: unknown): CallToolResult {
   const startTimeMs = Date.now()
   return reportToolResult(
     createErrorJsonReport({
       context: createMcpReportContext(command, startTimeMs),
-      root: currentRoot(),
+      root: context.root,
       error,
     }),
   )
@@ -451,7 +461,7 @@ function createProjectOptions(args: JsonObject): CliOptions {
   return baseOptions(overrides)
 }
 
-async function syncOptions(args: JsonObject): Promise<CliOptions> {
+async function syncOptions(args: JsonObject, root: string): Promise<CliOptions> {
   const target = requiredEnum(args, 'target', SYNC_TARGETS)
   const value = optionalString(args, 'value')
   if (
@@ -474,9 +484,7 @@ async function syncOptions(args: JsonObject): Promise<CliOptions> {
   if (target === 'license') options.license = requiredEnum(args, 'value', LICENSE_KINDS)
   if (target === 'github-url') options.syncValue = requiredString(args, 'value')
   if (target === 'network') {
-    options.network = value
-      ? valueAsEnum(value, NETWORK_MODES, 'value')
-      : (await readProjectConfig(currentRoot())).network.mode
+    options.network = value ? valueAsEnum(value, NETWORK_MODES, 'value') : (await readProjectConfig(root)).network.mode
   }
   return options
 }
@@ -660,10 +668,6 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
       rejectOnce(new Error(`Command failed: ${formatCommand(command, args)} (${suffix})`))
     })
   })
-}
-
-function currentRoot(): string {
-  return serverRoot
 }
 
 function safeProcessCwd(fallback: string): string {

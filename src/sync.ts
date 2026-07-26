@@ -22,10 +22,11 @@ import { assertValidSemVer } from './semver.js'
 
 type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
+  root?: string
 }
 
 export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
-  const root = process.cwd()
+  const root = environment.root ?? process.cwd()
   const config = await readProjectConfig(root)
   const sync = options.sync
   if (!sync) throw new Error('Missing --sync target')

@@ -23,11 +23,12 @@ import { withProjectWriteLock } from './project.js'
 export async function applyIncrementalAddons(
   options: CliOptions,
   writeLine: (line: string) => void = console.log,
+  root = process.cwd(),
 ): Promise<ScaffoldResult | undefined> {
   const addons = resolveAddonDependencies(options.add)
   if (addons.length === 0) return undefined
   return withProjectWriteLock(
-    process.cwd(),
+    root,
     process.argv.join(' '),
     async (operation) => {
       let combinedResult: ScaffoldResult | undefined
@@ -41,25 +42,25 @@ export async function applyIncrementalAddons(
         }
         let result: ScaffoldResult | undefined
         if (addon === 'dev-tools') {
-          result = await addDevTools(options)
+          result = await addDevTools(options, root)
         } else if (addon === 'github') {
-          result = await addGithub(options)
+          result = await addGithub(options, root)
         } else if (addon === 'agent') {
-          result = await addAgent(options)
+          result = await addAgent(options, root)
         } else if (addon === 'resource-pack') {
-          result = await addResourcePack(options)
+          result = await addResourcePack(options, root)
         } else if (addon === 'git-cliff') {
-          result = await addGitCliff(options)
+          result = await addGitCliff(options, root)
         } else if (addon === 'auto-format') {
-          result = await addAutoFormat(options)
+          result = await addAutoFormat(options, root)
         } else if (addon === 'optimize-images') {
-          result = await addOptimizeImages(options)
+          result = await addOptimizeImages(options, root)
         } else if (addon === 'community') {
-          result = await addCommunity(options)
+          result = await addCommunity(options, root)
         } else if (addon === 'dependabot') {
-          result = await addDependabot(options)
+          result = await addDependabot(options, root)
         } else if (addon === 'schema-sync') {
-          result = await addSchemaSync(options)
+          result = await addSchemaSync(options, root)
         }
         if (result) combinedResult = mergeScaffoldResults(combinedResult, result)
       }

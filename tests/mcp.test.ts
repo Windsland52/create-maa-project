@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -167,6 +167,38 @@ describe('MCP server', () => {
   )
 
   it(
+    'keeps project roots isolated across multiple server instances',
+    async () => {
+      const firstRoot = await createValidProject('maa-mcp-first')
+      const secondRoot = await createValidProject('maa-mcp-second')
+      const firstSession = await startSession(firstRoot)
+      const secondSession = await startSession(secondRoot)
+      await Promise.all([initialize(firstSession), initialize(secondSession)])
+
+      const response = await firstSession.request('tools/call', {
+        name: 'sync',
+        arguments: {
+          target: 'display-name',
+          value: 'First MCP Project',
+        },
+      })
+      const { result, report } = parseToolReport(response)
+      const firstConfig = JSON.parse(await readFile(join(firstRoot, 'maa-project.json'), 'utf8')) as {
+        project: { displayName: string }
+      }
+      const secondConfig = JSON.parse(await readFile(join(secondRoot, 'maa-project.json'), 'utf8')) as {
+        project: { displayName: string }
+      }
+
+      expect(result.isError).toBeFalsy()
+      expect(report.root).toBe(firstRoot)
+      expect(firstConfig.project.displayName).toBe('First MCP Project')
+      expect(secondConfig.project.displayName).toBe('maa-mcp-second')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'returns an error report for doctor outside a project and keeps serving requests',
     async () => {
       const session = await startSession(await tempRoot())
@@ -283,7 +315,6 @@ describe('MCP server', () => {
       const root = await tempRoot()
       const session = await startSession(root)
       await initialize(session)
-      process.chdir(tmpdir())
       await rm(root, { recursive: true, force: true })
 
       const response = await session.request('tools/call', {
@@ -382,7 +413,6 @@ async function tempRoot(): Promise<string> {
 
 class McpSession {
   private clientTransport: InMemoryTransport
-  private previousCwd: string
   private nextId = 1
   private closed = false
   private exit: number | null = null
@@ -395,9 +425,8 @@ class McpSession {
     }
   >()
 
-  private constructor(clientTransport: InMemoryTransport, previousCwd: string) {
+  private constructor(clientTransport: InMemoryTransport) {
     this.clientTransport = clientTransport
-    this.previousCwd = previousCwd
     this.clientTransport.onmessage = (message) => {
       this.handleMessage(message as JsonRpcResponse)
     }
@@ -411,14 +440,12 @@ class McpSession {
   }
 
   static async create(cwd: string): Promise<McpSession> {
-    const previousCwd = process.cwd()
-    process.chdir(cwd)
     const [
       clientTransport,
       serverTransport,
     ] = InMemoryTransport.createLinkedPair()
     const server = createMcpServer(cwd)
-    const session = new McpSession(clientTransport, previousCwd)
+    const session = new McpSession(clientTransport)
     await server.connect(serverTransport)
     await clientTransport.start()
     return session
@@ -455,7 +482,6 @@ class McpSession {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
-    process.chdir(this.previousCwd)
     await this.clientTransport.close()
   }
 

@@ -111,6 +111,29 @@ describe('operation backups', () => {
     expect(await readFile(join(root, 'created.txt'), 'utf8')).toBe('created')
   })
 
+  it('restores only the created nested path and preserves later user files in its parent', async () => {
+    const root = await temporaryRoot()
+    const backupId = await withProjectWriteLock(root, 'create nested generated file', async (operation) => {
+      await writeGeneratedFiles(root, [{ path: 'generated/nested/managed.txt', content: 'managed', managed: true }], {
+        force: true,
+        backup: true,
+      })
+      return operation.backupId
+    })
+    expect((await readManifest(root, backupId)).entries).toEqual([
+      { path: 'generated/nested/managed.txt', state: 'created' },
+    ])
+    await writeFile(join(root, 'generated/user.txt'), 'keep me', 'utf8')
+
+    const restoreResult = await restoreBackup(root, backupId)
+
+    expect(restoreResult.restored).toEqual([
+      'generated/nested/managed.txt',
+    ])
+    await expect(readFile(join(root, 'generated/nested/managed.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(root, 'generated/user.txt'), 'utf8')).toBe('keep me')
+  })
+
   it('validates every payload before changing project files', async () => {
     const root = await temporaryRoot()
     await writeFile(join(root, 'existing.txt'), 'before', 'utf8')

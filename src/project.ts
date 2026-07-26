@@ -560,7 +560,8 @@ async function mergeChildBackupPayloads(
 async function backupBoundaryPath(root: string, relativePath: string): Promise<string> {
   let current = resolve(root)
   const canonicalRoot = await realpath(current)
-  for (const segment of relativePath.split('/')) {
+  const segments = relativePath.split('/')
+  for (const [index, segment] of segments.entries()) {
     current = join(current, segment)
     try {
       const info = await lstat(current)
@@ -570,7 +571,10 @@ async function backupBoundaryPath(root: string, relativePath: string): Promise<s
     } catch (error) {
       if (isMissingPathError(error)) {
         const canonicalParent = await realpath(dirname(current))
-        return relative(canonicalRoot, join(canonicalParent, segment)).replaceAll('\\', '/')
+        return relative(canonicalRoot, join(canonicalParent, segment, ...segments.slice(index + 1))).replaceAll(
+          '\\',
+          '/',
+        )
       }
       throw error
     }

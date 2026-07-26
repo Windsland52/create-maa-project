@@ -584,13 +584,13 @@ describe('scaffold', () => {
     expect(agentDependabot).toContain('versioning-strategy: lockfile-only')
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
-      icon: 'logo.ico',
       agent: [
         {
           child_exec: 'uv',
         },
       ],
     })
+    expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).not.toHaveProperty('icon')
     const pnpmWorkspace = await readFile(join(root, 'maa-agent-test', 'pnpm-workspace.yaml'), 'utf8')
     expect(pnpmWorkspace).toContain('minimumReleaseAgeExclude:')
     expect(pnpmWorkspace).toContain('- create-maa-project')
@@ -1356,11 +1356,13 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const projectRoot = join(root, 'MaaSync')
     const interfacePath = join(projectRoot, 'interface.json')
     const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
-    delete interfaceJson.icon
+    interfaceJson.icon = 'logo.ico'
     await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
     process.chdir(projectRoot)
 
     await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+    expect(await readJson(join(root, 'MaaSync', 'interface.json'))).not.toHaveProperty('icon')
+    await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
     const result = await syncProject(defaultOptions({ sync: 'display-name', displayName: 'Maa Sync' }))
 
     expect(result.config.project.version).toBe('0.2.0')
@@ -1749,8 +1751,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(await readJson(join(root, 'MaaXX', 'interface.json'))).toMatchObject({
       name: 'maaxx',
       label: 'MaaXX',
-      icon: 'logo.ico',
     })
+    expect(await readJson(join(root, 'MaaXX', 'interface.json'))).not.toHaveProperty('icon')
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
       'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
     )
@@ -3547,7 +3549,6 @@ jobs:
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).toMatchObject({
       name: 'maa-test',
       label: 'Maa Test',
-      icon: 'logo.ico',
       controller: [
         { name: 'Android', label: 'Android / Emulator', type: 'Adb' },
       ],
@@ -3563,6 +3564,7 @@ jobs:
         './tasks/tutorial.json',
       ],
     })
+    expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('icon')
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('task')
     expect(await readJson(join(root, 'Maa Test', 'interface.json'))).not.toHaveProperty('$schema')
     expect(interfaceSchema).toMatchObject({

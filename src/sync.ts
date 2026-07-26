@@ -112,7 +112,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
       throw new Error(`Unsupported sync target: ${sync}`)
   }
 
-  applyInterfaceMetadata(interfaceJson, config)
+  applyInterfaceMetadata(interfaceJson, config, await exists(join(root, 'logo.ico')))
   if (packageJson) applyPackageMetadata(packageJson, config)
   const pyproject = await syncedPyproject(root, config)
 
@@ -286,11 +286,18 @@ function applyPackageMetadata(
 function applyInterfaceMetadata(
   interfaceJson: Record<string, unknown>,
   config: Awaited<ReturnType<typeof readProjectConfig>>,
+  hasDefaultIcon: boolean,
 ): void {
   interfaceJson.name = config.project.slug
   interfaceJson.label = config.project.displayName
   interfaceJson.version = addV(config.project.version)
-  interfaceJson.icon = 'logo.ico'
+  if (hasDefaultIcon) {
+    if (interfaceJson.icon === undefined || interfaceJson.icon === 'logo.ico') {
+      interfaceJson.icon = 'logo.ico'
+    }
+  } else if (interfaceJson.icon === 'logo.ico') {
+    delete interfaceJson.icon
+  }
   interfaceJson.controller = interfaceController(projectControllerKinds(config))
   interfaceJson.resource = interfaceResourceItems(enabledResourcePacks(config))
   if (config.project.github) {

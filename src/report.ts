@@ -25,6 +25,8 @@ export type CliJsonReport = {
   skipped: string[]
   pending: PendingItem[]
   suggestedCommands: SuggestedCommand[]
+  backupId?: string
+  backupScope?: 'managed-files'
   git?: GitInitResult
   doctor?: {
     lines: string[]
@@ -85,6 +87,10 @@ export function createScaffoldJsonReport(context: ReportContext, result: Scaffol
     suggestedCommands: suggestedCommandsFromPending(result.pending),
   })
   if (result.git) report.git = result.git
+  if (result.backupId) {
+    report.backupId = result.backupId
+    report.backupScope = 'managed-files'
+  }
   return report
 }
 

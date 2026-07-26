@@ -144,13 +144,14 @@ async function main(): Promise<void> {
     }
 
     if (options.restore) {
-      const restored = await withProjectWriteLock(
+      const restoreResult = await withProjectWriteLock(
         process.cwd(),
         process.argv.join(' '),
         () => restoreBackup(process.cwd(), options.restore as string),
         { clearStale: options.clearStaleLock },
       )
-      console.log(`Restored files: ${restored.join(', ')}`)
+      console.log(`Restored files: ${restoreResult.restored.join(', ')}`)
+      console.log(`Pre-restore managed-files backup: ${restoreResult.backupId}`)
       console.log(`Log: ${logger.path}`)
       return
     }
@@ -403,6 +404,7 @@ function formatBytes(bytes: number): string {
 function printScaffoldResult(title: string, result: ScaffoldResult): void {
   console.log(`${title}: ${result.root}`)
   console.log(`Written files: ${result.written.length}`)
+  if (result.backupId) console.log(`Managed-files backup: ${result.backupId}`)
   if (result.skipped.length > 0) {
     console.log(`Skipped existing files: ${result.skipped.join(', ')}`)
   }

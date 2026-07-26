@@ -1,9 +1,9 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { gunzipSync, inflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { sha256, stableJson } from './utils.js'
+import { sha256, stableJson, writeFileAtomic } from './utils.js'
 
 function posixJoin(...segments: string[]): string {
   return segments.filter(Boolean).join('/').replace(/\\/g, '/')
@@ -335,7 +335,7 @@ export async function writeDownloadedAssets(
     const relativePath = posixJoin(basePath, asset.path)
     const target = join(root, relativePath)
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, asset.content)
+    await writeFileAtomic(target, asset.content)
     written.push(relativePath)
   }
   const manifestContent = stableJson({
@@ -347,7 +347,7 @@ export async function writeDownloadedAssets(
       source: asset.url,
     })),
   })
-  await writeFile(join(root, basePath, 'manifest.json'), manifestContent, 'utf8')
+  await writeFileAtomic(join(root, basePath, 'manifest.json'), manifestContent)
   written.push(posixJoin(basePath, 'manifest.json'))
   return { written, manifestContent }
 }
@@ -357,7 +357,7 @@ export async function writeDownloadedProjectAssets(root: string, assets: Downloa
   for (const asset of assets) {
     const target = join(root, asset.path)
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, asset.content)
+    await writeFileAtomic(target, asset.content)
     if (asset.mode !== undefined) {
       await chmod(target, asset.mode & 0o777)
     }

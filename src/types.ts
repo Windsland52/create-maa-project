@@ -130,6 +130,7 @@ export type ScaffoldResult = {
   written: string[]
   skipped: string[]
   pending: PendingItem[]
+  backupId?: string
   git?: GitInitResult
 }
 

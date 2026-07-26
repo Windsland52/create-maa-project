@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   CONFIG_FILE,
@@ -17,7 +17,7 @@ import {
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
-import { addV, exists, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 
 type SyncEnvironment = {
@@ -119,7 +119,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
-    async () => {
+    async (operation) => {
       const result =
         sync === 'license'
           ? await applySyncFileTransaction(root, files, removeAfterWrite, environment.writeFiles ?? writeGeneratedFiles)
@@ -135,6 +135,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
         written: result.written,
         skipped: result.skipped,
         pending: [],
+        backupId: operation.backupId,
       }
     },
     { clearStale: options.clearStaleLock },
@@ -186,7 +187,7 @@ async function applySyncFileTransaction(
           if (snapshot.content === undefined) {
             await rm(fullPath, { force: true, recursive: true })
           } else {
-            await writeFile(fullPath, snapshot.content)
+            await writeFileAtomic(fullPath, snapshot.content)
           }
         }),
       )

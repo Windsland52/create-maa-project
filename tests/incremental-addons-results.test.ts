@@ -15,6 +15,12 @@ const addonMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../src/scaffold.js', () => addonMocks)
+vi.mock('../src/project.js', () => ({
+  withProjectWriteLock: vi.fn(
+    async (_root: string, _command: string, action: (operation: { backupId: string }) => Promise<unknown>) =>
+      action({ backupId: 'backup-add-operation' }),
+  ),
+}))
 
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 
@@ -97,6 +103,7 @@ describe('incremental add-on result aggregation', () => {
     ])
     expect(result?.root).toBe('C:/project')
     expect(result?.config).toBe(finalConfig)
+    expect(result?.backupId).toBe('backup-add-operation')
     expect(result?.written).toEqual([
       'package.json',
       'maa-project.json',

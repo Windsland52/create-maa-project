@@ -262,7 +262,7 @@ Maintenance modes:
     Targets: schema, maafw, runtime:mfa, runtime:mxu, ocr-models, node-deps,
              python-deps, python-runtime
   --doctor                          Diagnose the current project.
-  --restore <backup-id>             Restore a project backup.
+  --restore <backup-id>             Restore managed files; .git is excluded.
   --clean-cache                     Remove the local download cache.
   --mcp                             Start the MCP server over stdio.
 

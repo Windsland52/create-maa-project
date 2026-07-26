@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 
 export function stableJson(value: unknown): string {
   return `${JSON.stringify(sortJson(value), null, 4)}\n`
@@ -41,6 +41,28 @@ export async function exists(path: string): Promise<boolean> {
 export async function writeText(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, content, 'utf8')
+}
+
+export async function writeFileAtomic(path: string, content: string | Buffer): Promise<void> {
+  await replaceFileAtomically(path, async (temporaryPath) => {
+    if (typeof content === 'string') await writeFile(temporaryPath, content, 'utf8')
+    else await writeFile(temporaryPath, content)
+  })
+}
+
+export async function copyFileAtomic(source: string, target: string): Promise<void> {
+  await replaceFileAtomically(target, (temporaryPath) => copyFile(source, temporaryPath))
+}
+
+async function replaceFileAtomically(path: string, write: (temporaryPath: string) => Promise<void>): Promise<void> {
+  await mkdir(dirname(path), { recursive: true })
+  const temporaryPath = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
+  try {
+    await write(temporaryPath)
+    await rename(temporaryPath, path)
+  } finally {
+    await rm(temporaryPath, { force: true })
+  }
 }
 
 export async function readText(path: string): Promise<string> {

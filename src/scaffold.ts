@@ -1,6 +1,8 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdir } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import {
   agentFiles,
@@ -30,13 +32,15 @@ import type {
   PendingItem,
   ScaffoldResult,
 } from './types.js'
-import { assertValidSlug, exists, normalizeSlug, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { assertValidSlug, exists, normalizeSlug, prettyJson, readText, stableJson, stripV, writeText } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 import {
-  backupProjectSnapshot,
   listDirectoryEntries,
   mergePending,
   readProjectConfig,
+  restoreTrackedProjectPaths,
+  trackProjectPathForBackup,
+  withProjectLock,
   withProjectWriteLock,
   writeGeneratedFiles,
   writeProjectState,
@@ -92,7 +96,6 @@ export async function createProject(
   const version = stripV(options.version ?? '0.1.0')
   assertValidSemVer(version)
 
-  const targetHadEntries = (await listDirectoryEntries(targetRoot)).length > 0
   await assertCanCreateTarget(targetRoot, options, detectGitTree)
   await mkdir(targetRoot, { recursive: true })
 
@@ -137,64 +140,68 @@ export async function createProject(
     ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, includeAgent }),
     configFile(config),
   ]
-  const scaffold = await withProjectWriteLock(
+  return withProjectLock(
     targetRoot,
     process.argv.join(' '),
     async () => {
-      if (targetHadEntries) {
-        await backupProjectSnapshot(targetRoot)
-      }
-      const result = await writeGeneratedFiles(targetRoot, files, {
-        force: options.force,
-        backup: true,
-      })
-      const written = new Set(result.written)
-      if (shouldDownloadOcrModels) {
-        try {
-          environment.onProgress?.('Downloading OCR models...')
-          const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
-          if (ocrResult) {
-            for (const path of ocrResult.written) written.add(path)
-            environment.onProgress?.('OCR models downloaded.')
+      const managedResult = await withProjectWriteLock(targetRoot, process.argv.join(' '), async (operation) => {
+        const result = await writeGeneratedFiles(targetRoot, files, {
+          force: options.force,
+          backup: true,
+        })
+        const written = new Set(result.written)
+        if (shouldDownloadOcrModels) {
+          const checkpoint = await createPathCheckpoint(targetRoot, 'resource/base/model/ocr')
+          try {
+            environment.onProgress?.('Downloading OCR models...')
+            const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
+            if (ocrResult) {
+              for (const path of ocrResult.written) written.add(path)
+              environment.onProgress?.('OCR models downloaded.')
+            }
+          } catch (error) {
+            await restoreCheckpoint(checkpoint, error, 'OCR model download')
+            environment.onProgress?.(
+              `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
+            )
+            pending = mergePending(pending, [
+              ocrDownloadPending(error),
+            ])
+          } finally {
+            await checkpoint.dispose()
           }
-        } catch (error) {
-          environment.onProgress?.(
-            `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
-          )
-          pending = mergePending(pending, [
-            ocrDownloadPending(error),
-          ])
         }
-      }
-      await writeProjectState(targetRoot, config)
+        await writeProjectState(targetRoot, config)
 
-      return {
-        root: targetRoot,
-        config,
-        written: [
-          ...written,
-        ],
-        skipped: result.skipped,
-        pending,
-      }
+        const scaffold = {
+          root: targetRoot,
+          config,
+          written: [
+            ...written,
+          ],
+          skipped: result.skipped,
+          pending,
+        }
+        const afterDependencies = await maybeInstallNodeDependencies(
+          scaffold,
+          options,
+          environment.commandRunner ?? runCommand,
+          environment.installNodeDeps === true,
+          environment.onProgress,
+        )
+        return { ...afterDependencies, backupId: operation.backupId }
+      })
+      const git = await maybeInitializeGit(
+        targetRoot,
+        options,
+        managedResult.pending,
+        targetInsideGitTree,
+        environment.gitRunner ?? runGit,
+      )
+      return git ? { ...managedResult, git } : managedResult
     },
     { clearStale: options.clearStaleLock },
   )
-  const afterDependencies = await maybeInstallNodeDependencies(
-    scaffold,
-    options,
-    environment.commandRunner ?? runCommand,
-    environment.installNodeDeps === true,
-    environment.onProgress,
-  )
-  const git = await maybeInitializeGit(
-    targetRoot,
-    options,
-    afterDependencies.pending,
-    targetInsideGitTree,
-    environment.gitRunner ?? runGit,
-  )
-  return git ? { ...afterDependencies, git } : afterDependencies
 }
 
 function createOcrUpdateOptions(environment: {
@@ -389,7 +396,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
-    async () => {
+    async (operation) => {
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
@@ -403,6 +410,7 @@ export async function addAgent(_options: CliOptions): Promise<ScaffoldResult> {
         written: result.written,
         skipped: result.skipped,
         pending: pythonPending(),
+        backupId: operation.backupId,
       }
     },
     { clearStale: _options.clearStaleLock },
@@ -450,7 +458,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
-    async () => {
+    async (operation) => {
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
@@ -464,6 +472,7 @@ export async function addResourcePack(options: CliOptions): Promise<ScaffoldResu
         written: result.written,
         skipped: result.skipped,
         pending: [],
+        backupId: operation.backupId,
       }
     },
     { clearStale: options.clearStaleLock },
@@ -655,7 +664,7 @@ async function writeAddonFiles(
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
-    async () => {
+    async (operation) => {
       const result = await writeGeneratedFiles(root, files, {
         force: true,
         backup: true,
@@ -669,6 +678,7 @@ async function writeAddonFiles(
         written: result.written,
         skipped: result.skipped,
         pending: writeOptions.pending ?? [],
+        backupId: operation.backupId,
       }
     },
     { clearStale: options.clearStaleLock },
@@ -801,18 +811,41 @@ async function maybeInitializeGit(
     }
   }
 
+  const gitDirectory = join(root, '.git')
+  const gitDirectoryExisted = await exists(gitDirectory)
   try {
     await gitRunner(root, [
       'init',
     ])
   } catch (error) {
-    const initialized = await exists(join(root, '.git'))
+    let initialized = await exists(gitDirectory)
+    let cleanupFailure: unknown
+    if (initialized && !gitDirectoryExisted) {
+      try {
+        await rm(gitDirectory, { force: true, recursive: true })
+        initialized = false
+      } catch (cleanupError) {
+        cleanupFailure = cleanupError
+      }
+    }
     return {
       initialized,
       committed: false,
-      reason: initialized
-        ? `git init reported a failure after creating the repository: ${errorMessage(error)}. Run git status and create the initial commit manually.`
-        : `git init failed: ${errorMessage(error)}. Project files were created successfully; run git init and create the initial commit manually.`,
+      reason:
+        initialized && gitDirectoryExisted
+          ? `git init failed: ${errorMessage(error)}. The pre-existing .git directory was left unchanged; inspect it before retrying.`
+          : initialized
+            ? `git init failed: ${errorMessage(error)}. The new .git directory could not be cleaned up (${errorMessage(cleanupFailure)}); inspect it before retrying.`
+            : `git init failed: ${errorMessage(error)}. Any newly created partial .git directory was removed; project files remain available; run git init and create the initial commit manually.`,
+    }
+  }
+  try {
+    await ensureLocalGitExcludes(root)
+  } catch (error) {
+    return {
+      initialized: true,
+      committed: false,
+      reason: `Git was initialized, but local project state could not be excluded (${errorMessage(error)}). Add /.create-maa-project/ and /node_modules/ to .git/info/exclude before staging files.`,
     }
   }
   if (pending.length > 0 && !options.allowPendingCommit) {
@@ -826,7 +859,13 @@ async function maybeInitializeGit(
   try {
     await gitRunner(root, [
       'add',
+      '--all',
+      '--',
       '.',
+      ':(exclude).create-maa-project',
+      ':(exclude).create-maa-project/**',
+      ':(exclude)node_modules',
+      ':(exclude)node_modules/**',
     ])
   } catch (error) {
     return {
@@ -852,6 +891,22 @@ async function maybeInitializeGit(
     initialized: true,
     committed: true,
   }
+}
+
+async function ensureLocalGitExcludes(root: string): Promise<void> {
+  const gitDirectory = join(root, '.git')
+  if (!(await exists(gitDirectory))) return
+  const excludePath = join(gitDirectory, 'info', 'exclude')
+  const current = (await exists(excludePath)) ? await readText(excludePath) : ''
+  const lines = new Set(current.split(/\r?\n/u))
+  const missing = [
+    '/.create-maa-project/',
+    '/node_modules/',
+  ].filter((line) => !lines.has(line))
+  if (missing.length === 0) return
+  const prefix = current.length === 0 || current.endsWith('\n') ? current : `${current}\n`
+  await mkdir(dirname(excludePath), { recursive: true })
+  await writeText(excludePath, `${prefix}${missing.join('\n')}\n`)
 }
 
 async function runGit(root: string, args: string[]): Promise<void> {
@@ -908,10 +963,24 @@ async function maybeInstallNodeDependencies(
   const config = scaffold.config
   let pending = scaffold.pending
   const written = new Set(scaffold.written)
+  const trackedPaths = [
+    'node_modules',
+    'pnpm-lock.yaml',
+  ]
+  for (const path of trackedPaths) await trackProjectPathForBackup(root, path)
   try {
     onProgress?.('Installing Node dependencies...')
     await commandRunner(root, 'pnpm', [
       'install',
+      '--ignore-scripts',
+      '--ignore-pnpmfile',
+      '--ignore-workspace',
+      '--lockfile-dir',
+      '.',
+      '--modules-dir',
+      'node_modules',
+      '--virtual-store-dir',
+      'node_modules/.pnpm',
     ])
     onProgress?.('Node dependencies installed.')
     pending = pending.filter((item) => item.kind !== 'node-deps')
@@ -919,6 +988,14 @@ async function maybeInstallNodeDependencies(
       written.add('pnpm-lock.yaml')
     }
   } catch (error) {
+    try {
+      await restoreTrackedProjectPaths(root, trackedPaths)
+    } catch (restoreError) {
+      throw new AggregateError(
+        [error, restoreError],
+        'Node dependency installation failed and its partial files could not be restored.',
+      )
+    }
     onProgress?.(`Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`)
     pending = replacePending(pending, {
       kind: 'node-deps',
@@ -942,6 +1019,45 @@ async function maybeInstallNodeDependencies(
       ...written,
     ],
     pending,
+  }
+}
+
+async function createPathCheckpoint(
+  root: string,
+  relativePath: string,
+): Promise<{ restore: () => Promise<void>; dispose: () => Promise<void> }> {
+  const source = join(root, relativePath)
+  const sourceExists = await exists(source)
+  const checkpointRoot = await mkdtemp(join(tmpdir(), `create-maa-project-checkpoint-${randomUUID()}-`))
+  const checkpoint = join(checkpointRoot, 'content')
+  if (sourceExists) {
+    await mkdir(checkpointRoot, { recursive: true })
+    await cp(source, checkpoint, { recursive: true, force: true, verbatimSymlinks: true })
+  }
+  return {
+    restore: async () => {
+      await rm(source, { force: true, recursive: true })
+      if (sourceExists) {
+        await mkdir(dirname(source), { recursive: true })
+        await cp(checkpoint, source, { recursive: true, force: true, verbatimSymlinks: true })
+      }
+    },
+    dispose: () => rm(checkpointRoot, { force: true, recursive: true }),
+  }
+}
+
+async function restoreCheckpoint(
+  checkpoint: { restore: () => Promise<void> },
+  originalError: unknown,
+  label: string,
+): Promise<void> {
+  try {
+    await checkpoint.restore()
+  } catch (rollbackError) {
+    throw new AggregateError(
+      [originalError, rollbackError],
+      `${label} failed and its project files could not be restored.`,
+    )
   }
 }
 

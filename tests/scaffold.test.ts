@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -216,6 +216,8 @@ describe('scaffold', () => {
       commandRunner: async (cwd, command, args) => {
         commands.push({ root: cwd, command, args })
         await writeFile(join(cwd, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
+        await mkdir(join(cwd, 'node_modules/example'), { recursive: true })
+        await writeFile(join(cwd, 'node_modules/example/package.json'), '{}\n', 'utf8')
       },
       onProgress: (message) => progress.push(message),
     })
@@ -227,6 +229,15 @@ describe('scaffold', () => {
         command: 'pnpm',
         args: [
           'install',
+          '--ignore-scripts',
+          '--ignore-pnpmfile',
+          '--ignore-workspace',
+          '--lockfile-dir',
+          '.',
+          '--modules-dir',
+          'node_modules',
+          '--virtual-store-dir',
+          'node_modules/.pnpm',
         ],
       },
     ])
@@ -237,7 +248,13 @@ describe('scaffold', () => {
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.written).toContain('pnpm-lock.yaml')
     expect(await pathExists(join(projectRoot, 'pnpm-lock.yaml'))).toBe(true)
+    expect(await pathExists(join(projectRoot, 'node_modules/example/package.json'))).toBe(true)
     expect((await runDoctor(projectRoot)).lines.join('\n')).not.toContain('create-maa-project --update node-deps')
+    expect(result.backupId).toBeTruthy()
+    await restoreBackup(projectRoot, result.backupId as string)
+    expect(await pathExists(join(projectRoot, 'pnpm-lock.yaml'))).toBe(false)
+    expect(await pathExists(join(projectRoot, 'node_modules'))).toBe(false)
+    expect(await pathExists(join(projectRoot, 'maa-project.json'))).toBe(false)
   })
 
   it('keeps node dependency pending when creation install fails', async () => {
@@ -247,7 +264,10 @@ describe('scaffold', () => {
 
     const result = await createProject(defaultOptions({ name: 'maa-create-install-fail' }), {
       installNodeDeps: true,
-      commandRunner: async () => {
+      commandRunner: async (cwd) => {
+        await writeFile(join(cwd, 'pnpm-lock.yaml'), 'partial lockfile', 'utf8')
+        await mkdir(join(cwd, 'node_modules/partial'), { recursive: true })
+        await writeFile(join(cwd, 'node_modules/partial/package.json'), '{}\n', 'utf8')
         throw new Error('offline registry')
       },
       onProgress: (message) => progress.push(message),
@@ -266,6 +286,8 @@ describe('scaffold', () => {
         }),
       ]),
     )
+    expect(await pathExists(join(result.root, 'pnpm-lock.yaml'))).toBe(false)
+    expect(await pathExists(join(result.root, 'node_modules'))).toBe(false)
   })
 
   it('keeps OCR pending when creation download fails', async () => {
@@ -2072,6 +2094,12 @@ jobs:
 
     expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('verified detector')
     expect(result.written).toContain('resource/base/model/ocr/det.onnx')
+    expect(result.backupId).toBeTruthy()
+
+    const restoreResult = await restoreBackup(projectRoot, result.backupId as string)
+
+    expect(restoreResult.backupId).toBeTruthy()
+    await expect(readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).resolves.toBe('')
   })
 
   it('rejects OCR submodule source and destination paths outside their allowed roots', async () => {
@@ -2868,7 +2896,52 @@ jobs:
 
     expect(result.written).toContain('interface.json')
     expect(await readFile(join(target, 'note.txt'), 'utf8')).toBe('important')
-    expect(await findBackedUpFile(join(target, '.create-maa-project/backups'), 'note.txt')).toBe(true)
+    expect(result.backupId).toBeTruthy()
+    await writeFile(join(target, 'note.txt'), 'changed after create', 'utf8')
+    await mkdir(join(target, 'docs'), { recursive: true })
+    await writeFile(join(target, 'docs/later.txt'), 'later', 'utf8')
+    await restoreBackup(target, result.backupId as string)
+    expect(await readFile(join(target, 'note.txt'), 'utf8')).toBe('changed after create')
+    expect(await readFile(join(target, 'docs/later.txt'), 'utf8')).toBe('later')
+  })
+
+  it('keeps local state excluded when initializing git in a forced directory with a custom gitignore', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const target = join(root, 'existing-gitignore')
+    const commands: string[][] = []
+    await mkdir(target, { recursive: true })
+    await writeFile(join(target, '.gitignore'), 'custom-only/\n', 'utf8')
+    process.chdir(root)
+
+    await createProject(
+      defaultOptions({
+        name: 'existing-gitignore',
+        force: true,
+        allowNonGitDir: true,
+        initializeGit: true,
+        allowPendingCommit: true,
+      }),
+      {
+        detectGitTree: async () => false,
+        gitRunner: async (cwd, args) => {
+          commands.push(args)
+          if (args[0] === 'init') await mkdir(join(cwd, '.git/info'), { recursive: true })
+        },
+      },
+    )
+
+    expect(await readFile(join(target, '.gitignore'), 'utf8')).toBe('custom-only/\n')
+    expect(await readFile(join(target, '.git/info/exclude'), 'utf8')).toBe('/.create-maa-project/\n/node_modules/\n')
+    expect(commands).toContainEqual([
+      'add',
+      '--all',
+      '--',
+      '.',
+      ':(exclude).create-maa-project',
+      ':(exclude).create-maa-project/**',
+      ':(exclude)node_modules',
+      ':(exclude)node_modules/**',
+    ])
   })
 
   it('initializes git without committing while generated project has pending actions', async () => {
@@ -2929,7 +3002,13 @@ jobs:
       ],
       [
         'add',
+        '--all',
+        '--',
         '.',
+        ':(exclude).create-maa-project',
+        ':(exclude).create-maa-project/**',
+        ':(exclude)node_modules',
+        ':(exclude)node_modules/**',
       ],
       [
         'commit',
@@ -2937,6 +3016,29 @@ jobs:
         'chore: scaffold MaaFW project',
       ],
     ])
+  })
+
+  it('removes a newly created partial git repository when initialization fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const result = await createProject(defaultOptions({ name: 'maa-git-init-fail', initializeGit: true }), {
+      gitRunner: async (cwd) => {
+        await mkdir(join(cwd, '.git'), { recursive: true })
+        await writeFile(join(cwd, '.git/partial'), 'partial', 'utf8')
+        throw new Error('simulated init failure')
+      },
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toMatchObject({
+      initialized: false,
+      committed: false,
+      reason: expect.stringContaining('partial .git directory was removed'),
+    })
+    expect(result.backupId).toBeTruthy()
+    expect(await pathExists(join(result.root, '.git'))).toBe(false)
+    expect(await pathExists(join(result.root, 'maa-project.json'))).toBe(true)
   })
 
   it('does not initialize git inside a parent git repository', async () => {
@@ -2979,7 +3081,7 @@ jobs:
 
     await writeFile(
       join(projectRoot, '.create-maa-project/run.lock'),
-      JSON.stringify({ pid: 99999999, command: 'test', startedAt: new Date().toISOString() }),
+      JSON.stringify({ ownerId: 'stale-owner', pid: 99999999, command: 'test', startedAt: new Date().toISOString() }),
       'utf8',
     )
     await expect(syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))).rejects.toThrow(
@@ -3005,11 +3107,12 @@ jobs:
     await writeFile(join(projectRoot, '.create-maa-project/backups/backup-1/README.md'), '# Restored\n', 'utf8')
 
     expect(await cleanCache(projectRoot)).toBe(join(projectRoot, '.create-maa-project/cache'))
-    const restored = await restoreBackup(projectRoot, 'backup-1')
+    const restoreResult = await restoreBackup(projectRoot, 'backup-1')
 
-    expect(restored).toEqual([
+    expect(restoreResult.restored).toEqual([
       'README.md',
     ])
+    expect(restoreResult.backupId).toBeTruthy()
     expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe('# Restored\n')
   })
   it('creates repository tooling project under resource/base', async () => {
@@ -3803,6 +3906,15 @@ jobs:
         command: 'pnpm',
         args: [
           'install',
+          '--ignore-scripts',
+          '--ignore-pnpmfile',
+          '--ignore-workspace',
+          '--lockfile-dir',
+          '.',
+          '--modules-dir',
+          'node_modules',
+          '--virtual-store-dir',
+          'node_modules/.pnpm',
         ],
       },
       {
@@ -3814,7 +3926,7 @@ jobs:
           '--python',
           '3.13',
           'python',
-          '.create-maa-project/sync-requirements-in.py',
+          expect.stringMatching(/[\\/]create-maa-project-python-deps-[0-9a-f-]+-[^\\/]+[\\/]sync-requirements-in\.py$/),
         ],
       },
       {
@@ -3865,6 +3977,39 @@ jobs:
       ),
     ).resolves.toBeDefined()
   })
+
+  it('updates Python dependency files without modifying external hard links', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-hard-links', template: 'agent' }))
+    const projectRoot = join(root, 'maa-python-hard-links')
+    const originals = new Map<string, string>()
+    for (const name of ['requirements.in', 'uv.lock', 'requirements.txt']) {
+      const projectFile = join(projectRoot, name)
+      const content = await readFile(projectFile, 'utf8')
+      const outsideFile = join(root, `outside-${name}`)
+      originals.set(name, content)
+      await writeFile(outsideFile, content, 'utf8')
+      await rm(projectFile)
+      await link(outsideFile, projectFile)
+    }
+    process.chdir(projectRoot)
+
+    await recordUpdateRequests(defaultOptions({ update: ['python-deps'] }), {
+      commandRunner: async (cwd, command, args) => {
+        if (command !== 'uv') return
+        if (args[0] === 'run') await writeFile(join(cwd, 'requirements.in'), 'updated input\n', 'utf8')
+        if (args[0] === 'lock') await writeFile(join(cwd, 'uv.lock'), 'updated lock\n', 'utf8')
+        if (args[0] === 'export') await writeFile(join(cwd, 'requirements.txt'), 'updated==1\n', 'utf8')
+      },
+    })
+
+    for (const [name, content] of originals) {
+      expect(await readFile(join(root, `outside-${name}`), 'utf8')).toBe(content)
+      expect(await readFile(join(projectRoot, name), 'utf8')).not.toBe(content)
+    }
+  })
+
   it('preserves one-time files in existing git directories', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     const target = join(root, 'existing-git')

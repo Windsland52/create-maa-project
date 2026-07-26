@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -50,8 +50,12 @@ describe('Git initialization after project creation', () => {
     const root = await tempRoot()
     process.chdir(root)
     const commands: string[][] = []
-    const gitRunner: GitRunner = async (_cwd, args) => {
+    const gitRunner: GitRunner = async (cwd, args) => {
       commands.push(args)
+      if (args[0] === 'init') {
+        await mkdir(join(cwd, '.git/info'), { recursive: true })
+        await writeFile(join(cwd, '.git/info/exclude'), '# custom exclude\n', 'utf8')
+      }
       if (args[0] === 'commit') throw new Error('Author identity unknown')
     }
 
@@ -72,7 +76,13 @@ describe('Git initialization after project creation', () => {
       ],
       [
         'add',
+        '--all',
+        '--',
         '.',
+        ':(exclude).create-maa-project',
+        ':(exclude).create-maa-project/**',
+        ':(exclude)node_modules',
+        ':(exclude)node_modules/**',
       ],
       [
         'commit',
@@ -80,10 +90,13 @@ describe('Git initialization after project creation', () => {
         'chore: scaffold MaaFW project',
       ],
     ])
+    await expect(readFile(join(result.root, '.git/info/exclude'), 'utf8')).resolves.toBe(
+      '# custom exclude\n/.create-maa-project/\n/node_modules/\n',
+    )
     await expect(readFile(join(result.root, 'interface.json'), 'utf8')).resolves.toContain('git-commit-failure')
   })
 
-  it('reports an initialized repository when git init fails after creating .git', async () => {
+  it('removes a partial repository when git init fails after creating .git', async () => {
     const root = await tempRoot()
     process.chdir(root)
     const gitRunner: GitRunner = async (cwd) => {
@@ -97,11 +110,12 @@ describe('Git initialization after project creation', () => {
     })
 
     expect(result.git).toMatchObject({
-      initialized: true,
+      initialized: false,
       committed: false,
     })
-    expect(result.git?.reason).toContain('git init reported a failure after creating the repository')
-    expect(result.git?.reason).toContain('Run git status and create the initial commit manually')
+    expect(result.git?.reason).toContain('Any newly created partial .git directory was removed')
+    expect(result.git?.reason).toContain('run git init and create the initial commit manually')
+    await expect(lstat(join(result.root, '.git'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('returns the initialized project when staging fails', async () => {
@@ -130,7 +144,13 @@ describe('Git initialization after project creation', () => {
       ],
       [
         'add',
+        '--all',
+        '--',
         '.',
+        ':(exclude).create-maa-project',
+        ':(exclude).create-maa-project/**',
+        ':(exclude)node_modules',
+        ':(exclude)node_modules/**',
       ],
     ])
   })

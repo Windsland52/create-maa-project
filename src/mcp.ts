@@ -188,10 +188,10 @@ const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'restore',
-    description: 'Restore files from a backup',
+    description: 'Restore managed project files from a backup. Git repository state under .git is never included.',
     inputSchema: objectSchema(
       {
-        backupId: stringSchema('Backup id under .create-maa-project/backups.'),
+        backupId: stringSchema('Managed-files backup id under .create-maa-project/backups; excludes .git state.'),
       },
       [
         'backupId',
@@ -308,10 +308,10 @@ async function callRestore(input: unknown): Promise<CallToolResult> {
   }
   return withReport('update', async (context) => {
     const root = currentRoot()
-    const restored = await withProjectWriteLock(root, 'create-maa-project --mcp restore', () =>
+    const restoreResult = await withProjectWriteLock(root, 'create-maa-project --mcp restore', () =>
       restoreBackup(root, backupId),
     )
-    return createMaintenanceReport(context, root, restored)
+    return createMaintenanceReport(context, root, restoreResult.restored, restoreResult.backupId)
   })
 }
 
@@ -379,6 +379,7 @@ async function createMaintenanceReport(
   context: ReportContext,
   root: string,
   affectedPaths: string[],
+  backupId?: string,
 ): Promise<CliJsonReport> {
   const config = await readProjectConfig(root)
   const result: ScaffoldResult = {
@@ -387,6 +388,7 @@ async function createMaintenanceReport(
     written: affectedPaths,
     skipped: [],
     pending: [],
+    ...(backupId ? { backupId } : {}),
   }
   return createScaffoldJsonReport(context, result)
 }

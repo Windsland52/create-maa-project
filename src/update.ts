@@ -1,13 +1,16 @@
 import {
   mergePending,
   readProjectConfig,
+  trackProjectPathForBackup,
   withProjectWriteLock,
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
+import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { spawn } from 'node:child_process'
-import { chmod, copyFile, cp, lstat, mkdir, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, cp, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import {
   downloadDefaultOcrZip,
   downloadUrl,
@@ -28,7 +31,7 @@ import {
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
-import { exists, readText, sha256 } from './utils.js'
+import { copyFileAtomic, exists, readText, sha256, writeFileAtomic } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools, hasGithubAutomation } from './features.js'
 
@@ -41,7 +44,6 @@ assert isinstance(dependencies, list) and all(isinstance(dependency, str) for de
 content = "# Generated from [project].dependencies in pyproject.toml.\\n" + "\\n".join(dependencies) + "\\n"
 Path("requirements.in").write_text(content, encoding="utf-8")
 `
-const SYNC_REQUIREMENTS_IN_SCRIPT_PATH = '.create-maa-project/sync-requirements-in.py'
 
 const UPDATE_PENDING: Record<string, PendingItem> = {
   schema: {
@@ -108,7 +110,7 @@ export async function recordUpdateRequests(
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
-    async () => {
+    async (operation) => {
       const written = new Set<string>()
       const skipped: string[] = []
       let pendingToAdd: PendingItem[] = []
@@ -124,11 +126,20 @@ export async function recordUpdateRequests(
           continue
         }
         if (target === 'node-deps') {
+          await trackProjectPathForBackup(root, 'node_modules')
+          await trackProjectPathForBackup(root, 'pnpm-lock.yaml')
           await updateNodeDeps(root, commandRunner)
           if (await exists(join(root, 'pnpm-lock.yaml'))) written.add('pnpm-lock.yaml')
           continue
         }
         if (target === 'python-deps') {
+          for (const path of [
+            'requirements.in',
+            'uv.lock',
+            'requirements.txt',
+          ]) {
+            await trackProjectPathForBackup(root, path)
+          }
           await updatePythonDeps(root, commandRunner)
           for (const path of [
             'uv.lock',
@@ -236,6 +247,7 @@ export async function recordUpdateRequests(
             const projectRoot = await realpath(root)
             const subRoot = await resolveContainedExistingPath(projectRoot, subPath, 'ocr.submodulePath')
             const ocrDest = resolve(projectRoot, 'resource/base/model/ocr')
+            await trackProjectPathForBackup(root, 'resource/base/model/ocr')
             await mkdir(ocrDest, { recursive: true })
             const resolvedOcrDest = await realpath(ocrDest)
             assertPathWithin(projectRoot, resolvedOcrDest, 'OCR destination')
@@ -246,12 +258,16 @@ export async function recordUpdateRequests(
                 if (!(await stat(source)).isFile()) {
                   throw new Error(`ocr.files["${destName}"] must reference a file inside the OCR submodule.`)
                 }
-                await cp(source, resolve(resolvedOcrDest, destName), { force: true })
+                await trackProjectPathForBackup(root, `resource/base/model/ocr/${destName}`)
+                await copyFileAtomic(source, resolve(resolvedOcrDest, destName))
                 written.add(['resource/base/model/ocr', destName].join('/'))
               }
             } else {
               await assertTreeContainsNoSymlinks(subRoot)
-              await cp(subRoot, resolvedOcrDest, { recursive: true, force: true })
+              await assertTreeContainsNoSymlinks(resolvedOcrDest)
+              await rm(resolvedOcrDest, { force: true, recursive: true })
+              await mkdir(resolvedOcrDest, { recursive: true })
+              await cp(subRoot, resolvedOcrDest, { recursive: true, force: true, verbatimSymlinks: true })
               written.add('resource/base/model/ocr')
             }
             environment.onProgress?.('OCR models copied from submodule.')
@@ -281,6 +297,7 @@ export async function recordUpdateRequests(
         ],
         skipped,
         pending: pendingToAdd,
+        backupId: operation.backupId,
       }
     },
     { clearStale: options.clearStaleLock },
@@ -329,6 +346,15 @@ function remoteAssetPending(target: string): PendingItem {
 async function updateNodeDeps(root: string, commandRunner: UpdateCommandRunner): Promise<void> {
   await commandRunner(root, 'pnpm', [
     'install',
+    '--ignore-scripts',
+    '--ignore-pnpmfile',
+    '--ignore-workspace',
+    '--lockfile-dir',
+    '.',
+    '--modules-dir',
+    'node_modules',
+    '--virtual-store-dir',
+    'node_modules/.pnpm',
   ])
 }
 
@@ -336,8 +362,12 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
   if (!(await exists(join(root, 'pyproject.toml')))) {
     throw new Error('--update python-deps requires an Agent project with pyproject.toml.')
   }
-  const syncScriptPath = join(root, SYNC_REQUIREMENTS_IN_SCRIPT_PATH)
-  await mkdir(join(root, '.create-maa-project'), { recursive: true })
+  for (const relativePath of ['requirements.in', 'uv.lock', 'requirements.txt']) {
+    const path = join(root, relativePath)
+    if (await exists(path)) await copyFileAtomic(path, path)
+  }
+  const syncScriptRoot = await mkdtemp(join(tmpdir(), `create-maa-project-python-deps-${randomUUID()}-`))
+  const syncScriptPath = join(syncScriptRoot, 'sync-requirements-in.py')
   await writeFile(syncScriptPath, SYNC_REQUIREMENTS_IN_SCRIPT, 'utf8')
   try {
     await commandRunner(root, 'uv', [
@@ -346,10 +376,10 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
       '--python',
       '3.13',
       'python',
-      SYNC_REQUIREMENTS_IN_SCRIPT_PATH,
+      syncScriptPath,
     ])
   } finally {
-    await rm(syncScriptPath, { force: true })
+    await rm(syncScriptRoot, { force: true, recursive: true })
   }
   await commandRunner(root, 'uv', [
     'lock',
@@ -372,7 +402,7 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
   const lines = requirements.split('\n')
   const headerEnd = lines.findIndex((line) => !line.startsWith('#'))
   lines.splice(headerEnd < 0 ? lines.length : headerEnd, 0, '# Dependabot: use --universal when updating this file.')
-  await writeFile(requirementsPath, lines.join('\n'), 'utf8')
+  await writeFileAtomic(requirementsPath, lines.join('\n'))
 }
 
 async function updatePythonRuntime(
@@ -408,7 +438,9 @@ async function updatePythonRuntime(
 
   const manifest = await options.manifestResolver({ ...options.request, platform })
   if (!manifest) return undefined
-  await rm(join(root, '.create-maa-project/runtime/python', platform), {
+  const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
+  await trackProjectPathForBackup(root, runtimeRoot)
+  await rm(join(root, runtimeRoot), {
     recursive: true,
     force: true,
   })
@@ -425,6 +457,7 @@ async function updatePythonRuntime(
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         },
   )
+  for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
   await options.commandRunner(root, 'uv', [
@@ -453,7 +486,9 @@ async function updateWindowsEmbeddedPythonRuntime(
     onDownloadProgress?: DownloadProgressReporter
   },
 ): Promise<{ written: string[] }> {
-  await rm(join(root, '.create-maa-project/runtime/python', platform), {
+  const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
+  await trackProjectPathForBackup(root, runtimeRoot)
+  await rm(join(root, runtimeRoot), {
     recursive: true,
     force: true,
   })
@@ -509,7 +544,7 @@ async function ensureEmbeddedPythonExecutable(root: string, platform: string): P
   if (!candidate) {
     throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
   }
-  await copyFile(join(root, binPath, candidate), join(root, python))
+  await copyFileAtomic(join(root, binPath, candidate), join(root, python))
   await chmod(join(root, python), 0o755)
   return python
 }
@@ -532,6 +567,7 @@ async function updateLinuxPythonRuntime(
   commandRunner: UpdateCommandRunner,
 ): Promise<{ written: string[] }> {
   const depsPath = `.create-maa-project/runtime/python-deps/${platform}`
+  await trackProjectPathForBackup(root, depsPath)
   await rm(join(root, depsPath), {
     recursive: true,
     force: true,
@@ -684,6 +720,8 @@ export async function updateOcrModels(
             },
       )
     : await downloadDefaultOcrZip(createDefaultOcrZipDownloadOptions(options))
+  for (const asset of assets) await trackProjectPathForBackup(root, `${basePath}/${asset.path}`)
+  await trackProjectPathForBackup(root, `${basePath}/manifest.json`)
   const { written, manifestContent } = await writeDownloadedAssets(root, basePath, assets)
   return {
     written,
@@ -725,6 +763,7 @@ export async function updateProjectAssets(
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
         },
   )
+  for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
   return {
     written: await writeDownloadedProjectAssets(root, assets),
   }

@@ -21,6 +21,8 @@ type JsonReport = {
   skipped: string[]
   pending: Array<{ kind: string; reason: string; command: string }>
   suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
+  backupId?: string
+  backupScope?: 'managed-files'
   doctor?: { lines: string[] }
   error?: { message: string; code?: string }
 }
@@ -63,6 +65,8 @@ describe('CLI JSON reports', () => {
         ok: true,
         exitCode: 0,
         root: join(root, 'maa-report-create'),
+        backupId: expect.any(String),
+        backupScope: 'managed-files',
       })
       expect(report.pending).toEqual(
         expect.arrayContaining([

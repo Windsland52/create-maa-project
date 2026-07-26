@@ -116,6 +116,7 @@ if (enabledGuis.length === 0) {
 }
 
 for (const path of [
+    ...(typeof interfaceJson.icon === "string" ? [interfaceJson.icon] : []),
     ...strings(interfaceJson.resource),
     ...strings(interfaceJson.import),
 ]) {
@@ -245,6 +246,9 @@ function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {
             paths.push(linuxPythonDepsPath(runtimePlatform));
         }
     }
+    if (typeof interfaceJson.icon === "string" && interfaceJson.icon) {
+        paths.push(interfaceJson.icon);
+    }
     return paths;
 }
 
@@ -264,6 +268,9 @@ function packageHasAgent(interfaceJson) {
 function prepareReleaseInterface(interfaceJson, version, runtimePlatform) {
     const releaseInterface = {...interfaceJson, version};
     delete releaseInterface.$schema;
+    if (releaseInterface.icon === undefined && existsSync("logo.ico")) {
+        releaseInterface.icon = "logo.ico";
+    }
     if (packageHasAgent(interfaceJson)) {
         releaseInterface.agent = interfaceJson.agent.map((agent) =>
             isRecord(agent)
@@ -406,6 +413,7 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
     }
     assertUnixExecutablePermissions(root, runtimePlatform);
     for (const path of [
+        ...(typeof packagedInterface.icon === "string" ? [packagedInterface.icon] : []),
         ...interfaceResourcePaths(packagedInterface.resource),
         ...strings(packagedInterface.import),
     ]) {

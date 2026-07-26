@@ -3,6 +3,20 @@ import { controllerUnavailableMessage, normalizeControllerKind, uniqueController
 import { parseCliLanguage } from './lang.js'
 import { UPDATE_TARGETS } from './update-targets.js'
 
+type CommandMode =
+  | 'create'
+  | '--help'
+  | '--cli-version'
+  | '--doctor'
+  | '--sync'
+  | '--update'
+  | '--add'
+  | '--list-backups'
+  | '--show-backup'
+  | '--restore'
+  | '--clean-cache'
+  | '--mcp'
+
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     help: false,
@@ -20,7 +34,6 @@ export function parseArgs(argv: string[]): CliOptions {
     skipDownload: false,
     verbose: false,
     noColor: false,
-    lang: 'auto',
     assist: false,
     dryRun: false,
     listBackups: false,
@@ -212,7 +225,7 @@ export function parseArgs(argv: string[]): CliOptions {
 }
 
 export function validateCommandModes(options: CliOptions): void {
-  const modes: string[] = []
+  const modes: CommandMode[] = []
 
   if (options.name !== undefined) modes.push('create')
   if (options.help) modes.push('--help')
@@ -233,6 +246,88 @@ export function validateCommandModes(options: CliOptions): void {
   if (options.dryRun && options.restore === undefined && options.migrate === undefined) {
     throw new Error('--dry-run requires --restore <backup-id>.')
   }
+  validateOptionApplicability(options, modes[0] ?? 'create')
+}
+
+function validateOptionApplicability(options: CliOptions, mode: CommandMode): void {
+  const creationOptions: Array<readonly [option: string, provided: boolean]> = [
+    ['--template', options.explicitTemplate],
+    ['--slug', options.slug !== undefined],
+    ['--controller', options.controllers !== undefined],
+    ['--git/--no-git', options.initializeGit !== undefined],
+    ['--force', options.force],
+    ['--allow-non-git-dir', options.allowNonGitDir],
+    ['--allow-pending-commit', options.allowPendingCommit],
+    ['--skip-download', options.skipDownload],
+    ['--yes/--no-interactive', options.noInteractive],
+    ['--lang', options.lang !== undefined],
+  ]
+  for (const [option, provided] of creationOptions) {
+    assertOptionAllowed(mode, option, provided, ['create'])
+  }
+  assertOptionAllowed(mode, '--report', options.report, [
+    'create',
+    '--doctor',
+    '--sync',
+    '--update',
+    '--add',
+    '--list-backups',
+    '--show-backup',
+    '--restore',
+    '--clean-cache',
+  ])
+  assertOptionAllowed(mode, '--log-file', options.logFile !== undefined, [
+    'create',
+    '--doctor',
+    '--sync',
+    '--update',
+    '--add',
+    '--list-backups',
+    '--show-backup',
+    '--restore',
+    '--clean-cache',
+  ])
+  assertOptionAllowed(mode, '--clear-stale-lock', options.clearStaleLock, [
+    'create',
+    '--sync',
+    '--update',
+    '--add',
+    '--list-backups',
+    '--show-backup',
+    '--restore',
+  ])
+
+  validateSyncAlias(options.displayName !== undefined, mode, options.sync, '--name', 'display-name')
+  validateSyncAlias(options.version !== undefined, mode, options.sync, '--version', 'version')
+  validateSyncAlias(options.license !== undefined, mode, options.sync, '--license', 'license')
+  validateSyncAlias(options.network !== undefined, mode, options.sync, '--network', 'network')
+
+  if (options.label !== undefined && !(
+    (mode === 'create' || mode === '--add') && options.add.includes('resource-pack')
+  )) {
+    throw new Error('--label is only valid when adding a resource-pack.')
+  }
+}
+
+function validateSyncAlias(
+  provided: boolean,
+  mode: CommandMode,
+  syncTarget: string | undefined,
+  option: '--name' | '--version' | '--license' | '--network',
+  target: string,
+): void {
+  if (!provided || mode === 'create' || (mode === '--sync' && syncTarget === target)) return
+  throw new Error(`${option} is only valid with project creation or --sync ${target}.`)
+}
+
+function assertOptionAllowed(
+  mode: CommandMode,
+  option: string,
+  provided: boolean,
+  allowedModes: readonly CommandMode[],
+): void {
+  if (!provided || allowedModes.includes(mode)) return
+  throw new Error(`${option} is not valid with ${mode}.`)
 }
 
 export function formatCliHelp(version: string): string {

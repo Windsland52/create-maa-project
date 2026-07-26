@@ -299,6 +299,30 @@ describe('validateCommandModes', () => {
   it('rejects dry-run without restore', () => {
     expect(() => validateCommandModes(parseArgs(['--dry-run']))).toThrow('--dry-run requires --restore <backup-id>.')
   })
+
+  it.each([
+    { argv: ['--doctor', '--template', 'agent'], message: '--template is not valid with --doctor.' },
+    { argv: ['--update', 'schema', '--skip-download'], message: '--skip-download is not valid with --update.' },
+    { argv: ['--add', 'community', '--license', 'MIT'], message: '--license is only valid' },
+    { argv: ['--sync', 'version', '--name', 'Wrong field'], message: '--name is only valid' },
+    { argv: ['--clean-cache', '--clear-stale-lock'], message: '--clear-stale-lock is not valid' },
+    { argv: ['--mcp', '--report'], message: '--report is not valid with --mcp.' },
+    { argv: ['--help', '--log-file', 'help.log'], message: '--log-file is not valid with --help.' },
+    { argv: ['--add', 'github', '--label', 'Ignored'], message: '--label is only valid' },
+  ])('rejects options that do not apply to the selected command: $argv', ({ argv, message }) => {
+    expect(() => validateCommandModes(parseArgs(argv))).toThrow(message)
+  })
+
+  it.each([
+    { argv: ['--sync', 'display-name', '--name', 'New name'] },
+    { argv: ['--sync', 'version', '--version', '1.2.3'] },
+    { argv: ['--sync', 'license', '--license', 'MIT'] },
+    { argv: ['--sync', 'network', '--network', 'official'] },
+    { argv: ['--add', 'resource-pack', 'extra', '--label', 'Extra Resource'] },
+    { argv: ['--restore', 'backup-1', '--clear-stale-lock'] },
+  ])('accepts options with a command that consumes them: $argv', ({ argv }) => {
+    expect(() => validateCommandModes(parseArgs(argv))).not.toThrow()
+  })
 })
 
 describe('formatCliHelp', () => {

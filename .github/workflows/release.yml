@@ -25,8 +25,19 @@ jobs:
       - run: node scripts/sync-release-version.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm build
-      - run: mkdir -p dist/npm && pnpm pack --pack-destination dist/npm
+      - name: Pack npm package
+        run: mkdir -p dist/npm && pnpm pack --pack-destination dist/npm
+      - name: Smoke npm package
+        shell: bash
+        run: |
+          package="$(find dist/npm -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "$package" ]]; then
+            echo "npm package was not created" >&2
+            exit 1
+          fi
+          smoke_root="$RUNNER_TEMP/npm-package-smoke"
+          npm install --prefix "$smoke_root" --no-audit --no-fund "$PWD/$package"
+          node scripts/smoke-cli-artifact.mjs "$smoke_root/node_modules/.bin/create-maa-project"
       - uses: actions/upload-artifact@v7
         with:
           name: npm-package
@@ -42,21 +53,27 @@ jobs:
           - runner: windows-latest
             asset_os: win
             arch: x86_64
+            binary: dist/sea/create-maa-project-win-x86_64.exe
           - runner: windows-11-arm
             asset_os: win
             arch: aarch64
+            binary: dist/sea/create-maa-project-win-aarch64.exe
           - runner: ubuntu-latest
             asset_os: linux
             arch: x86_64
+            binary: dist/sea/create-maa-project-linux-x86_64
           - runner: ubuntu-24.04-arm
             asset_os: linux
             arch: aarch64
+            binary: dist/sea/create-maa-project-linux-aarch64
           - runner: macos-15-intel
             asset_os: macos
             arch: x86_64
+            binary: dist/sea/create-maa-project-macos-x86_64
           - runner: macos-latest
             asset_os: macos
             arch: aarch64
+            binary: dist/sea/create-maa-project-macos-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -71,6 +88,8 @@ jobs:
         env:
           CREATE_MAA_PROJECT_RELEASE_OS: ${{ matrix.asset_os }}
           CREATE_MAA_PROJECT_RELEASE_ARCH: ${{ matrix.arch }}
+      - name: Smoke SEA binary
+        run: node scripts/smoke-cli-artifact.mjs "${{ matrix.binary }}"
       - uses: actions/upload-artifact@v7
         with:
           name: sea-${{ matrix.asset_os }}-${{ matrix.arch }}
@@ -211,4 +230,18 @@ jobs:
           path: .release
       - run: node scripts/prepare-pypi-release.mjs .release/create-maa-project-manifest.json
       - run: uv build
+      - name: Smoke Python wheel
+        shell: bash
+        env:
+          CREATE_MAA_PROJECT_CACHE: ${{ runner.temp }}/create-maa-project-pypi-smoke-cache
+        run: |
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          if [[ -z "$wheel" ]]; then
+            echo "Python wheel was not created" >&2
+            exit 1
+          fi
+          smoke_venv="$RUNNER_TEMP/pypi-wheel-smoke"
+          uv venv "$smoke_venv"
+          uv pip install --python "$smoke_venv/bin/python" "$wheel"
+          node scripts/smoke-cli-artifact.mjs "$smoke_venv/bin/create-maa-project"
       - uses: pypa/gh-action-pypi-publish@release/v1

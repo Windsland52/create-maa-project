@@ -19,6 +19,8 @@
     "files": [
         "dist/index.js",
         "templates",
+        "!templates/**/__pycache__",
+        "!templates/**/*.pyc",
         "README.md",
         "LICENSE"
     ],
@@ -34,6 +36,7 @@
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",
         "check:network": "tsx scripts/check-network-assets.ts",
+        "prepack": "npm run build",
         "pretest": "pnpm build",
         "test": "vitest run && node scripts/test-python.mjs",
         "check": "pnpm format:check && pnpm typecheck && pnpm test"

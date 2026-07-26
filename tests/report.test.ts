@@ -54,6 +54,33 @@ afterEach(async () => {
 
 describe('CLI JSON reports', () => {
   it(
+    'only advertises log files that were actually created',
+    async () => {
+      const root = await tempRoot()
+      const lazy = await runCli(['--clean-cache'], root)
+
+      expect(lazy.exitCode).toBe(0)
+      expect(lazy.stdout).toContain('Cleaned cache:')
+      expect(lazy.stdout).not.toContain('Log:')
+      await expect(readdir(join(root, '.create-maa-project', 'logs'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+      const explicitLog = join(root, 'explicit.log')
+      const explicit = await runCli(
+        [
+          '--clean-cache',
+          '--log-file',
+          explicitLog,
+        ],
+        root,
+      )
+      expect(explicit.exitCode).toBe(0)
+      expect(explicit.stdout).toContain(`Log: ${explicitLog}`)
+      await expect(readFile(explicitLog, 'utf8')).resolves.toContain('argv=')
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'requires an explicit target for non-interactive project creation',
     async () => {
       const reportRoot = await tempRoot()
@@ -261,6 +288,7 @@ describe('CLI JSON reports', () => {
         ok: true,
         exitCode: 0,
         root: projectRoot,
+        logPath: null,
       })
       expect(report.written).toEqual(
         expect.arrayContaining([
@@ -292,6 +320,7 @@ describe('CLI JSON reports', () => {
         ok: true,
         exitCode: 0,
         root: projectRoot,
+        logPath: null,
       })
       expect(report.written).toEqual(
         expect.arrayContaining([

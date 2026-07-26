@@ -161,21 +161,21 @@ async function main(): Promise<void> {
     if (options.cleanCache) {
       const cleaned = await cleanCache(process.cwd())
       console.log(`Cleaned cache: ${cleaned}`)
-      console.log(`Log: ${logger.path}`)
+      printLogPath(logger)
       return
     }
 
     if (isBackupCommand(options)) {
       const backup = await executeBackupCommand(process.cwd(), options)
       printBackupResult(backup)
-      if (backup.operation === 'restore') console.log(`Log: ${logger.path}`)
+      if (backup.operation === 'restore') printLogPath(logger)
       return
     }
 
     if (options.doctor) {
       const report = await runDoctor(process.cwd())
       console.log(options.report ? JSON.stringify(report, null, 4) : report.lines.join('\n'))
-      console.log(`Log: ${logger.path}`)
+      printLogPath(logger)
       process.exitCode = report.ok ? 0 : 1
       return
     }
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
     if (options.sync) {
       const result = await syncProject(options)
       printScaffoldResult('Synchronized project', result)
-      console.log(`Log: ${logger.path}`)
+      printLogPath(logger)
       return
     }
 
@@ -199,14 +199,14 @@ async function main(): Promise<void> {
       progress.clear()
       clearActiveProgress = (): void => {}
       printScaffoldResult('Recorded update request', result)
-      console.log(`Log: ${logger.path}`)
+      printLogPath(logger)
       return
     }
 
     if (options.add.length > 0 && !options.name) {
       const lastResult = await applyIncrementalAddons(options)
       if (lastResult) printScaffoldResult('Updated project', lastResult)
-      console.log(`Log: ${logger.path}`)
+      printLogPath(logger)
       return
     }
 
@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     const projectLogger = await createLogger(result.root, options.logFile)
     await projectLogger.info(`created=${result.root}`)
     printScaffoldResult('Created project', result)
-    console.log(`Log: ${projectLogger.path}`)
+    printLogPath(projectLogger)
   } catch (error) {
     clearActiveProgress()
     logger = logger ?? (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       return
     }
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
-    if (logger) console.error(`Log: ${logger.path}`)
+    printLogPath(logger, true)
     process.exitCode = 1
   }
 }
@@ -348,8 +348,15 @@ function createReportContext(
     command,
     startTimeMs,
     executionId,
-    logPath: logger?.path ?? null,
+    logPath: logger?.hasEntries() ? logger.path : null,
   }
+}
+
+function printLogPath(logger: Logger | undefined, error = false): void {
+  if (!logger?.hasEntries()) return
+  const line = `Log: ${logger.path}`
+  if (error) console.error(line)
+  else console.log(line)
 }
 
 async function tryCreateLogger(

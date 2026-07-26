@@ -5,6 +5,7 @@ import { nowIso } from './utils.js'
 
 export type Logger = {
   path: string
+  hasEntries(): boolean
   info(message: string): Promise<void>
   error(error: unknown): Promise<void>
 }
@@ -19,12 +20,15 @@ export async function createLogger(root: string, logFile?: string, executionId?:
 }
 
 function createLoggerAt(path: string): Logger {
+  let hasEntries = false
   async function write(level: string, message: string): Promise<void> {
     await mkdir(dirname(path), { recursive: true })
     await appendFile(path, `[${nowIso()}] [${level}] ${message}\n`, 'utf8')
+    hasEntries = true
   }
   return {
     path,
+    hasEntries: () => hasEntries,
     info: (message) => write('INFO', message),
     error: async (error) => {
       const message = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)

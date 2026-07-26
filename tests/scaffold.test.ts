@@ -19,7 +19,13 @@ import {
 } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
 import { recordUpdateRequests } from '../src/update.js'
-import { cleanCache, readProjectConfig, restoreBackup, writeGeneratedFiles } from '../src/project.js'
+import {
+  cleanCache,
+  readProjectConfig,
+  restoreBackup,
+  withProjectWriteLock,
+  writeGeneratedFiles,
+} from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
@@ -1306,6 +1312,35 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     await expect(syncProject(defaultOptions({ sync: 'display-name', displayName: '   ' }))).rejects.toThrow(
       '--sync display-name requires --name <display-name>',
     )
+  })
+
+  it('acquires the project lock before reading sync inputs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    const created = await createProject(defaultOptions({ name: 'maa-sync-lock-order' }))
+    let markAcquired!: () => void
+    let releaseLock!: () => void
+    const acquired = new Promise<void>((resolve) => {
+      markAcquired = resolve
+    })
+    const release = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    const holding = withProjectWriteLock(created.root, 'hold sync inputs', async () => {
+      markAcquired()
+      await release
+    })
+    await acquired
+    await writeFile(join(created.root, 'maa-project.json'), '{ invalid', 'utf8')
+
+    try {
+      await expect(syncProject(defaultOptions({ sync: 'metadata' }), { root: created.root })).rejects.toThrow(
+        'Another create-maa-project command is running',
+      )
+    } finally {
+      releaseLock()
+      await holding
+    }
   })
 
   it(

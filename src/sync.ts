@@ -8,6 +8,7 @@ import {
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
+import type { ProjectWriteOperation } from './project.js'
 import {
   interfaceAgent,
   interfaceController,
@@ -21,10 +22,13 @@ import { enabledResourcePacks, hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 
+const syncOperation = Symbol('syncOperation')
+
 type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
   root?: string
   operationCommand?: string
+  [syncOperation]?: ProjectWriteOperation
 }
 
 export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
@@ -34,6 +38,14 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   if (sync === 'config') {
     if (options.syncValue !== undefined) throw new Error('--sync config does not accept a value.')
     return migrateStoredProjectConfig(root, options.clearStaleLock, environment.operationCommand)
+  }
+  if (!environment[syncOperation]) {
+    return withProjectWriteLock(
+      root,
+      environment.operationCommand ?? process.argv.join(' '),
+      (operation) => syncProject(options, { ...environment, [syncOperation]: operation }),
+      { clearStale: options.clearStaleLock },
+    )
   }
   const config = await readProjectConfig(root)
 
@@ -140,30 +152,23 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
     if (generatedLicense === undefined) removeAfterWrite.push('LICENSE')
   }
 
-  return withProjectWriteLock(
+  const result =
+    sync === 'license'
+      ? await applySyncFileTransaction(root, files, removeAfterWrite, environment.writeFiles ?? writeGeneratedFiles)
+      : await writeGeneratedFiles(root, files, {
+          force: true,
+          backup: true,
+          overwriteUnmanaged: true,
+        })
+  if (sync !== 'license') await writeProjectState(root, config)
+  return {
     root,
-    environment.operationCommand ?? process.argv.join(' '),
-    async (operation) => {
-      const result =
-        sync === 'license'
-          ? await applySyncFileTransaction(root, files, removeAfterWrite, environment.writeFiles ?? writeGeneratedFiles)
-          : await writeGeneratedFiles(root, files, {
-              force: true,
-              backup: true,
-              overwriteUnmanaged: true,
-            })
-      if (sync !== 'license') await writeProjectState(root, config)
-      return {
-        root,
-        config,
-        written: result.written,
-        skipped: result.skipped,
-        pending: [],
-        backupId: operation.backupId,
-      }
-    },
-    { clearStale: options.clearStaleLock },
-  )
+    config,
+    written: result.written,
+    skipped: result.skipped,
+    pending: [],
+    backupId: environment[syncOperation].backupId,
+  }
 }
 
 type FileSnapshot = {

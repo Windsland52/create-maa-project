@@ -371,6 +371,7 @@ type CliJsonReport = {
     root: string;
     logPath: string | null;
     written: string[];
+    removed: string[];
     skipped: string[];
     pending: Array<{kind: string; reason: string; command: string}>;
     suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
@@ -381,7 +382,13 @@ type CliJsonReport = {
     backup?:
         | {operation: "list"; backups: BackupSummary[]}
         | {operation: "show" | "restore-preview"; backup: BackupInspection}
-        | {operation: "restore"; backupId: string; restored: string[]; preRestoreBackupId: string};
+        | {
+              operation: "restore";
+              backupId: string;
+              restored: string[];
+              removed: string[];
+              preRestoreBackupId: string;
+          };
     error?: {message: string; code?: string};
 };
 ```
@@ -401,6 +408,7 @@ type CliJsonReport = {
     "root": "/path/to/project",
     "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
     "written": [],
+    "removed": [],
     "skipped": [],
     "pending": [],
     "suggestedCommands": [],

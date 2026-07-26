@@ -72,6 +72,7 @@ export type ProjectWriteOperation = {
 
 export type RestoreResult = {
   restored: string[]
+  removed: string[]
   backupId: string
 }
 
@@ -292,13 +293,15 @@ export async function restoreBackup(root: string, backupId: string): Promise<Res
   if (await exists(manifestPath)) {
     const manifest = await readBackupManifest(root, manifestPath, backupId)
     await validateBackupPayload(root, backupRoot, manifest)
+    const changes = await restoreManifestBackup(root, backupRoot, manifest)
     return {
-      restored: await restoreManifestBackup(root, backupRoot, manifest),
+      ...changes,
       backupId: operation.manifest.id,
     }
   }
+  const changes = await restoreLegacyBackup(root, backupRoot)
   return {
-    restored: await restoreLegacyBackup(root, backupRoot),
+    ...changes,
     backupId: operation.manifest.id,
   }
 }
@@ -698,10 +701,17 @@ async function canonicalBackupTargetPath(root: string, filePath: string): Promis
   return normalizeBackupPath(root, relative(canonicalRoot, await realpath(current)))
 }
 
-async function restoreManifestBackup(root: string, backupRoot: string, manifest: BackupManifest): Promise<string[]> {
+async function restoreManifestBackup(
+  root: string,
+  backupRoot: string,
+  manifest: BackupManifest,
+): Promise<Pick<RestoreResult, 'restored' | 'removed'>> {
   for (const entry of manifest.entries) await backupPath(root, entry.path)
   await applyManifestBackup(root, backupRoot, manifest)
-  return manifest.entries.map((entry) => entry.path)
+  return {
+    restored: manifest.entries.filter((entry) => entry.state === 'modified').map((entry) => entry.path),
+    removed: manifest.entries.filter((entry) => entry.state === 'created').map((entry) => entry.path),
+  }
 }
 
 async function applyManifestBackup(root: string, backupRoot: string, manifest: BackupManifest): Promise<void> {
@@ -718,13 +728,16 @@ async function applyBackupEntry(root: string, backupRoot: string, entry: BackupE
   await cp(source, target, { recursive: true, force: true, verbatimSymlinks: true })
 }
 
-async function restoreLegacyBackup(root: string, backupRoot: string): Promise<string[]> {
+async function restoreLegacyBackup(
+  root: string,
+  backupRoot: string,
+): Promise<Pick<RestoreResult, 'restored' | 'removed'>> {
   const paths: string[] = []
   await collectBackupFiles(backupRoot, backupRoot, paths)
   for (const path of paths) await backupPath(root, path)
   const restored: string[] = []
   await restoreDirectory(root, backupRoot, backupRoot, restored)
-  return restored
+  return { restored, removed: [] }
 }
 
 async function collectBackupFiles(backupRoot: string, current: string, paths: string[]): Promise<void> {

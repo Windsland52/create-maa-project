@@ -30,12 +30,15 @@ type JsonReport = {
   exitCode: number
   root: string
   pending: Array<{ kind: string; reason: string; command: string }>
+  written: string[]
+  removed: string[]
   backupId?: string
   backupScope?: string
   backup?: {
     operation: string
     backupId?: string
     restored?: string[]
+    removed?: string[]
     preRestoreBackupId?: string
   }
   doctor?: { lines: string[] }
@@ -348,12 +351,15 @@ describe('MCP server', () => {
         backup: {
           operation: 'restore',
           backupId: sourceBackupId,
-          restored: expect.arrayContaining([
+          restored: [],
+          removed: expect.arrayContaining([
             'maa-project.json',
           ]),
           preRestoreBackupId: expect.any(String),
         },
       })
+      expect(report.written).toEqual([])
+      expect(report.removed).toEqual(expect.arrayContaining(['maa-project.json']))
       expect(report.backupId).toBe(report.backup?.preRestoreBackupId)
       await expect(readFile(join(root, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     },

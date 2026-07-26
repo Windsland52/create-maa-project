@@ -14,7 +14,7 @@ export type SuggestedCommand = {
 export type BackupJsonResult =
   | { operation: 'list'; backups: BackupSummary[] }
   | { operation: 'show' | 'restore-preview'; backup: BackupInspection }
-  | { operation: 'restore'; backupId: string; restored: string[]; preRestoreBackupId: string }
+  | { operation: 'restore'; backupId: string; restored: string[]; removed: string[]; preRestoreBackupId: string }
 
 export type CliJsonReport = {
   schemaVersion: 1
@@ -28,6 +28,7 @@ export type CliJsonReport = {
   root: string
   logPath: string | null
   written: string[]
+  removed: string[]
   skipped: string[]
   pending: PendingItem[]
   suggestedCommands: SuggestedCommand[]
@@ -128,12 +129,14 @@ export function createBackupJsonReport(input: {
   backup: BackupJsonResult
 }): CliJsonReport {
   const written = input.backup.operation === 'restore' ? input.backup.restored : []
+  const removed = input.backup.operation === 'restore' ? input.backup.removed : []
   const report = createBaseReport({
     context: input.context,
     ok: true,
     exitCode: 0,
     root: input.root,
     written,
+    removed,
   })
   report.backup = input.backup
   report.backupScope = 'managed-files'
@@ -172,6 +175,7 @@ function createBaseReport(input: {
   exitCode: 0 | 1
   root: string
   written?: string[]
+  removed?: string[]
   skipped?: string[]
   pending?: PendingItem[]
   suggestedCommands?: SuggestedCommand[]
@@ -188,6 +192,7 @@ function createBaseReport(input: {
     root: input.root,
     logPath: input.context.logPath,
     written: input.written ?? [],
+    removed: input.removed ?? [],
     skipped: input.skipped ?? [],
     pending: input.pending ?? [],
     suggestedCommands: uniqueSuggestedCommands(input.suggestedCommands ?? []),

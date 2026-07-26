@@ -287,6 +287,7 @@ async function executeBackupCommand(root: string, options: CliOptions): Promise<
         operation: 'restore',
         backupId,
         restored: restoreResult.restored,
+        removed: restoreResult.removed,
         preRestoreBackupId: restoreResult.backupId,
       }
     },
@@ -310,7 +311,8 @@ function printBackupResult(result: BackupJsonResult): void {
     return
   }
   if (result.operation === 'restore') {
-    console.log(`Restored managed files: ${result.restored.join(', ') || '(none)'}`)
+    console.log(`Restored managed paths: ${result.restored.join(', ') || '(none)'}`)
+    console.log(`Removed managed paths: ${result.removed.join(', ') || '(none)'}`)
     console.log(`Pre-restore managed-files backup: ${result.preRestoreBackupId}`)
     return
   }

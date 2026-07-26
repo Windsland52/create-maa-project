@@ -99,8 +99,10 @@ describe('operation backups', () => {
     )
 
     expect(restoreResult.restored).toEqual([
-      'created.txt',
       'existing.txt',
+    ])
+    expect(restoreResult.removed).toEqual([
+      'created.txt',
     ])
     expect(await readFile(join(root, 'existing.txt'), 'utf8')).toBe('before')
     await expect(readFile(join(root, 'created.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -127,7 +129,8 @@ describe('operation backups', () => {
 
     const restoreResult = await restoreBackup(root, backupId)
 
-    expect(restoreResult.restored).toEqual([
+    expect(restoreResult.restored).toEqual([])
+    expect(restoreResult.removed).toEqual([
       'generated/nested/managed.txt',
     ])
     await expect(readFile(join(root, 'generated/nested/managed.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -427,6 +430,7 @@ describe('operation backups', () => {
     const result = await restoreBackup(root, 'legacy-manifest-project')
 
     expect(result.restored).toEqual(expect.arrayContaining(['manifest.json', 'README.md']))
+    expect(result.removed).toEqual([])
     expect(await readFile(join(root, 'manifest.json'), 'utf8')).toBe('{"project":true}\n')
     expect(await readFile(join(root, 'README.md'), 'utf8')).toBe('# Legacy\n')
   })

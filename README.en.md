@@ -210,13 +210,19 @@ Local state lives under `.create-maa-project/` and is ignored by generated proje
 ├── backups/
 ├── cache/
 ├── logs/
-└── run.lock
+└── run-locks/
 ```
 
 Safety rules:
 
-- Writes to configuration and generated files use a project run lock.
-- Files are backed up before overwrites.
+- Writes to configuration and generated files use an owner-identified project run lock;
+  use `--clear-stale-lock` to clear a lock left by an interrupted process.
+- Managed files are registered in one operation backup before they are overwritten or
+  created. Failed operations roll back automatically, and successful operations report a
+  backup id that can be restored later.
+- `--list-backups` and `--show-backup <id>` inspect backups. `--restore <id> --dry-run`
+  lists restore/remove actions without changing files.
+- `.git` is protected repository state and is excluded from managed-file backups.
 - `--force` skips prompts but still keeps backups.
 - `--yes` is not the same as `--force`.
 - Non-empty non-Git targets require explicit `--force --allow-non-git-dir`.
@@ -287,6 +293,9 @@ Diagnostics and maintenance:
 ```bash
 create-maa-project --doctor
 create-maa-project --doctor --report
+create-maa-project --list-backups
+create-maa-project --show-backup <backup-id>
+create-maa-project --restore <backup-id> --dry-run
 create-maa-project --restore <backup-id>
 create-maa-project --clean-cache
 ```
@@ -365,20 +374,39 @@ Windows artifacts are `.zip`; Linux and macOS artifacts are `.tar.gz`.
 
 ## JSON Report Mode
 
-Pass `--report` to make `create`, `sync`, `update`, and `doctor` emit a single
-machine-readable JSON document on stdout. In report mode, `--report` forces
-non-interactive execution. Progress, `Log:`, and human `Error:` text are not written to
-stdout; wrappers may ignore stderr unless they want diagnostics.
+Pass `--report` to make `create`, `sync`, `update`, `doctor`, and backup inspection/restore
+commands emit a single machine-readable JSON document on stdout. In report mode,
+`--report` forces non-interactive execution. Progress, `Log:`, and human `Error:` text are
+not written to stdout; wrappers may ignore stderr unless they want diagnostics.
 
 Exit code `0` means the command completed successfully. Exit code `1` means the command
 failed, or `doctor` found project problems. The JSON `exitCode` field matches the process
 exit code.
 
 ```ts
+type BackupInspection = {
+    id: string;
+    format: "managed-files" | "legacy";
+    createdAt: string;
+    command: string | null;
+    status: "in-progress" | "complete" | "rolled-back" | "rollback-failed" | "legacy";
+    entries: Array<{path: string; action: "restore" | "remove"}>;
+};
+
+type BackupSummary = {
+    id: string;
+    format: "managed-files" | "legacy" | "invalid";
+    createdAt: string;
+    command: string | null;
+    status: BackupInspection["status"] | "invalid";
+    entryCount: number;
+    error?: string;
+};
+
 type CliJsonReport = {
     schemaVersion: 1;
     tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "doctor";
+    command: "create" | "sync" | "update" | "doctor" | "backup";
     ok: boolean;
     timestamp: string;
     durationMs: number;
@@ -387,11 +415,24 @@ type CliJsonReport = {
     root: string;
     logPath: string | null;
     written: string[];
+    removed: string[];
     skipped: string[];
     pending: Array<{kind: string; reason: string; command: string}>;
     suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
+    backupId?: string;
+    backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
     doctor?: {lines: string[]};
+    backup?:
+        | {operation: "list"; backups: BackupSummary[]}
+        | {operation: "show" | "restore-preview"; backup: BackupInspection}
+        | {
+              operation: "restore";
+              backupId: string;
+              restored: string[];
+              removed: string[];
+              preRestoreBackupId: string;
+          };
     error?: {message: string; code?: string};
 };
 ```
@@ -411,6 +452,7 @@ Example failure report:
     "root": "/path/to/project",
     "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
     "written": [],
+    "removed": [],
     "skipped": [],
     "pending": [],
     "suggestedCommands": [],

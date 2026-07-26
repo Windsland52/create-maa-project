@@ -19,6 +19,7 @@ type JsonReport = {
   root: string
   logPath: string | null
   written: string[]
+  removed: string[]
   skipped: string[]
   pending: Array<{ kind: string; reason: string; command: string }>
   suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
@@ -29,6 +30,7 @@ type JsonReport = {
     backups?: Array<{ id: string; entryCount: number; error?: string }>
     backup?: { id: string; entries: Array<{ path: string; action: string }> }
     restored?: string[]
+    removed?: string[]
     preRestoreBackupId?: string
   }
   doctor?: { lines: string[] }
@@ -142,6 +144,26 @@ describe('CLI JSON reports', () => {
       expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe(readmeBefore)
       expect((await readdir(backupRoot)).sort()).toEqual(backupIdsBefore)
 
+      const synced = await runCli(['--sync', 'version', '--version', '0.2.0', '--report'], projectRoot)
+      const syncReport = parseStdoutReport(synced.stdout, synced.stderr)
+      const modifiedBackupId = syncReport.backupId as string
+      const restoredModified = await runCli(['--restore', modifiedBackupId, '--report'], projectRoot)
+      const restoredModifiedReport = parseStdoutReport(restoredModified.stdout, restoredModified.stderr)
+      expect(restoredModifiedReport).toMatchObject({
+        written: expect.arrayContaining([
+          'maa-project.json',
+        ]),
+        removed: [],
+        backup: {
+          operation: 'restore',
+          backupId: modifiedBackupId,
+          restored: expect.arrayContaining([
+            'maa-project.json',
+          ]),
+          removed: [],
+        },
+      })
+
       const restored = await runCli(['--restore', backupId, '--report'], projectRoot)
       const restoreReport = parseStdoutReport(restored.stdout, restored.stderr)
       expect(restored.exitCode).toBe(0)
@@ -153,10 +175,15 @@ describe('CLI JSON reports', () => {
         backup: {
           operation: 'restore',
           backupId,
-          restored: expect.arrayContaining(['README.md']),
+          restored: [],
+          removed: expect.arrayContaining([
+            'README.md',
+          ]),
           preRestoreBackupId: expect.any(String),
         },
       })
+      expect(restoreReport.written).toEqual([])
+      expect(restoreReport.removed).toEqual(expect.arrayContaining(['README.md']))
       expect(restoreReport.backupId).not.toBe(backupId)
       await expect(readFile(join(projectRoot, 'README.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     },

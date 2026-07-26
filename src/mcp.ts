@@ -326,6 +326,7 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
         operation: 'restore',
         backupId,
         restored: restoreResult.restored,
+        removed: restoreResult.removed,
         preRestoreBackupId: restoreResult.backupId,
       },
     })
@@ -406,6 +407,7 @@ function createBaseReport(context: ReportContext, root: string, affectedPaths: s
     root,
     logPath: context.logPath,
     written: affectedPaths,
+    removed: [],
     skipped: [],
     pending: [],
     suggestedCommands: [],

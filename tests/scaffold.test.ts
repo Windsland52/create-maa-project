@@ -3115,6 +3115,7 @@ jobs:
     expect(restoreResult.restored).toEqual([
       'README.md',
     ])
+    expect(restoreResult.removed).toEqual([])
     expect(restoreResult.backupId).toBeTruthy()
     expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe('# Restored\n')
   })

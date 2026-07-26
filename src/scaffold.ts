@@ -801,9 +801,20 @@ async function maybeInitializeGit(
     }
   }
 
-  await gitRunner(root, [
-    'init',
-  ])
+  try {
+    await gitRunner(root, [
+      'init',
+    ])
+  } catch (error) {
+    const initialized = await exists(join(root, '.git'))
+    return {
+      initialized,
+      committed: false,
+      reason: initialized
+        ? `git init reported a failure after creating the repository: ${errorMessage(error)}. Run git status and create the initial commit manually.`
+        : `git init failed: ${errorMessage(error)}. Project files were created successfully; run git init and create the initial commit manually.`,
+    }
+  }
   if (pending.length > 0 && !options.allowPendingCommit) {
     return {
       initialized: true,
@@ -812,15 +823,31 @@ async function maybeInitializeGit(
     }
   }
 
-  await gitRunner(root, [
-    'add',
-    '.',
-  ])
-  await gitRunner(root, [
-    'commit',
-    '-m',
-    'chore: scaffold MaaFW project',
-  ])
+  try {
+    await gitRunner(root, [
+      'add',
+      '.',
+    ])
+  } catch (error) {
+    return {
+      initialized: true,
+      committed: false,
+      reason: `git add . failed: ${errorMessage(error)}. Run git status, then git add . and git commit manually.`,
+    }
+  }
+  try {
+    await gitRunner(root, [
+      'commit',
+      '-m',
+      'chore: scaffold MaaFW project',
+    ])
+  } catch (error) {
+    return {
+      initialized: true,
+      committed: false,
+      reason: `git commit failed: ${errorMessage(error)}. Files remain staged; configure Git user.name and user.email if needed, then run git commit manually.`,
+    }
+  }
   return {
     initialized: true,
     committed: true,

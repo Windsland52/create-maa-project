@@ -11,6 +11,7 @@ import {
   addAgent,
   addCommunity,
   addDependabot,
+  addDevTools,
   addGitCliff,
   addGithub,
   addResourcePack,
@@ -951,6 +952,33 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       '--update',
       'runtime:mfa',
     ])
+  })
+
+  it('refreshes enabled managed add-on templates without overwriting project-owned files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-addon-refresh' }))
+    const projectRoot = join(root, 'maa-addon-refresh')
+    const packagePath = join(projectRoot, 'package.json')
+    const packageJson = (await readJson(packagePath)) as Record<string, unknown>
+    packageJson.userMetadata = { preserved: true }
+    await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
+    await writeFile(join(projectRoot, 'tools/check-project.mjs'), '// stale dev tool\n', 'utf8')
+    await writeFile(join(projectRoot, '.github/workflows/release.yml'), 'name: stale release\n', 'utf8')
+    process.chdir(projectRoot)
+
+    const devToolsResult = await addDevTools(defaultOptions({ add: ['dev-tools'] }))
+    const githubResult = await addGithub(defaultOptions({ add: ['github'] }))
+
+    expect(devToolsResult.written).toContain('tools/check-project.mjs')
+    expect(githubResult.written).toContain('.github/workflows/release.yml')
+    expect(devToolsResult.backupId).toBeTruthy()
+    expect(githubResult.backupId).toBeTruthy()
+    expect(await readFile(join(projectRoot, 'tools/check-project.mjs'), 'utf8')).toContain('Node 24')
+    expect(await readFile(join(projectRoot, '.github/workflows/release.yml'), 'utf8')).toContain(
+      '3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  rcedit.exe',
+    )
+    expect(await readJson(packagePath)).toMatchObject({ userMetadata: { preserved: true } })
   })
 
   it('supports git-cliff, community, and dependabot during project creation', async () => {

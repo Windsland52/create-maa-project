@@ -240,13 +240,8 @@ export function addDevTools(options: CliOptions, root = process.cwd()): Promise<
 async function addDevToolsLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (hasDevTools(config)) {
-    return {
-      root,
-      config,
-      written: [],
-      skipped: [],
-      pending: [],
-    }
+    const managedFiles = devToolFiles(templateInputFromConfig(config)).filter((file) => file.managed)
+    return writeAddonFiles(root, config, managedFiles, options)
   }
 
   config.features.vscode = { enabled: true }
@@ -278,13 +273,7 @@ async function addGithubLocked(options: CliOptions, root: string): Promise<Scaff
     throw new Error('--add github requires --add dev-tools first.')
   }
   if (hasGithubAutomation(config)) {
-    return {
-      root,
-      config,
-      written: [],
-      skipped: [],
-      pending: [],
-    }
+    return writeAddonFiles(root, config, githubFiles(templateInputFromConfig(config)), options)
   }
 
   config.features.ci = { enabled: true }

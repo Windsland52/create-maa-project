@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
-import { stat } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -83,17 +83,24 @@ const CREATE_PROJECT_ARGUMENTS = [
 const SYNC_ARGUMENTS = [
   'target',
   'value',
+  'projectPath',
 ] as const
 const UPDATE_ARGUMENTS = [
   'targets',
+  'projectPath',
 ] as const
 const ADD_ARGUMENTS = [
   'addon',
   'resourcePackSlug',
   'label',
+  'projectPath',
 ] as const
 const RESTORE_ARGUMENTS = [
   'backupId',
+  'projectPath',
+] as const
+const PROJECT_PATH_ARGUMENTS = [
+  'projectPath',
 ] as const
 
 type ToolName = 'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'restore' | 'clean_cache'
@@ -166,7 +173,9 @@ const MCP_TOOLS: Tool[] = [
   {
     name: 'doctor',
     description: 'Check project health',
-    inputSchema: objectSchema(),
+    inputSchema: objectSchema({
+      projectPath: projectPathSchema(),
+    }),
   },
   {
     name: 'sync',
@@ -175,6 +184,7 @@ const MCP_TOOLS: Tool[] = [
       {
         target: enumSchema(SYNC_TARGETS, 'Metadata target to sync.'),
         value: stringSchema('New value for targets that require one.'),
+        projectPath: projectPathSchema(),
       },
       [
         'target',
@@ -187,6 +197,7 @@ const MCP_TOOLS: Tool[] = [
     inputSchema: objectSchema(
       {
         targets: arraySchema(enumSchema(UPDATE_TARGETS, 'Update target.'), 'Update targets.'),
+        projectPath: projectPathSchema(),
       },
       [
         'targets',
@@ -204,6 +215,7 @@ const MCP_TOOLS: Tool[] = [
           'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon is "resource-pack".',
         ),
         label: stringSchema('Optional resource pack display label. If omitted, it is derived from resourcePackSlug.'),
+        projectPath: projectPathSchema(),
       },
       [
         'addon',
@@ -216,6 +228,7 @@ const MCP_TOOLS: Tool[] = [
     inputSchema: objectSchema(
       {
         backupId: stringSchema('Managed-files backup id under .create-maa-project/backups; excludes .git state.'),
+        projectPath: projectPathSchema(),
       },
       [
         'backupId',
@@ -225,7 +238,9 @@ const MCP_TOOLS: Tool[] = [
   {
     name: 'clean_cache',
     description: 'Clean local cache',
-    inputSchema: objectSchema(),
+    inputSchema: objectSchema({
+      projectPath: projectPathSchema(),
+    }),
   },
 ]
 
@@ -272,17 +287,17 @@ async function callCreateProject(context: McpServerContext, input: unknown): Pro
 }
 
 async function callDoctor(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  let root: string
   try {
-    argsRecord(input, [], 'doctor')
+    const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'doctor')
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'doctor', error)
   }
   return withReport(
-    context,
+    { root },
     'doctor',
     async (reportContext) => {
-      const root = context.root
-      if (!(await stat(root)).isDirectory()) throw new Error(`MCP project root is not a directory: ${root}`)
       const doctor = await runDoctor(root)
       return createDoctorJsonReport({
         context: reportContext,
@@ -296,26 +311,32 @@ async function callDoctor(context: McpServerContext, input: unknown): Promise<Ca
 
 async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
+  let root: string
   try {
-    options = syncOptions(argsRecord(input, SYNC_ARGUMENTS, 'sync'))
+    const args = argsRecord(input, SYNC_ARGUMENTS, 'sync')
+    options = syncOptions(args)
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'sync', error)
   }
-  return withReport(context, 'sync', async (reportContext) =>
-    createScaffoldJsonReport(reportContext, await syncProject(options, { root: context.root })),
+  return withReport({ root }, 'sync', async (reportContext) =>
+    createScaffoldJsonReport(reportContext, await syncProject(options, { root })),
   )
 }
 
 async function callUpdate(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
+  let root: string
   try {
-    options = updateOptions(argsRecord(input, UPDATE_ARGUMENTS, 'update'))
+    const args = argsRecord(input, UPDATE_ARGUMENTS, 'update')
+    options = updateOptions(args)
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
-  return withReport(context, 'update', async (reportContext) => {
+  return withReport({ root }, 'update', async (reportContext) => {
     const result = await recordUpdateRequests(options, {
-      root: context.root,
+      root,
       commandRunner: runMcpChildCommand,
       productManifestResolver: (request) => resolveProductAssetManifest(request),
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
@@ -326,18 +347,21 @@ async function callUpdate(context: McpServerContext, input: unknown): Promise<Ca
 
 async function callAdd(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
+  let root: string
   try {
-    options = addOptions(argsRecord(input, ADD_ARGUMENTS, 'add'))
+    const args = argsRecord(input, ADD_ARGUMENTS, 'add')
+    options = addOptions(args)
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
-  return withReport(context, 'update', async (reportContext) => {
+  return withReport({ root }, 'update', async (reportContext) => {
     const result = await applyIncrementalAddons(
       options,
       (line) => {
         process.stderr.write(`${line}\n`)
       },
-      context.root,
+      root,
     )
     if (!result) {
       throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
@@ -348,13 +372,15 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
 
 async function callRestore(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let backupId: string
+  let root: string
   try {
-    backupId = requiredString(argsRecord(input, RESTORE_ARGUMENTS, 'restore'), 'backupId')
+    const args = argsRecord(input, RESTORE_ARGUMENTS, 'restore')
+    backupId = requiredString(args, 'backupId')
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'backup', error)
   }
-  return withReport(context, 'backup', async (reportContext) => {
-    const root = context.root
+  return withReport({ root }, 'backup', async (reportContext) => {
     const restoreResult = await restoreBackup(root, backupId)
     return createBackupJsonReport({
       context: reportContext,
@@ -371,13 +397,14 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
 }
 
 async function callCleanCache(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  let root: string
   try {
-    argsRecord(input, [], 'clean_cache')
+    const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'clean_cache')
+    root = await resolveMcpProjectRoot(context.root, args)
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
-  return withReport(context, 'update', async (reportContext) => {
-    const root = context.root
+  return withReport({ root }, 'update', async (reportContext) => {
     return createBaseReport(reportContext, root, [
       await cleanCache(root),
     ])
@@ -602,6 +629,35 @@ function argsRecord(input: unknown, allowed: readonly string[], tool: ToolName):
   return args
 }
 
+async function resolveMcpProjectRoot(serverRoot: string, args: JsonObject): Promise<string> {
+  const projectPath = optionalString(args, 'projectPath') ?? '.'
+  const segments = projectPath.split('/')
+  if (
+    projectPath.trim() !== projectPath ||
+    projectPath === '' ||
+    projectPath.includes('\\') ||
+    isAbsolute(projectPath) ||
+    /^[A-Za-z]:/.test(projectPath) ||
+    (projectPath !== '.' && segments.some((segment) => segment === '' || segment === '.' || segment === '..'))
+  ) {
+    throw new Error('projectPath must be "." or a forward-slash relative path inside the MCP server root.')
+  }
+
+  const canonicalServerRoot = await realpath(serverRoot)
+  const candidate = await realpath(resolve(canonicalServerRoot, projectPath))
+  const relativePath = relative(canonicalServerRoot, candidate)
+  if (
+    relativePath !== '' &&
+    (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith(`..${sep}`))
+  ) {
+    throw new Error('projectPath must resolve inside the MCP server root.')
+  }
+  if (!(await stat(candidate)).isDirectory()) {
+    throw new Error(`projectPath must resolve to a directory: ${projectPath}`)
+  }
+  return candidate
+}
+
 function requiredString(args: JsonObject, key: string): string {
   const value = optionalString(args, key)
   if (value === undefined || value.trim().length === 0) {
@@ -755,6 +811,10 @@ function stringSchema(description: string): object {
     type: 'string',
     description,
   }
+}
+
+function projectPathSchema(): object {
+  return stringSchema('Optional project directory relative to the MCP server root. Defaults to ".".')
 }
 
 function booleanSchema(description: string): object {

@@ -156,6 +156,9 @@ and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
 
 If the agent adds a resource pack, it must pass a `resourcePackSlug` such as `extra` or
 `cn`; otherwise the MCP tool will reject the call.
+After creating a child project, the agent can pass a relative `projectPath` to `doctor`,
+`sync`, `update`, `add`, `restore`, and `clean_cache`. The path must resolve to a real
+directory under the MCP server root; absolute paths, `..`, and escaping symlinks are rejected.
 
 ## Project Model
 

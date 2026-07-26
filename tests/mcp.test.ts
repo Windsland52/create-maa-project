@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -160,6 +160,19 @@ describe('MCP server', () => {
         type: 'string',
         description: expect.stringContaining('Required when addon is "resource-pack"'),
       })
+      for (const name of [
+        'doctor',
+        'sync',
+        'update',
+        'add',
+        'restore',
+        'clean_cache',
+      ]) {
+        expect(toolByName(tools, name).inputSchema.properties?.projectPath, name).toMatchObject({
+          type: 'string',
+          description: expect.stringContaining('relative to the MCP server root'),
+        })
+      }
     },
     MCP_TEST_TIMEOUT_MS,
   )
@@ -257,6 +270,92 @@ describe('MCP server', () => {
       expect(report.root).toBe(firstRoot)
       expect(firstConfig.project.displayName).toBe('First MCP Project')
       expect(secondConfig.project.displayName).toBe('maa-mcp-second')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'maintains a newly created child project through projectPath in the same session',
+    async () => {
+      const serverRoot = await tempRoot()
+      const session = await startSession(serverRoot)
+      await initialize(session)
+      const projectPath = 'projects/maa-child'
+      const projectRoot = join(serverRoot, 'projects', 'maa-child')
+
+      const created = parseToolReport(
+        await session.request('tools/call', {
+          name: 'create_project',
+          arguments: {
+            name: projectPath,
+            skipDownload: true,
+            git: false,
+          },
+        }),
+      )
+      const synchronized = parseToolReport(
+        await session.request('tools/call', {
+          name: 'sync',
+          arguments: {
+            projectPath,
+            target: 'display-name',
+            value: 'Maintained Child',
+          },
+        }),
+      )
+      const added = parseToolReport(
+        await session.request('tools/call', {
+          name: 'add',
+          arguments: {
+            projectPath,
+            addon: 'community',
+          },
+        }),
+      )
+      const diagnosed = parseToolReport(
+        await session.request('tools/call', {
+          name: 'doctor',
+          arguments: { projectPath },
+        }),
+      )
+
+      expect(created.result.isError).toBeFalsy()
+      expect(created.report.root).toBe(projectRoot)
+      expect(synchronized.result.isError).toBeFalsy()
+      expect(synchronized.report.root).toBe(projectRoot)
+      expect(added.result.isError).toBeFalsy()
+      expect(added.report.root).toBe(projectRoot)
+      expect(diagnosed.result.isError).toBeFalsy()
+      expect(diagnosed.report.root).toBe(projectRoot)
+      expect(diagnosed.report.doctor?.lines.join('\n')).toContain('[OK] Project: Maintained Child')
+      await expect(readFile(join(projectRoot, 'CONTRIBUTING.md'), 'utf8')).resolves.toContain('Maintained Child')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'confines projectPath to real directories under the MCP server root',
+    async () => {
+      const serverRoot = await tempRoot()
+      const outsideRoot = await tempRoot()
+      await symlink(outsideRoot, join(serverRoot, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+      const session = await startSession(serverRoot)
+      await initialize(session)
+
+      for (const projectPath of [
+        '../outside',
+        outsideRoot,
+        'escape',
+      ]) {
+        const { result, report } = parseToolReport(
+          await session.request('tools/call', {
+            name: 'doctor',
+            arguments: { projectPath },
+          }),
+        )
+        expect(result.isError, projectPath).toBe(true)
+        expect(report.error?.message, projectPath).toContain('MCP server root')
+      }
     },
     MCP_TEST_TIMEOUT_MS,
   )

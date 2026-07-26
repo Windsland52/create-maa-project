@@ -110,6 +110,21 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
     recordSkippedCheck(checks, 'vscode-settings', 'Node tooling is disabled in project configuration.')
     recordSkippedCheck(checks, 'node-lockfile', 'Node tooling is disabled in project configuration.')
   }
+  if (config.python) {
+    detailStart = lines.length
+    const pythonToolingOk = await checkPythonTooling(root, config, lines)
+    recordDoctorCheck(
+      checks,
+      'python-tooling',
+      pythonToolingOk,
+      pythonToolingOk ? 'Python Agent tooling files are valid.' : 'Python Agent tooling files need repair.',
+      lines,
+      detailStart,
+    )
+    ok = pythonToolingOk && ok
+  } else {
+    recordSkippedCheck(checks, 'python-tooling', 'Python Agent tooling is not enabled in project configuration.')
+  }
   detailStart = lines.length
   const resourcesOk = await checkResourcePaths(root, config, lines)
   recordDoctorCheck(
@@ -290,6 +305,57 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
   }
 
   if (ok) lines.push('[OK] Node tooling files pin Node 24.')
+  return ok
+}
+
+async function checkPythonTooling(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
+  const python = config.python
+  if (!python) return true
+  let ok = true
+  let repairAgent = false
+  let repairDependencies = false
+  for (const path of [
+    '.python-version',
+    'pyproject.toml',
+    'agent/bootstrap.py',
+    'agent/main.py',
+    'agent/agent_runtime.py',
+  ]) {
+    if (await exists(join(root, path))) continue
+    lines.push(`[ERR] Required Python Agent file is missing: ${path}`)
+    ok = false
+    repairAgent = true
+  }
+  for (const path of [
+    'requirements.in',
+    'requirements.txt',
+    'uv.lock',
+  ]) {
+    if (await exists(join(root, path))) continue
+    lines.push(`[ERR] Required Python dependency file is missing: ${path}`)
+    ok = false
+    repairDependencies = true
+  }
+
+  const pythonVersionPath = join(root, '.python-version')
+  if ((await exists(pythonVersionPath)) && (await readText(pythonVersionPath)).trim() !== python.recommendedPython) {
+    lines.push(`[ERR] .python-version must match python.recommendedPython (${python.recommendedPython}).`)
+    ok = false
+    repairAgent = true
+  }
+  const pyprojectPath = join(root, 'pyproject.toml')
+  if (await exists(pyprojectPath)) {
+    const requiresPython = /^requires-python\s*=\s*["']([^"']+)["']/m.exec(await readText(pyprojectPath))?.[1]
+    if (requiresPython !== python.requiresPython) {
+      lines.push(`[ERR] pyproject.toml requires-python must match python.requiresPython (${python.requiresPython}).`)
+      ok = false
+      repairAgent = true
+    }
+  }
+
+  if (repairAgent) lines.push('      To fix generated Agent files: create-maa-project --add agent')
+  if (repairDependencies) lines.push('      To fix dependency files: create-maa-project --update python-deps')
+  if (ok) lines.push('[OK] Python Agent files and dependency state are present.')
   return ok
 }
 

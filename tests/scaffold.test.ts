@@ -2236,6 +2236,37 @@ jobs:
     expect(output).toContain('To fix: pnpm install')
   })
 
+  it('doctor reports Python Agent source, version, and dependency drift', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-python-doctor', template: 'agent', skipDownload: true }))
+    const projectRoot = join(root, 'maa-python-doctor')
+    await clearPending(projectRoot)
+    await rm(join(projectRoot, 'agent/main.py'))
+    await rm(join(projectRoot, 'requirements.txt'))
+    await writeFile(join(projectRoot, '.python-version'), '3.12\n', 'utf8')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    await writeFile(
+      pyprojectPath,
+      (await readFile(pyprojectPath, 'utf8')).replace('requires-python = ">=3.13,<3.14"', 'requires-python = ">=3.12"'),
+      'utf8',
+    )
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(report.ok).toBe(false)
+    expect(report.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'python-tooling', status: 'fail' })]),
+    )
+    expect(output).toContain('Required Python Agent file is missing: agent/main.py')
+    expect(output).toContain('Required Python dependency file is missing: requirements.txt')
+    expect(output).toContain('.python-version must match python.recommendedPython (3.13)')
+    expect(output).toContain('pyproject.toml requires-python must match python.requiresPython (>=3.13,<3.14)')
+    expect(output).toContain('create-maa-project --add agent')
+    expect(output).toContain('create-maa-project --update python-deps')
+  })
+
   it('updates schema files explicitly without creating project lock state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

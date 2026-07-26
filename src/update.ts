@@ -459,11 +459,6 @@ async function updatePythonRuntime(
   const manifest = await options.manifestResolver({ ...options.request, platform })
   if (!manifest) return undefined
   const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
-  await trackProjectPathForBackup(root, runtimeRoot)
-  await rm(join(root, runtimeRoot), {
-    recursive: true,
-    force: true,
-  })
   const assets = await downloadProjectManifestAssets(
     manifest,
     options.downloader
@@ -481,6 +476,11 @@ async function updatePythonRuntime(
   if (reserved) {
     throw new Error(`Project asset path is reserved for installation state: ${reserved.path}`)
   }
+  await trackProjectPathForBackup(root, runtimeRoot)
+  await rm(join(root, runtimeRoot), {
+    recursive: true,
+    force: true,
+  })
   for (const asset of assets) await trackProjectPathForBackup(root, asset.path)
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
@@ -511,11 +511,6 @@ async function updateWindowsEmbeddedPythonRuntime(
   },
 ): Promise<{ written: string[] }> {
   const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
-  await trackProjectPathForBackup(root, runtimeRoot)
-  await rm(join(root, runtimeRoot), {
-    recursive: true,
-    force: true,
-  })
   const arch = platform.endsWith('-arm64') ? 'arm64' : 'amd64'
   const filename = `python-${PYTHON_EMBED_VERSION}-embed-${arch}.zip`
   const url = `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/${filename}`
@@ -534,6 +529,11 @@ async function updateWindowsEmbeddedPythonRuntime(
       },
     }),
   )
+  await trackProjectPathForBackup(root, runtimeRoot)
+  await rm(join(root, runtimeRoot), {
+    recursive: true,
+    force: true,
+  })
   const written = await writeDownloadedProjectAssets(root, assets)
   const python = await ensureEmbeddedPythonExecutable(root, platform)
   await options.commandRunner(root, 'uv', [
@@ -591,23 +591,28 @@ async function updateLinuxPythonRuntime(
   commandRunner: UpdateCommandRunner,
 ): Promise<{ written: string[] }> {
   const depsPath = `.create-maa-project/runtime/python-deps/${platform}`
-  await trackProjectPathForBackup(root, depsPath)
-  await rm(join(root, depsPath), {
-    recursive: true,
-    force: true,
-  })
-  await mkdir(join(root, depsPath), { recursive: true })
-  await commandRunner(root, 'python3', [
-    '-m',
-    'pip',
-    'download',
-    '--requirement',
-    'requirements.txt',
-    '--dest',
-    depsPath,
-    '--only-binary=:all:',
-    ...linuxWheelPlatformArgs(platform),
-  ])
+  const stagingRoot = await mkdtemp(join(tmpdir(), `create-maa-project-python-runtime-${randomUUID()}-`))
+  try {
+    await commandRunner(root, 'python3', [
+      '-m',
+      'pip',
+      'download',
+      '--requirement',
+      'requirements.txt',
+      '--dest',
+      stagingRoot,
+      '--only-binary=:all:',
+      ...linuxWheelPlatformArgs(platform),
+    ])
+    await trackProjectPathForBackup(root, depsPath)
+    await rm(join(root, depsPath), {
+      recursive: true,
+      force: true,
+    })
+    await cp(stagingRoot, join(root, depsPath), { recursive: true, force: true })
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true })
+  }
   return {
     written: await listRelativeFiles(root, depsPath),
   }

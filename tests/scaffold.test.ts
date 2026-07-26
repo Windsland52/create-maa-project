@@ -2850,6 +2850,9 @@ jobs:
     ])
     const commands: Array<{ root: string; command: string; args: string[] }> = []
     const progress: string[] = []
+    const existingRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python/osx-arm64')
+    await mkdir(existingRuntimeRoot, { recursive: true })
+    await writeFile(join(existingRuntimeRoot, 'old-runtime.txt'), 'old-runtime', 'utf8')
 
     await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'osx-arm64' }, async () => {
       const result = await recordUpdateRequests(
@@ -2884,7 +2887,10 @@ jobs:
               ],
             }
           },
-          assetDownloader: async () => archive,
+          assetDownloader: async () => {
+            expect(await readFile(join(existingRuntimeRoot, 'old-runtime.txt'), 'utf8')).toBe('old-runtime')
+            return archive
+          },
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
           },
@@ -3026,6 +3032,9 @@ jobs:
 
     const commands: Array<{ root: string; command: string; args: string[] }> = []
     const progress: string[] = []
+    const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps/linux-arm64')
+    await mkdir(depsRoot, { recursive: true })
+    await writeFile(join(depsRoot, 'old.whl'), 'old-wheel', 'utf8')
 
     await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'linux-arm64' }, async () => {
       const result = await recordUpdateRequests(
@@ -3043,14 +3052,10 @@ jobs:
           },
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
-            await mkdir(join(cwd, '.create-maa-project/runtime/python-deps/linux-arm64'), {
-              recursive: true,
-            })
-            await writeFile(
-              join(cwd, '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl'),
-              'wheel',
-              'utf8',
-            )
+            expect(await readFile(join(depsRoot, 'old.whl'), 'utf8')).toBe('old-wheel')
+            const destination = args[args.indexOf('--dest') + 1]
+            if (!destination) throw new Error('pip download destination is missing')
+            await writeFile(join(destination, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
           },
           onProgress: (message) => progress.push(message),
         },
@@ -3063,6 +3068,7 @@ jobs:
         ]),
       )
       expect(await pathExists(join(projectRoot, '.create-maa-project/runtime/python/linux-arm64'))).toBe(false)
+      expect(await pathExists(join(depsRoot, 'old.whl'))).toBe(false)
     })
 
     expect(commands).toEqual([
@@ -3076,7 +3082,7 @@ jobs:
           '--requirement',
           'requirements.txt',
           '--dest',
-          '.create-maa-project/runtime/python-deps/linux-arm64',
+          expect.stringContaining('create-maa-project-python-runtime-'),
           '--only-binary=:all:',
           '--platform',
           'manylinux_2_28_aarch64',

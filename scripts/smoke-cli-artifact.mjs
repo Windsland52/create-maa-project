@@ -18,17 +18,17 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
 const expectedVersion = String(packageJson.version);
 const executable = command.includes("/") || command.includes("\\") ? resolve(command) : command;
-const result = await execFileAsync(
-    executable,
-    [
-        ...commandArgs,
-        "--cli-version",
-    ],
-    {
-        encoding: "utf8",
-        windowsHide: true,
-    },
-);
+const artifactArgs = [
+    ...commandArgs,
+    "--cli-version",
+];
+const invocation = windowsCommandInvocation(executable, artifactArgs);
+const result = await execFileAsync(invocation.command, invocation.args, {
+    encoding: "utf8",
+    env: invocation.env,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+    windowsHide: true,
+});
 
 if (result.stderr) process.stderr.write(result.stderr);
 process.stdout.write(result.stdout);
@@ -41,3 +41,31 @@ if (actualVersion !== expectedVersion) {
 }
 
 console.log(`Verified CLI artifact version ${actualVersion}.`);
+
+function windowsCommandInvocation(executable, args) {
+    if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(executable)) {
+        return {command: executable, args, env: process.env, windowsVerbatimArguments: false};
+    }
+
+    const env = {
+        ...process.env,
+        CREATE_MAA_PROJECT_SMOKE_COMMAND: executable,
+    };
+    const placeholders = args.map((value, index) => {
+        const name = `CREATE_MAA_PROJECT_SMOKE_ARG_${index}`;
+        env[name] = value;
+        return `"%${name}%"`;
+    });
+    return {
+        command: process.env.ComSpec ?? "cmd.exe",
+        args: [
+            "/d",
+            "/s",
+            "/v:off",
+            "/c",
+            `call "%CREATE_MAA_PROJECT_SMOKE_COMMAND%" ${placeholders.join(" ")}`,
+        ],
+        env,
+        windowsVerbatimArguments: true,
+    };
+}

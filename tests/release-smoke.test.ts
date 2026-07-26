@@ -39,4 +39,16 @@ describe('release artifact smoke verifier', () => {
       ),
     })
   })
+
+  it.skipIf(process.platform !== 'win32')('runs Windows command shims through the system shell', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-release-smoke-'))
+    tempRoots.push(root)
+    const commandShim = join(root, 'create-maa-project.cmd')
+    await writeFile(commandShim, `@echo off\r\n"${process.execPath}" "${cliEntry}" %*\r\n`, 'utf8')
+
+    const result = await execFileAsync(process.execPath, [smokeScript, commandShim])
+
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toContain(`Verified CLI artifact version ${packageJson.version}.`)
+  })
 })

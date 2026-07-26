@@ -132,6 +132,14 @@ describe('MCP server', () => {
       expect(toolByName(tools, 'update').inputSchema.required).toEqual([
         'targets',
       ])
+      expect(toolByName(tools, 'update').inputSchema.properties?.targets).toMatchObject({
+        items: {
+          enum: expect.arrayContaining([
+            'runtime:mfa',
+            'runtime:mxu',
+          ]),
+        },
+      })
       expect(toolByName(tools, 'add').inputSchema.properties?.addon).toMatchObject({
         enum: expect.arrayContaining([
           'dev-tools',
@@ -428,6 +436,35 @@ describe('MCP server', () => {
       })
       expect(report.error?.message).toContain('targets must contain at least one item')
       expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'accepts the shared runtime:mxu update target',
+    async () => {
+      const root = await createValidProject('maa-mcp-mxu')
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'update',
+        arguments: {
+          targets: [
+            'runtime:mxu',
+          ],
+        },
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({
+        command: 'update',
+        ok: true,
+        skipped: [
+          'runtime:mxu (disabled in config)',
+        ],
+      })
     },
     MCP_TEST_TIMEOUT_MS,
   )

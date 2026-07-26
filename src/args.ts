@@ -1,6 +1,7 @@
 import type { CliOptions, ControllerKind, LicenseKind, NetworkMode, TemplateName } from './types.js'
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { parseCliLanguage } from './lang.js'
+import { UPDATE_TARGETS } from './update-targets.js'
 
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
@@ -275,8 +276,7 @@ Maintenance modes:
   --sync <target> [value]           Sync metadata into generated files.
     Targets: config, metadata, display-name, version, license, github-url, network
   --update <target>                 Update schemas, assets, or dependencies.
-    Targets: schema, maafw, runtime:mfa, runtime:mxu, ocr-models, node-deps,
-             python-deps, python-runtime
+    Targets: ${UPDATE_TARGETS.join(', ')}
   --doctor                          Diagnose the current project.
   --list-backups                    List managed-files backups newest first.
   --show-backup <backup-id>         Show paths and actions in one backup.

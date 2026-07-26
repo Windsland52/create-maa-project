@@ -34,6 +34,7 @@ import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, Scaff
 import { copyFileAtomic, exists, readText, sha256, writeFileAtomic } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
+import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
 
 const SYNC_REQUIREMENTS_IN_SCRIPT = `from pathlib import Path
 import tomllib
@@ -45,7 +46,7 @@ content = "# Generated from [project].dependencies in pyproject.toml.\\n" + "\\n
 Path("requirements.in").write_text(content, encoding="utf-8")
 `
 
-const UPDATE_PENDING: Record<string, PendingItem> = {
+const UPDATE_PENDING: Record<UpdateTarget, PendingItem> = {
   schema: {
     kind: 'schema',
     reason: 'Schema baseline update is pending because schema downloads are not implemented locally yet.',
@@ -309,11 +310,11 @@ export async function recordUpdateRequests(
   )
 }
 
-function validateUpdateTarget(target: string): string {
+function validateUpdateTarget(target: string): UpdateTarget {
   if (target === 'all') {
     throw new Error('--update all is not supported. Update one target at a time.')
   }
-  if (!UPDATE_PENDING[target]) {
+  if (!isUpdateTarget(target)) {
     throw new Error(`Unsupported update target: ${target}`)
   }
   return target
@@ -332,15 +333,11 @@ function embeddedPythonExecutable(platform: string): string {
     : `.create-maa-project/runtime/python/${platform}/bin/python3`
 }
 
-function toPendingUpdate(target: string): PendingItem {
-  const pending = UPDATE_PENDING[target]
-  if (!pending) {
-    throw new Error(`Unsupported update target: ${target}`)
-  }
-  return pending
+function toPendingUpdate(target: UpdateTarget): PendingItem {
+  return UPDATE_PENDING[target]
 }
 
-function remoteAssetPending(target: string): PendingItem {
+function remoteAssetPending(target: UpdateTarget): PendingItem {
   const pending = toPendingUpdate(target)
   return {
     ...pending,

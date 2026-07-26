@@ -30,6 +30,7 @@ import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { CliOptions, ControllerKind } from './types.js'
 import { recordUpdateRequests } from './update.js'
+import { UPDATE_TARGETS } from './update-targets.js'
 
 const TEMPLATE_NAMES = [
   'pipeline',
@@ -52,15 +53,6 @@ const SYNC_TARGETS = [
   'license',
   'github-url',
   'network',
-] as const
-const UPDATE_TARGETS = [
-  'schema',
-  'maafw',
-  'runtime:mfa',
-  'ocr-models',
-  'node-deps',
-  'python-deps',
-  'python-runtime',
 ] as const
 const ADDONS = [
   'dev-tools',

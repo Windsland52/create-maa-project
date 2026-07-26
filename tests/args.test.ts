@@ -310,6 +310,7 @@ describe('formatCliHelp', () => {
     expect(help).toContain('--add <addon>')
     expect(help).toContain('--sync <target> [value]')
     expect(help).toContain('--update <target>')
+    expect(help).toContain('runtime:mfa, runtime:mxu')
     expect(help).toContain('--doctor')
     expect(help).toContain('--list-backups')
     expect(help).toContain('--show-backup <backup-id>')

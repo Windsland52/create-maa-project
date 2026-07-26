@@ -285,6 +285,7 @@ Updates:
 create-maa-project --update schema
 create-maa-project --update maafw
 create-maa-project --update runtime:mfa
+create-maa-project --update runtime:mxu
 create-maa-project --update ocr-models
 create-maa-project --update node-deps
 create-maa-project --update python-deps

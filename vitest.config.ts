@@ -10,9 +10,17 @@ export default defineConfig({
       'tests/**/*.test.ts',
     ],
     coverage: {
+      include: ['src/**/*.ts'],
+      exclude: ['src/index.ts', 'src/templates.generated.ts', 'src/types.ts'],
       reporter: [
         'text',
       ],
+      thresholds: {
+        statements: 82,
+        branches: 78,
+        functions: 85,
+        lines: 82,
+      },
     },
   },
 })

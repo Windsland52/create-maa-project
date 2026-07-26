@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseArgs, validateCommandModes } from '../src/args.js'
+import { formatCliHelp, parseArgs, validateCommandModes } from '../src/args.js'
 
 describe('parseArgs', () => {
   it('parses create options', () => {
@@ -92,6 +92,14 @@ describe('parseArgs', () => {
     ])
 
     expect(options.mcp).toBe(true)
+  })
+
+  it('parses help and CLI version aliases without changing project --version', () => {
+    expect(parseArgs(['--help']).help).toBe(true)
+    expect(parseArgs(['-h']).help).toBe(true)
+    expect(parseArgs(['--cli-version']).cliVersion).toBe(true)
+    expect(parseArgs(['-V']).cliVersion).toBe(true)
+    expect(parseArgs(['--version', '1.2.3']).version).toBe('1.2.3')
   })
 
   it('parses interactive prompt language', () => {
@@ -209,6 +217,20 @@ describe('validateCommandModes', () => {
       ],
       modes: 'create, --doctor',
     },
+    {
+      argv: [
+        '--help',
+        '--doctor',
+      ],
+      modes: '--help, --doctor',
+    },
+    {
+      argv: [
+        '--cli-version',
+        '--mcp',
+      ],
+      modes: '--cli-version, --mcp',
+    },
   ])('rejects conflicting command modes: $modes', ({ argv, modes }) => {
     expect(() => validateCommandModes(parseArgs(argv))).toThrow(
       `Command modes are mutually exclusive; choose only one: ${modes}`,
@@ -248,5 +270,24 @@ describe('validateCommandModes', () => {
     },
   ])('accepts a single command mode: $argv', ({ argv }) => {
     expect(() => validateCommandModes(parseArgs(argv))).not.toThrow()
+  })
+})
+
+describe('formatCliHelp', () => {
+  it('documents creation, maintenance, version, and representative examples', () => {
+    const help = formatCliHelp('1.2.3')
+
+    expect(help).toContain('create-maa-project 1.2.3')
+    expect(help).toContain('create-maa-project [project] [creation options]')
+    expect(help).toContain('--add <addon>')
+    expect(help).toContain('--sync <target> [value]')
+    expect(help).toContain('--update <target>')
+    expect(help).toContain('--doctor')
+    expect(help).toContain('--restore <backup-id>')
+    expect(help).toContain('--clean-cache')
+    expect(help).toContain('--mcp')
+    expect(help).toContain('-V, --cli-version')
+    expect(help).toContain('--version <semver>')
+    expect(help).toContain('Examples:')
   })
 })

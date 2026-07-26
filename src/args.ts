@@ -4,6 +4,8 @@ import { parseCliLanguage } from './lang.js'
 
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
+    help: false,
+    cliVersion: false,
     template: 'pipeline',
     add: [],
     update: [],
@@ -30,6 +32,14 @@ export function parseArgs(argv: string[]): CliOptions {
     const arg = argv[index]
     if (!arg) continue
     switch (arg) {
+      case '--help':
+      case '-h':
+        options.help = true
+        break
+      case '--cli-version':
+      case '-V':
+        options.cliVersion = true
+        break
       case '--template':
         options.template = readValue(argv, ++index, arg) as TemplateName
         options.explicitTemplate = true
@@ -196,6 +206,8 @@ export function validateCommandModes(options: CliOptions): void {
   const modes: string[] = []
 
   if (options.name !== undefined) modes.push('create')
+  if (options.help) modes.push('--help')
+  if (options.cliVersion) modes.push('--cli-version')
   if (options.doctor) modes.push('--doctor')
   if (options.sync !== undefined) modes.push('--sync')
   if (options.update.length > 0) modes.push('--update')
@@ -207,6 +219,70 @@ export function validateCommandModes(options: CliOptions): void {
   if (modes.length > 1) {
     throw new Error(`Command modes are mutually exclusive; choose only one: ${modes.join(', ')}`)
   }
+}
+
+export function formatCliHelp(version: string): string {
+  return `create-maa-project ${version}
+Create and maintain MaaFW application projects.
+
+Usage:
+  create-maa-project [project] [creation options]
+  create-maa-project --add <addon> [add-on options]
+  create-maa-project --sync <target> [value]
+  create-maa-project --update <target>
+  create-maa-project --doctor [--report]
+  create-maa-project --restore <backup-id>
+  create-maa-project --clean-cache
+  create-maa-project --mcp
+
+Creation options:
+  --template <pipeline|agent>       Select the initial template.
+  --slug <project-id>               Set the ASCII project identifier.
+  --name <display-name>             Set the human-readable project name.
+  --controller <kind[,kind...]>     Select MaaFW controllers.
+  --license <AGPL-3.0-or-later|MIT|None>
+                                    Set the project license.
+  --network <auto|official>         Select the asset network mode.
+  --add <addon>                     Include an add-on during creation.
+  --git | --no-git                  Enable or disable Git initialization.
+  --force                           Permit creation in an existing target.
+  --allow-non-git-dir               Permit a forced non-Git target directory.
+  --allow-pending-commit            Permit an initial commit with pending work.
+  --skip-download                   Defer dependency and asset downloads.
+  --no-interactive                  Disable interactive creation prompts.
+
+Maintenance modes:
+  --add <addon>                     Add a capability to the current project.
+    Add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format,
+             optimize-images, community, dependabot, schema-sync
+  --label <name>                    Label a resource-pack add-on.
+  --sync <target> [value]           Sync metadata into generated files.
+    Targets: metadata, display-name, version, license, github-url, network
+  --update <target>                 Update schemas, assets, or dependencies.
+    Targets: schema, maafw, runtime:mfa, runtime:mxu, ocr-models, node-deps,
+             python-deps, python-runtime
+  --doctor                          Diagnose the current project.
+  --restore <backup-id>             Restore a project backup.
+  --clean-cache                     Remove the local download cache.
+  --mcp                             Start the MCP server over stdio.
+
+Common options:
+  --report                          Emit JSON for create, sync, update, or doctor.
+  --clear-stale-lock                Clear a stale project write lock.
+  --lang <auto|en|zh-CN>            Select the prompt language.
+  --log-file <path>                 Write logs to a specific file.
+  -h, --help                        Show this help and exit.
+  -V, --cli-version                 Print the CLI version and exit.
+
+Project version:
+  --version <semver>                Set the project version; this is not the CLI version.
+
+Examples:
+  create-maa-project my-project --template agent --license MIT
+  create-maa-project --add resource-pack extra --label "Extra Resource"
+  create-maa-project --sync version --version 0.2.0
+  create-maa-project --update ocr-models
+  create-maa-project --doctor --report`
 }
 
 function parseControllerOption(value: string): ControllerKind[] {

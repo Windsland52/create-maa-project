@@ -77,6 +77,8 @@ export type PendingItem = {
 }
 
 export type CliOptions = {
+  help?: boolean
+  cliVersion?: boolean
   name?: string
   slug?: string
   template: TemplateName

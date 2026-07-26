@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { parseArgs, validateCommandModes } from './args.js'
+import packageJson from '../package.json' with { type: 'json' }
+import { formatCliHelp, parseArgs, validateCommandModes } from './args.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger, type Logger } from './log.js'
@@ -43,6 +44,14 @@ async function main(): Promise<void> {
   try {
     const options = parseArgs(argv)
     validateCommandModes(options)
+    if (options.help) {
+      console.log(formatCliHelp(packageJson.version))
+      return
+    }
+    if (options.cliVersion) {
+      console.log(packageJson.version)
+      return
+    }
     if (options.mcp) {
       const { startMcpServer } = await import('./mcp.js')
       await startMcpServer()

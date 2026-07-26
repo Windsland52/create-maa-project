@@ -99,6 +99,7 @@ export function defaultAgentDevCommand(): string[] {
 }
 
 export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[] {
+  const generatedLicense = licenseText(input)
   const files: ManagedFileInput[] = [
     managed('.editorconfig', template('base/.editorconfig')),
     once('.gitignore', template('base/gitignore.tmpl')),
@@ -115,7 +116,11 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
     once('resource/base/model/ocr/README.md', ''),
     once('README.md', generatedReadme(input)),
     once('README.en.md', generatedEnglishReadme(input)),
-    once('LICENSE', licenseText(input)),
+    ...(generatedLicense === undefined
+      ? []
+      : [
+          once('LICENSE', generatedLicense),
+        ]),
     once(
       'maatools.config.mts',
       maatoolsConfig(resourcePaths(input.resources ?? defaultResources()), input.includeAgent),
@@ -664,8 +669,8 @@ function generatedPullRequestTemplate(): string {
   return template('addons/community/PULL_REQUEST_TEMPLATE.md')
 }
 
-function licenseText(input: Pick<ProjectTemplateInput, 'license' | 'displayName'>): string {
-  if (input.license === 'None') return ''
+export function licenseText(input: Pick<ProjectTemplateInput, 'license' | 'displayName'>): string | undefined {
+  if (input.license === 'None') return undefined
   if (input.license === 'MIT') {
     return template('base/licenses/MIT.txt', {
       year: String(new Date().getFullYear()),

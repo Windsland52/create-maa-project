@@ -19,7 +19,7 @@ import {
 } from '../src/scaffold.js'
 import { syncProject } from '../src/sync.js'
 import { recordUpdateRequests } from '../src/update.js'
-import { cleanCache, readProjectConfig, restoreBackup } from '../src/project.js'
+import { cleanCache, readProjectConfig, restoreBackup, writeGeneratedFiles } from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
@@ -187,6 +187,21 @@ describe('scaffold', () => {
     expect(license).not.toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
     expect(await readJson(join(root, 'maa-mit-test', 'package.json'))).toMatchObject({
       license: 'MIT',
+    })
+  })
+
+  it('does not create a misleading empty license file when no license is selected', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    await createProject(defaultOptions({ name: 'maa-unlicensed-create', license: 'None' }))
+
+    expect(await pathExists(join(root, 'maa-unlicensed-create', 'LICENSE'))).toBe(false)
+    expect(await readJson(join(root, 'maa-unlicensed-create', 'maa-project.json'))).toMatchObject({
+      license: { spdx: 'None' },
+    })
+    expect(await readJson(join(root, 'maa-unlicensed-create', 'package.json'))).toMatchObject({
+      license: 'UNLICENSED',
     })
   })
 
@@ -1252,7 +1267,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     )
   })
 
-  it('syncs license metadata to project state and package json', async () => {
+  it('syncs MIT license metadata and legal text as one operation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-license-test' }))
@@ -1267,6 +1282,78 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(await readJson(join(root, 'maa-license-test', 'package.json'))).toMatchObject({
       license: 'MIT',
     })
+    const license = await readFile(join(root, 'maa-license-test', 'LICENSE'), 'utf8')
+    expect(license).toContain('MIT License')
+    expect(license).toContain(`Copyright (c) ${new Date().getFullYear()} maa-license-test contributors`)
+    expect(license).not.toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
+    expect(result.written).toEqual(expect.arrayContaining(['maa-project.json', 'package.json', 'LICENSE']))
+  })
+
+  it('syncs AGPL license metadata and legal text as one operation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-agpl-license-sync', license: 'MIT' }))
+    process.chdir(join(root, 'maa-agpl-license-sync'))
+
+    const result = await syncProject(defaultOptions({ sync: 'license', license: 'AGPL-3.0-or-later' }))
+
+    expect(result.config.license.spdx).toBe('AGPL-3.0-or-later')
+    expect(await readJson(join(root, 'maa-agpl-license-sync', 'maa-project.json'))).toMatchObject({
+      license: { spdx: 'AGPL-3.0-or-later' },
+    })
+    expect(await readJson(join(root, 'maa-agpl-license-sync', 'package.json'))).toMatchObject({
+      license: 'AGPL-3.0-or-later',
+    })
+    const license = await readFile(join(root, 'maa-agpl-license-sync', 'LICENSE'), 'utf8')
+    expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE')
+    expect(license).toContain('Version 3, 19 November 2007')
+    expect(license).not.toContain('MIT License')
+    expect(result.written).toEqual(expect.arrayContaining(['maa-project.json', 'package.json', 'LICENSE']))
+  })
+
+  it('removes stale legal text when syncing to no license', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-unlicensed-sync' }))
+    const projectRoot = join(root, 'maa-unlicensed-sync')
+    process.chdir(projectRoot)
+
+    const result = await syncProject(defaultOptions({ sync: 'license', license: 'None' }))
+
+    expect(result.config.license.spdx).toBe('None')
+    expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
+      license: { spdx: 'None' },
+    })
+    expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
+      license: 'UNLICENSED',
+    })
+    expect(await pathExists(join(projectRoot, 'LICENSE'))).toBe(false)
+    expect(result.written).toEqual(expect.arrayContaining(['maa-project.json', 'package.json', 'LICENSE']))
+  })
+
+  it('restores every legal-status file when license sync fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-license-rollback' }))
+    const projectRoot = join(root, 'maa-license-rollback')
+    process.chdir(projectRoot)
+    const paths = ['maa-project.json', 'package.json', 'LICENSE']
+    const before = new Map(
+      await Promise.all(paths.map(async (path) => [path, await readFile(join(projectRoot, path))] as const)),
+    )
+
+    await expect(
+      syncProject(defaultOptions({ sync: 'license', license: 'MIT' }), {
+        writeFiles: async (...args) => {
+          await writeGeneratedFiles(...args)
+          throw new Error('simulated license transaction failure')
+        },
+      }),
+    ).rejects.toThrow('simulated license transaction failure')
+
+    for (const path of paths) {
+      expect(await readFile(join(projectRoot, path))).toEqual(before.get(path))
+    }
   })
 
   it('syncs github url to project state and interface metadata', async () => {

@@ -1,3 +1,4 @@
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   CONFIG_FILE,
@@ -6,13 +7,23 @@ import {
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
-import { interfaceAgent, interfaceController, interfaceResourceItems, maatoolsConfigFile } from './templates.js'
+import {
+  interfaceAgent,
+  interfaceController,
+  interfaceResourceItems,
+  licenseText,
+  maatoolsConfigFile,
+} from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV } from './utils.js'
 
-export async function syncProject(options: CliOptions): Promise<ScaffoldResult> {
+type SyncEnvironment = {
+  writeFiles?: typeof writeGeneratedFiles
+}
+
+export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
   const root = process.cwd()
   const config = await readProjectConfig(root)
   const sync = options.sync
@@ -25,6 +36,7 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     ? (JSON.parse(await readText(packagePath)) as Record<string, unknown>)
     : undefined
   const files: ManagedFileInput[] = []
+  const removeAfterWrite: string[] = []
 
   switch (sync) {
     case 'metadata':
@@ -90,17 +102,32 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     files.splice(2, 0, { path: 'package.json', content: stableJson(packageJson), managed: false })
   }
   if (pyproject) files.push(pyproject)
+  if (sync === 'license') {
+    const generatedLicense = licenseText({
+      license: config.license.spdx,
+      displayName: config.project.displayName,
+    })
+    files.push({
+      path: 'LICENSE',
+      content: generatedLicense ?? '',
+      managed: false,
+    })
+    if (generatedLicense === undefined) removeAfterWrite.push('LICENSE')
+  }
 
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
     async () => {
-      const result = await writeGeneratedFiles(root, files, {
-        force: true,
-        backup: true,
-        overwriteUnmanaged: true,
-      })
-      await writeProjectState(root, config)
+      const result =
+        sync === 'license'
+          ? await applySyncFileTransaction(root, files, removeAfterWrite, environment.writeFiles ?? writeGeneratedFiles)
+          : await writeGeneratedFiles(root, files, {
+              force: true,
+              backup: true,
+              overwriteUnmanaged: true,
+            })
+      if (sync !== 'license') await writeProjectState(root, config)
       return {
         root,
         config,
@@ -111,6 +138,65 @@ export async function syncProject(options: CliOptions): Promise<ScaffoldResult> 
     },
     { clearStale: options.clearStaleLock },
   )
+}
+
+type FileSnapshot = {
+  path: string
+  content: Buffer | undefined
+}
+
+async function applySyncFileTransaction(
+  root: string,
+  files: ManagedFileInput[],
+  removeAfterWrite: string[],
+  writeFiles: typeof writeGeneratedFiles,
+): Promise<{ written: string[]; skipped: string[] }> {
+  const paths = [
+    ...new Set([
+      ...files.map((file) => file.path),
+      ...removeAfterWrite,
+    ]),
+  ]
+  const snapshots = await Promise.all(
+    paths.map(async (path): Promise<FileSnapshot> => {
+      const fullPath = join(root, path)
+      return {
+        path,
+        content: (await exists(fullPath)) ? await readFile(fullPath) : undefined,
+      }
+    }),
+  )
+
+  try {
+    const result = await writeFiles(root, files, {
+      force: true,
+      backup: true,
+      overwriteUnmanaged: true,
+    })
+    for (const path of removeAfterWrite) {
+      await rm(join(root, path), { force: true })
+    }
+    return result
+  } catch (error) {
+    try {
+      await Promise.all(
+        snapshots.map(async (snapshot) => {
+          const fullPath = join(root, snapshot.path)
+          if (snapshot.content === undefined) {
+            await rm(fullPath, { force: true, recursive: true })
+          } else {
+            await writeFile(fullPath, snapshot.content)
+          }
+        }),
+      )
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        'Sync failed and the original project files could not be restored.',
+      )
+    }
+    throw error
+  }
 }
 
 function assertSemver(version: string): void {

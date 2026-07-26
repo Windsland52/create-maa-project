@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -13,7 +14,7 @@ import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from '
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
-import { cleanCache, readProjectConfig, restoreBackup } from './project.js'
+import { cleanCache, restoreBackup } from './project.js'
 import { promptForCreateOptions } from './prompt.js'
 import {
   createBackupJsonReport,
@@ -213,16 +214,21 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
     case 'create_project':
       return callCreateProject(context, input)
     case 'doctor':
-      return withReport(context, 'doctor', async (reportContext) => {
-        const root = context.root
-        await readProjectConfig(root)
-        const doctor = await runDoctor(root)
-        return createDoctorJsonReport({
-          context: reportContext,
-          root,
-          doctor,
-        })
-      })
+      return withReport(
+        context,
+        'doctor',
+        async (reportContext) => {
+          const root = context.root
+          if (!(await stat(root)).isDirectory()) throw new Error(`MCP project root is not a directory: ${root}`)
+          const doctor = await runDoctor(root)
+          return createDoctorJsonReport({
+            context: reportContext,
+            root,
+            doctor,
+          })
+        },
+        { reportFailureIsError: false },
+      )
     case 'sync':
       return callSync(context, input)
     case 'update':
@@ -347,11 +353,13 @@ async function withReport(
   serverContext: McpServerContext,
   command: CliReportCommand,
   action: (context: ReportContext) => Promise<CliJsonReport>,
+  options: { reportFailureIsError?: boolean } = {},
 ): Promise<CallToolResult> {
   const startTimeMs = Date.now()
   const context = createMcpReportContext(command, startTimeMs)
   try {
-    return reportToolResult(await action(context))
+    const report = await action(context)
+    return reportToolResult(report, options.reportFailureIsError === false ? false : !report.ok)
   } catch (error) {
     return reportToolResult(
       createErrorJsonReport({
@@ -359,6 +367,7 @@ async function withReport(
         root: serverContext.root,
         error,
       }),
+      true,
     )
   }
 }
@@ -383,7 +392,7 @@ function errorToolResult(context: McpServerContext, command: CliReportCommand, e
   )
 }
 
-function reportToolResult(report: CliJsonReport): CallToolResult {
+function reportToolResult(report: CliJsonReport, isError = !report.ok): CallToolResult {
   return {
     content: [
       {
@@ -391,7 +400,7 @@ function reportToolResult(report: CliJsonReport): CallToolResult {
         text: JSON.stringify(report),
       },
     ],
-    isError: !report.ok,
+    isError,
   }
 }
 

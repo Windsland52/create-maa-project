@@ -299,7 +299,7 @@ describe('MCP server', () => {
   )
 
   it(
-    'returns an error report for doctor outside a project and keeps serving requests',
+    'returns doctor findings outside a project without treating them as MCP execution errors',
     async () => {
       const session = await startSession(await tempRoot())
       await initialize(session)
@@ -310,19 +310,42 @@ describe('MCP server', () => {
       })
       const { result, report } = parseToolReport(response)
 
-      expect(result.isError).toBe(true)
+      expect(result.isError).toBe(false)
       expect(report).toMatchObject({
         command: 'doctor',
         ok: false,
         exitCode: 1,
       })
-      expect(report.error?.message).toContain('No maa-project.json found')
+      expect(report.error).toBeUndefined()
+      expect(report.doctor?.lines.join('\n')).toContain('No maa-project.json found')
       expect(session.exitCode()).toBeNull()
 
       const listAfterError = await session.request('tools/list')
       expect(listAfterError.error).toBeUndefined()
       expect((listAfterError.result as ToolListResult).tools.length).toBeGreaterThan(0)
       expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'preserves malformed config details in MCP doctor diagnostics',
+    async () => {
+      const root = await createValidProject('maa-mcp-invalid-config')
+      await writeFile(join(root, 'maa-project.json'), '{ invalid', 'utf8')
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'doctor',
+        arguments: {},
+      })
+      const { result, report } = parseToolReport(response)
+
+      expect(result.isError).toBe(false)
+      expect(report).toMatchObject({ command: 'doctor', ok: false, exitCode: 1 })
+      expect(report.error).toBeUndefined()
+      expect(report.doctor?.lines.join('\n')).toContain('[ERR] maa-project.json could not be read:')
     },
     MCP_TEST_TIMEOUT_MS,
   )

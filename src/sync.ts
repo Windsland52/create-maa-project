@@ -23,7 +23,7 @@ import type {
   ScaffoldResult,
 } from './types.js'
 import { projectControllerKinds } from './controllers.js'
-import { hasDevTools } from './features.js'
+import { enabledResourcePacks, hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 
@@ -108,7 +108,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
 
   files.push(
     maatoolsConfigFile(
-      config.resources.map((pack) => `./${pack.path}`),
+      enabledResourcePacks(config).map((pack) => `./${pack.path}`),
       config.python !== undefined,
     ),
   )
@@ -289,7 +289,7 @@ function applyInterfaceMetadata(
   interfaceJson.version = addV(config.project.version)
   interfaceJson.icon = 'logo.ico'
   interfaceJson.controller = interfaceController(projectControllerKinds(config))
-  interfaceJson.resource = interfaceResourceItems(config.resources)
+  interfaceJson.resource = interfaceResourceItems(enabledResourcePacks(config))
   if (config.project.github) {
     interfaceJson.github = config.project.github
   } else {

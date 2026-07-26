@@ -53,7 +53,7 @@ import {
   type DownloadProgressReporter,
 } from './assets.js'
 import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
-import { hasDevTools, hasGithubAutomation } from './features.js'
+import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { updateOcrModels } from './update.js'
 
 const execFileAsync = promisify(execFile)
@@ -278,13 +278,13 @@ export async function addGithub(options: CliOptions, root = process.cwd()): Prom
     ...(isRecord(packageJson.scripts) ? packageJson.scripts : {}),
     'release:dry-run': 'node tools/build-release.mjs --dry-run',
     'sync:runtime': 'node tools/sync-runtime.mjs',
-    ...(config.addons.optimizeImages ? { 'optimize:images': 'node tools/optimize-images.mjs' } : {}),
+    ...(isAddonEnabled(config, 'optimizeImages') ? { 'optimize:images': 'node tools/optimize-images.mjs' } : {}),
   }
   const files = [
     ...githubFiles(templateInputFromConfig(config)),
-    ...(config.addons.gitCliff ? gitCliffFiles() : []),
-    ...(config.addons.autoFormat ? autoFormatFiles() : []),
-    ...(config.addons.optimizeImages ? optimizeImagesFiles() : []),
+    ...(isAddonEnabled(config, 'gitCliff') ? gitCliffFiles() : []),
+    ...(isAddonEnabled(config, 'autoFormat') ? autoFormatFiles() : []),
+    ...(isAddonEnabled(config, 'optimizeImages') ? optimizeImagesFiles() : []),
     {
       path: 'package.json',
       content: stableJson(packageJson),
@@ -370,7 +370,7 @@ export async function addAgent(_options: CliOptions, root = process.cwd()): Prom
       managed: false,
     },
     maatoolsConfigFile(
-      config.resources.map((pack) => `./${pack.path}`),
+      enabledResourcePacks(config).map((pack) => `./${pack.path}`),
       true,
     ),
     configFile(config),
@@ -383,11 +383,11 @@ export async function addAgent(_options: CliOptions, root = process.cwd()): Prom
       releaseWorkflowFile({
         slug: config.project.slug,
         displayName: config.project.displayName,
-        includeGitCliff: Boolean(config.addons.gitCliff),
+        includeGitCliff: isAddonEnabled(config, 'gitCliff'),
       }),
     )
   }
-  if (Boolean(config.addons.dependabot)) files.push(dependabotFile(true))
+  if (isAddonEnabled(config, 'dependabot')) files.push(dependabotFile(true))
   return withProjectWriteLock(
     root,
     process.argv.join(' '),
@@ -427,8 +427,9 @@ export async function addResourcePack(options: CliOptions, root = process.cwd())
     enabled: true,
   })
   const interfaceJson = await readInterfaceJson(root)
-  interfaceJson.resource = interfaceResourceItems(config.resources)
-  const resourcePaths = config.resources.map((pack) => `./${pack.path}`)
+  const resources = enabledResourcePacks(config)
+  interfaceJson.resource = interfaceResourceItems(resources)
+  const resourcePaths = resources.map((pack) => `./${pack.path}`)
   const files: ManagedFileInput[] = [
     {
       path: 'interface.json',
@@ -744,12 +745,12 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
     includeDevTools: hasDevTools(config),
     includeGithub: hasGithubAutomation(config),
     includeAgent: config.python !== undefined,
-    includeGitCliff: Boolean(config.addons.gitCliff),
-    includeAutoFormat: Boolean(config.addons.autoFormat),
-    includeOptimizeImages: Boolean(config.addons.optimizeImages),
-    includeSchemaSync: Boolean(config.addons.schemaSync),
+    includeGitCliff: isAddonEnabled(config, 'gitCliff'),
+    includeAutoFormat: isAddonEnabled(config, 'autoFormat'),
+    includeOptimizeImages: isAddonEnabled(config, 'optimizeImages'),
+    includeSchemaSync: isAddonEnabled(config, 'schemaSync'),
     pythonDevCommand: config.python?.devCommand,
-    resources: config.resources,
+    resources: enabledResourcePacks(config),
   }
 }
 

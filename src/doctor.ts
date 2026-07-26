@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { readProjectConfig } from './project.js'
 import type { MaaProjectConfig } from './types.js'
-import { hasDevTools, hasGithubAutomation } from './features.js'
+import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { exists, readText } from './utils.js'
 
 export type DoctorReport = {
@@ -139,8 +139,8 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
         '.github/workflows/release.yml',
       ]
     : []
-  if (config.addons.schemaSync) workflows.push('.github/workflows/schema-sync.yml')
-  if (config.addons.optimizeImages) workflows.push('.github/workflows/optimize-images.yml')
+  if (isAddonEnabled(config, 'schemaSync')) workflows.push('.github/workflows/schema-sync.yml')
+  if (isAddonEnabled(config, 'optimizeImages')) workflows.push('.github/workflows/optimize-images.yml')
   for (const workflow of workflows) {
     const workflowPath = join(root, workflow)
     if (!(await exists(workflowPath))) {
@@ -216,7 +216,7 @@ async function checkVscodeSettings(root: string, lines: string[]): Promise<boole
 }
 
 async function checkResourcePaths(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
-  for (const pack of config.resources) {
+  for (const pack of enabledResourcePacks(config)) {
     if (pack.path.includes('\\')) {
       lines.push(`[ERR] Resource pack path uses backslashes: ${pack.path}`)
       lines.push('      To fix: use forward slashes in maa-project.json')

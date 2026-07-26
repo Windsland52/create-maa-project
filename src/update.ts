@@ -33,7 +33,7 @@ import { baseProjectFiles } from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
 import { copyFileAtomic, exists, readText, sha256, writeFileAtomic } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
-import { hasDevTools, hasGithubAutomation } from './features.js'
+import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 
 const SYNC_REQUIREMENTS_IN_SCRIPT = `from pathlib import Path
 import tomllib
@@ -193,6 +193,10 @@ export async function recordUpdateRequests(
           continue
         }
         if (target === 'runtime:mfa') {
+          if (!config.runtime.mfa.enabled) {
+            skipped.push('runtime:mfa (disabled in config)')
+            continue
+          }
           environment.onProgress?.('Resolving MFAAvalonia runtime assets...')
           const result = await updateProjectAssets(
             root,
@@ -876,12 +880,12 @@ function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     includeDevTools: hasDevTools(config),
     includeGithub: hasGithubAutomation(config),
     includeAgent: config.python !== undefined,
-    includeGitCliff: Boolean(config.addons.gitCliff),
-    includeAutoFormat: Boolean(config.addons.autoFormat),
-    includeOptimizeImages: Boolean(config.addons.optimizeImages),
-    includeSchemaSync: Boolean(config.addons.schemaSync),
+    includeGitCliff: isAddonEnabled(config, 'gitCliff'),
+    includeAutoFormat: isAddonEnabled(config, 'autoFormat'),
+    includeOptimizeImages: isAddonEnabled(config, 'optimizeImages'),
+    includeSchemaSync: isAddonEnabled(config, 'schemaSync'),
     pythonDevCommand: config.python?.devCommand,
-    resources: config.resources,
+    resources: enabledResourcePacks(config),
   }).filter((file) => file.path.startsWith('tools/schema/'))
 }
 

@@ -225,7 +225,19 @@ function createOcrUpdateOptions(environment: {
   return options
 }
 
-export async function addDevTools(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+function withAddonProjectLock(
+  options: CliOptions,
+  root: string,
+  action: () => Promise<ScaffoldResult>,
+): Promise<ScaffoldResult> {
+  return withProjectLock(root, process.argv.join(' '), action, { clearStale: options.clearStaleLock })
+}
+
+export function addDevTools(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addDevToolsLocked(options, root))
+}
+
+async function addDevToolsLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (hasDevTools(config)) {
     return {
@@ -256,7 +268,11 @@ export async function addDevTools(options: CliOptions, root = process.cwd()): Pr
   })
 }
 
-export async function addGithub(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addGithub(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addGithubLocked(options, root))
+}
+
+async function addGithubLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (!hasDevTools(config)) {
     throw new Error('--add github requires --add dev-tools first.')
@@ -300,7 +316,11 @@ export async function addGithub(options: CliOptions, root = process.cwd()): Prom
   })
 }
 
-export async function addAgent(_options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addAgent(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addAgentLocked(options, root))
+}
+
+async function addAgentLocked(_options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (config.python) {
     return {
@@ -414,7 +434,11 @@ export async function addAgent(_options: CliOptions, root = process.cwd()): Prom
   )
 }
 
-export async function addResourcePack(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addResourcePack(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addResourcePackLocked(options, root))
+}
+
+async function addResourcePackLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   const slug = normalizeSlug(options.resourcePackSlug ?? options.name ?? '')
   assertValidSlug(slug)
@@ -476,7 +500,11 @@ export async function addResourcePack(options: CliOptions, root = process.cwd())
   )
 }
 
-export async function addGitCliff(_options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addGitCliff(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addGitCliffLocked(options, root))
+}
+
+async function addGitCliffLocked(_options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.gitCliff = { enabled: true }
   const files: ManagedFileInput[] = [
@@ -489,7 +517,11 @@ export async function addGitCliff(_options: CliOptions, root = process.cwd()): P
   return writeAddonFiles(root, config, files, _options)
 }
 
-export async function addAutoFormat(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addAutoFormat(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addAutoFormatLocked(options, root))
+}
+
+async function addAutoFormatLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.autoFormat = { enabled: true }
   return writeAddonFiles(
@@ -503,7 +535,11 @@ export async function addAutoFormat(options: CliOptions, root = process.cwd()): 
   )
 }
 
-export async function addOptimizeImages(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addOptimizeImages(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addOptimizeImagesLocked(options, root))
+}
+
+async function addOptimizeImagesLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.optimizeImages = { enabled: true }
 
@@ -530,7 +566,11 @@ export async function addOptimizeImages(options: CliOptions, root = process.cwd(
   )
 }
 
-export async function addDependabot(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addDependabot(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addDependabotLocked(options, root))
+}
+
+async function addDependabotLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.dependabot = { enabled: true }
   return writeAddonFiles(
@@ -544,7 +584,11 @@ export async function addDependabot(options: CliOptions, root = process.cwd()): 
   )
 }
 
-export async function addCommunity(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addCommunity(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addCommunityLocked(options, root))
+}
+
+async function addCommunityLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.community = { enabled: true }
   return writeAddonFiles(
@@ -560,7 +604,11 @@ export async function addCommunity(options: CliOptions, root = process.cwd()): P
   )
 }
 
-export async function addSchemaSync(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+export function addSchemaSync(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addSchemaSyncLocked(options, root))
+}
+
+async function addSchemaSyncLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   config.addons.schemaSync = { enabled: true }
 

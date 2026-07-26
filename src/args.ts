@@ -249,6 +249,15 @@ export function validateCommandModes(options: CliOptions): void {
   validateOptionApplicability(options, modes[0] ?? 'create')
 }
 
+export function applyCliEnvironment(
+  options: Pick<CliOptions, 'noColor'>,
+  environment: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!options.noColor) return
+  environment.NO_COLOR = '1'
+  environment.FORCE_COLOR = '0'
+}
+
 function validateOptionApplicability(options: CliOptions, mode: CommandMode): void {
   const creationOptions: Array<readonly [option: string, provided: boolean]> = [
     ['--template', options.explicitTemplate],
@@ -296,15 +305,32 @@ function validateOptionApplicability(options: CliOptions, mode: CommandMode): vo
     '--show-backup',
     '--restore',
   ])
+  for (const [option, provided] of [
+    ['--verbose', options.verbose],
+    ['--no-color', options.noColor],
+  ] as const) {
+    assertOptionAllowed(mode, option, provided, [
+      'create',
+      '--doctor',
+      '--sync',
+      '--update',
+      '--add',
+      '--list-backups',
+      '--show-backup',
+      '--restore',
+      '--clean-cache',
+    ])
+  }
 
   validateSyncAlias(options.displayName !== undefined, mode, options.sync, '--name', 'display-name')
   validateSyncAlias(options.version !== undefined, mode, options.sync, '--version', 'version')
   validateSyncAlias(options.license !== undefined, mode, options.sync, '--license', 'license')
   validateSyncAlias(options.network !== undefined, mode, options.sync, '--network', 'network')
 
-  if (options.label !== undefined && !(
-    (mode === 'create' || mode === '--add') && options.add.includes('resource-pack')
-  )) {
+  if (
+    options.label !== undefined &&
+    !((mode === 'create' || mode === '--add') && options.add.includes('resource-pack'))
+  ) {
     throw new Error('--label is only valid when adding a resource-pack.')
   }
 }
@@ -383,6 +409,8 @@ Maintenance modes:
 Common options:
   --report                          Emit a machine-readable JSON result.
   --clear-stale-lock                Clear a stale project write lock.
+  --verbose                         Record and print invocation diagnostics.
+  --no-color                        Disable color in this process and child tools.
   --lang <auto|en|zh-CN>            Select the prompt language.
   --log-file <path>                 Write logs to a specific file.
   -h, --help                        Show this help and exit.

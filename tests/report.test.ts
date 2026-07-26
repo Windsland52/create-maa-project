@@ -76,6 +76,16 @@ describe('CLI JSON reports', () => {
       expect(explicit.exitCode).toBe(0)
       expect(explicit.stdout).toContain(`Log: ${explicitLog}`)
       await expect(readFile(explicitLog, 'utf8')).resolves.toContain('argv=')
+
+      const verbose = await runCli(['--clean-cache', '--verbose'], root)
+      expect(verbose.exitCode).toBe(0)
+      expect(verbose.stderr).toContain('[verbose] command=clean-cache')
+      expect(verbose.stdout).toContain('Log:')
+      const verboseLogs = await readdir(join(root, '.create-maa-project', 'logs'))
+      expect(verboseLogs).toHaveLength(1)
+      await expect(
+        readFile(join(root, '.create-maa-project', 'logs', verboseLogs[0] as string), 'utf8'),
+      ).resolves.toContain('argv=')
     },
     CLI_TEST_TIMEOUT_MS,
   )
@@ -150,6 +160,7 @@ describe('CLI JSON reports', () => {
           '--add',
           'dev-tools',
           '--skip-download',
+          '--verbose',
           '--report',
         ],
         root,
@@ -162,6 +173,7 @@ describe('CLI JSON reports', () => {
         ok: true,
         exitCode: 0,
         root: join(root, 'maa-report-create'),
+        logPath: expect.any(String),
         backupId: expect.any(String),
         backupScope: 'managed-files',
       })
@@ -180,6 +192,8 @@ describe('CLI JSON reports', () => {
           }),
         ]),
       )
+      expect(report.logPath?.startsWith(join(root, 'maa-report-create'))).toBe(true)
+      await expect(readFile(report.logPath as string, 'utf8')).resolves.toMatch(/argv=.*--verbose[\s\S]*created=/)
     },
     CLI_TEST_TIMEOUT_MS,
   )

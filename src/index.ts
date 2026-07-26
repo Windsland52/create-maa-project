@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
 import packageJson from '../package.json' with { type: 'json' }
-import { formatCliHelp, parseArgs, validateCommandModes } from './args.js'
+import { applyCliEnvironment, formatCliHelp, parseArgs, validateCommandModes } from './args.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger, type Logger } from './log.js'
@@ -49,12 +49,15 @@ async function main(): Promise<void> {
   let command: CliReportCommand = inferReportCommandFromArgv(argv)
   let logger: Logger | undefined
   let logFile: string | undefined
+  let argvLogged = false
+  const verboseRequested = argv.includes('--verbose')
   let reportRoot = process.cwd()
   let clearActiveProgress = (): void => {}
 
   try {
     const options = parseArgs(argv)
     validateCommandModes(options)
+    applyCliEnvironment(options)
     if (options.help) {
       console.log(formatCliHelp(packageJson.version))
       return
@@ -73,8 +76,12 @@ async function main(): Promise<void> {
     if (command === 'create' && options.name !== undefined) reportRoot = resolve(process.cwd(), options.name)
     logFile = options.logFile
     logger = await createLogger(process.cwd(), options.logFile, options.report ? executionId : undefined)
-    if (options.doctor || options.logFile) {
+    if (options.doctor || options.logFile || (options.verbose && command !== 'create')) {
       await logger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
+      argvLogged = true
+    }
+    if (options.verbose && !options.report) {
+      process.stderr.write(`[verbose] command=${command} cwd=${process.cwd()} argv=${JSON.stringify(argv)}\n`)
     }
     if (options.assist || options.from) {
       throw new Error('Agent-assisted creation is reserved for a future version and is not supported in v1.')
@@ -174,6 +181,10 @@ async function main(): Promise<void> {
       clearActiveProgress = (): void => {}
       const projectLogger = await createLogger(result.root, options.logFile, executionId)
       logger = projectLogger
+      if (options.verbose && !argvLogged) {
+        await projectLogger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
+        argvLogged = true
+      }
       await projectLogger.info(`created=${result.root}`)
       const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
       writeJsonReport(report)
@@ -191,7 +202,7 @@ async function main(): Promise<void> {
     if (isBackupCommand(options)) {
       const backup = await executeBackupCommand(process.cwd(), options)
       printBackupResult(backup)
-      if (backup.operation === 'restore') printLogPath(logger)
+      printLogPath(logger)
       return
     }
 
@@ -246,12 +257,20 @@ async function main(): Promise<void> {
     progress.clear()
     clearActiveProgress = (): void => {}
     const projectLogger = await createLogger(result.root, options.logFile)
+    if (options.verbose && !argvLogged) {
+      await projectLogger.info(`argv=${JSON.stringify(process.argv.slice(2))}`)
+      argvLogged = true
+    }
     await projectLogger.info(`created=${result.root}`)
     printScaffoldResult('Created project', result)
     printLogPath(projectLogger)
   } catch (error) {
     clearActiveProgress()
     logger = logger ?? (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
+    if (verboseRequested && !argvLogged) {
+      await safeLogInfo(logger, `argv=${JSON.stringify(process.argv.slice(2))}`)
+      argvLogged = logger?.hasEntries() ?? false
+    }
     await safeLogError(logger, error)
     if (wantsReport) {
       const report = createErrorJsonReport({
@@ -399,6 +418,14 @@ async function safeLogError(logger: Logger | undefined, error: unknown): Promise
     await logger?.error(error)
   } catch {
     // Error reporting must not fail before the CLI can print its user-facing result.
+  }
+}
+
+async function safeLogInfo(logger: Logger | undefined, message: string): Promise<void> {
+  try {
+    await logger?.info(message)
+  } catch {
+    // Diagnostic logging must not hide the original command result.
   }
 }
 

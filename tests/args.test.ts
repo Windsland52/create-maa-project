@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCliHelp, parseArgs, validateCommandModes } from '../src/args.js'
+import { applyCliEnvironment, formatCliHelp, parseArgs, validateCommandModes } from '../src/args.js'
 
 describe('parseArgs', () => {
   it('parses create options', () => {
@@ -307,6 +307,8 @@ describe('validateCommandModes', () => {
     { argv: ['--sync', 'version', '--name', 'Wrong field'], message: '--name is only valid' },
     { argv: ['--clean-cache', '--clear-stale-lock'], message: '--clear-stale-lock is not valid' },
     { argv: ['--mcp', '--report'], message: '--report is not valid with --mcp.' },
+    { argv: ['--mcp', '--verbose'], message: '--verbose is not valid with --mcp.' },
+    { argv: ['--help', '--no-color'], message: '--no-color is not valid with --help.' },
     { argv: ['--help', '--log-file', 'help.log'], message: '--log-file is not valid with --help.' },
     { argv: ['--add', 'github', '--label', 'Ignored'], message: '--label is only valid' },
   ])('rejects options that do not apply to the selected command: $argv', ({ argv, message }) => {
@@ -322,6 +324,13 @@ describe('validateCommandModes', () => {
     { argv: ['--restore', 'backup-1', '--clear-stale-lock'] },
   ])('accepts options with a command that consumes them: $argv', ({ argv }) => {
     expect(() => validateCommandModes(parseArgs(argv))).not.toThrow()
+  })
+
+  it('applies standard no-color variables for this process and child tools', () => {
+    const environment: NodeJS.ProcessEnv = {}
+    applyCliEnvironment(parseArgs(['--no-color']), environment)
+
+    expect(environment).toMatchObject({ NO_COLOR: '1', FORCE_COLOR: '0' })
   })
 })
 
@@ -342,6 +351,8 @@ describe('formatCliHelp', () => {
     expect(help).toContain('--dry-run')
     expect(help).toContain('--clean-cache')
     expect(help).toContain('--mcp')
+    expect(help).toContain('--verbose')
+    expect(help).toContain('--no-color')
     expect(help).toContain('-V, --cli-version')
     expect(help).toContain('--version <semver>')
     expect(help).toContain('Examples:')

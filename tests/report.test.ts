@@ -114,6 +114,33 @@ describe('CLI JSON reports', () => {
   )
 
   it(
+    'reports the intended target root when project creation fails',
+    async () => {
+      const root = await tempRoot()
+      const target = join(root, 'occupied-target')
+      await mkdir(target, { recursive: true })
+      await writeFile(join(target, 'user-file.txt'), 'keep', 'utf8')
+
+      const failed = await runCli(['occupied-target', '--skip-download', '--report'], root)
+      const report = parseStdoutReport(failed.stdout, failed.stderr)
+
+      expect(failed.exitCode).toBe(1)
+      expect(report).toMatchObject({
+        command: 'create',
+        ok: false,
+        root: target,
+      })
+      expect(report.error?.message).toContain('Target directory is not empty')
+      await expect(readFile(join(target, 'user-file.txt'), 'utf8')).resolves.toBe('keep')
+      await expect(readFile(join(target, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+
+      const parseFailed = await runCli(['--unknown-option', '--report'], root)
+      expect(parseStdoutReport(parseFailed.stdout, parseFailed.stderr).root).toBe(root)
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'reports create as pure stdout JSON',
     async () => {
       const root = await tempRoot()

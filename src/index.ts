@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { resolve } from 'node:path'
 import packageJson from '../package.json' with { type: 'json' }
 import { formatCliHelp, parseArgs, validateCommandModes } from './args.js'
 import { runDoctor } from './doctor.js'
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
   let command: CliReportCommand = inferReportCommandFromArgv(argv)
   let logger: Logger | undefined
   let logFile: string | undefined
+  let reportRoot = process.cwd()
   let clearActiveProgress = (): void => {}
 
   try {
@@ -68,6 +70,7 @@ async function main(): Promise<void> {
     }
     if (options.report) options.noInteractive = true
     command = reportCommandFromOptions(options)
+    if (command === 'create' && options.name !== undefined) reportRoot = resolve(process.cwd(), options.name)
     logFile = options.logFile
     logger = await createLogger(process.cwd(), options.logFile, options.report ? executionId : undefined)
     if (options.doctor || options.logFile) {
@@ -156,6 +159,7 @@ async function main(): Promise<void> {
       }
 
       const createOptions = await promptForCreateOptions(options)
+      reportRoot = resolve(process.cwd(), createOptions.name ?? '.')
       const progress = createReportProgressHandlers('OCR models')
       clearActiveProgress = progress.clear
       const result = await createProject(createOptions, {
@@ -252,7 +256,7 @@ async function main(): Promise<void> {
     if (wantsReport) {
       const report = createErrorJsonReport({
         context: createReportContext(command, startTimeMs, executionId, logger),
-        root: process.cwd(),
+        root: reportRoot,
         error,
       })
       writeJsonReport(report)

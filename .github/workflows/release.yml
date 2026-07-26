@@ -188,7 +188,7 @@ jobs:
           files: dist/release/*
 
   npm:
-    needs: check
+    needs: github-release
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
@@ -203,12 +203,29 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm publish dist/npm/*.tgz --access public --provenance
+      - name: Publish npm package if needed
+        shell: bash
+        run: |
+          package="$(find dist/npm -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "$package" ]]; then
+            echo "npm package artifact is missing" >&2
+            exit 1
+          fi
+          metadata_root="$RUNNER_TEMP/npm-package-metadata"
+          mkdir -p "$metadata_root"
+          tar -xzf "$package" -C "$metadata_root" package/package.json
+          package_name="$(node -e 'const value = require(process.argv[1]); process.stdout.write(value.name)' "$metadata_root/package/package.json")"
+          package_version="$(node -e 'const value = require(process.argv[1]); process.stdout.write(value.version)' "$metadata_root/package/package.json")"
+          if npm view "$package_name@$package_version" version --json >/dev/null 2>&1; then
+            echo "$package_name@$package_version is already published; skipping npm publish."
+          else
+            npm publish "$package" --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   pypi:
-    needs: github-release
+    needs: npm
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
@@ -245,3 +262,5 @@ jobs:
           uv pip install --python "$smoke_venv/bin/python" "$wheel"
           node scripts/smoke-cli-artifact.mjs "$smoke_venv/bin/create-maa-project"
       - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
+        with:
+          skip-existing: true

@@ -9,13 +9,15 @@ import sys
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 from urllib.parse import urlparse
 
 from . import __version__
 from .release_manifest import RELEASE_MANIFEST_SHA256
 
 RELEASE_REPOSITORY = "Windsland52/create-maa-project"
+MAX_MANIFEST_BYTES = 1024 * 1024
+DEFAULT_MAX_BINARY_BYTES = 1024 * 1024 * 1024
 
 SYSTEM_NAMES = {
     "windows": "win",
@@ -32,6 +34,12 @@ ARCHITECTURE_NAMES = {
     "aarch64": "aarch64",
     "arm64": "aarch64",
 }
+
+
+class ReleaseAsset(TypedDict):
+    url: str
+    sha256: str
+    size: int
 
 
 def main() -> None:
@@ -93,7 +101,7 @@ def ensure_binary() -> Path:
         "create-maa-project-manifest.json"
     )
     try:
-        manifest_bytes = download(manifest_url)
+        manifest_bytes = download(manifest_url, MAX_MANIFEST_BYTES)
     except OSError as error:
         raise RuntimeError(
             "Unable to download create-maa-project binary. Install Node.js and run "
@@ -107,12 +115,23 @@ def ensure_binary() -> Path:
     manifest = parse_manifest(manifest_bytes)
     validate_manifest_version(manifest)
     asset = select_asset_for_platform(manifest, system, arch)
+    max_binary_bytes = configured_max_binary_bytes()
+    if asset["size"] > max_binary_bytes:
+        raise RuntimeError(
+            f"CLI binary asset declares {asset['size']} bytes, exceeding the configured "
+            f"download limit of {max_binary_bytes} bytes."
+        )
     try:
-        binary_bytes = download(asset["url"])
+        binary_bytes = download(asset["url"], asset["size"])
     except OSError as error:
         raise RuntimeError(
             "Unable to download create-maa-project binary asset. Retry with network access."
         ) from error
+    if len(binary_bytes) != asset["size"]:
+        raise RuntimeError(
+            f"Downloaded CLI binary size {len(binary_bytes)} does not match "
+            f"the release manifest size {asset['size']}."
+        )
     binary_digest = hashlib.sha256(binary_bytes).hexdigest()
     if binary_digest != asset["sha256"]:
         raise RuntimeError("Downloaded CLI binary failed sha256 verification.")
@@ -241,7 +260,7 @@ def select_asset(
     manifest: dict[str, object],
     system_name: Optional[str] = None,
     machine_name: Optional[str] = None,
-) -> dict[str, str]:
+) -> ReleaseAsset:
     validate_manifest_version(manifest)
     system, arch = resolve_platform(system_name, machine_name)
     return select_asset_for_platform(manifest, system, arch)
@@ -251,7 +270,7 @@ def select_asset_for_platform(
     manifest: dict[str, object],
     system: str,
     arch: str,
-) -> dict[str, str]:
+) -> ReleaseAsset:
     for asset in manifest.get("assets", []):
         if not isinstance(asset, dict):
             continue
@@ -264,11 +283,13 @@ def select_asset_for_platform(
                 )
             url = asset_string(asset, "url")
             sha256 = asset_string(asset, "sha256")
+            size = asset_size(asset)
             validate_asset_url(url)
             validate_sha256(sha256)
             return {
                 "url": url,
                 "sha256": sha256,
+                "size": size,
             }
     raise RuntimeError(f"No CLI binary is available for {system}/{arch}.")
 
@@ -288,6 +309,13 @@ def asset_string(asset: dict[str, object], key: str) -> str:
     return value
 
 
+def asset_size(asset: dict[str, object]) -> int:
+    value = asset.get("size")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise RuntimeError("CLI binary asset must include a positive integer size.")
+    return value
+
+
 def validate_asset_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
@@ -299,10 +327,43 @@ def validate_sha256(value: str) -> None:
         raise RuntimeError("CLI binary asset must include a 64-character sha256 digest.")
 
 
-def download(url: str) -> bytes:
+def configured_max_binary_bytes() -> int:
+    raw = os.getenv("CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES")
+    if raw is None:
+        return DEFAULT_MAX_BINARY_BYTES
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError("CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES must be a positive integer.") from error
+    if value <= 0:
+        raise RuntimeError("CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES must be a positive integer.")
+    return value
+
+
+def download(url: str, max_bytes: int) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": f"create-maa-project/{__version__}"})
     with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read()
+        content_length = response.headers.get("Content-Length")
+        if content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = -1
+            if declared_size > max_bytes:
+                raise RuntimeError(
+                    f"Download from {url} declares {declared_size} bytes, exceeding the limit of {max_bytes} bytes."
+                )
+
+        chunks: list[bytes] = []
+        received = 0
+        while True:
+            chunk = response.read(min(1024 * 1024, max_bytes - received + 1))
+            if not chunk:
+                return b"".join(chunks)
+            received += len(chunk)
+            if received > max_bytes:
+                raise RuntimeError(f"Download from {url} exceeded the limit of {max_bytes} bytes.")
+            chunks.append(chunk)
 
 
 if __name__ == "__main__":

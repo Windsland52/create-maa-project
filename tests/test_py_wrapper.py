@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest.mock import patch
 
 
@@ -16,6 +18,7 @@ from create_maa_project import __version__  # noqa: E402
 from create_maa_project.__main__ import (  # noqa: E402
     execution_failure_message,
     fallback_message,
+    download as bounded_download,
     manifest_version,
     parse_manifest,
     select_asset,
@@ -78,6 +81,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                         "version": __version__,
                         "url": "https://example.test/create-maa-project-linux-x64",
                         "sha256": "b" * 64,
+                        "size": 10,
                     }
                 ],
             },
@@ -142,6 +146,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                         "version": __version__,
                         "url": "https://example.test/create-maa-project-linux-x64",
                         "sha256": binary_digest,
+                        "size": len(binary_bytes),
                     }
                 ],
             },
@@ -204,6 +209,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                         "version": __version__,
                         "url": "https://example.test/create-maa-project-linux-x64",
                         "sha256": hashlib.sha256(x86_binary).hexdigest(),
+                        "size": len(x86_binary),
                     },
                     {
                         "kind": "sea",
@@ -212,6 +218,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                         "version": __version__,
                         "url": "https://example.test/create-maa-project-linux-arm64",
                         "sha256": hashlib.sha256(arm_binary).hexdigest(),
+                        "size": len(arm_binary),
                     },
                 ],
             },
@@ -271,6 +278,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                         "version": __version__,
                         "url": "https://example.test/create-maa-project-linux-x64",
                         "sha256": binary_digest,
+                        "size": len(binary_bytes),
                     }
                 ],
             },
@@ -349,6 +357,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                     "version": __version__,
                     "url": "https://example.test/create-maa-project",
                     "sha256": "a" * 64,
+                    "size": 123,
                 }
             ],
         }
@@ -358,6 +367,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
             {
                 "url": "https://example.test/create-maa-project",
                 "sha256": "a" * 64,
+                "size": 123,
             },
         )
 
@@ -383,6 +393,7 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                     "version": __version__,
                     "url": "https://example.test/create-maa-project",
                     "sha256": "a" * 64,
+                    "size": 123,
                 }
             ],
         }
@@ -401,6 +412,31 @@ class PyWrapperTrustChainTest(unittest.TestCase):
         bad_digest_manifest["assets"][0]["sha256"] = "abc"
         with self.assertRaisesRegex(RuntimeError, "64-character sha256"):
             select_asset(bad_digest_manifest, system_name="Linux", machine_name="x86_64")
+
+        bad_size_manifest = json.loads(json.dumps(manifest))
+        bad_size_manifest["assets"][0]["size"] = 0
+        with self.assertRaisesRegex(RuntimeError, "positive integer size"):
+            select_asset(bad_size_manifest, system_name="Linux", machine_name="x86_64")
+
+    def test_download_rejects_declared_and_streamed_oversize_responses(self) -> None:
+        class Response(io.BytesIO):
+            def __init__(self, contents: bytes, content_length: Optional[str] = None) -> None:
+                super().__init__(contents)
+                self.headers = {} if content_length is None else {"Content-Length": content_length}
+
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                self.close()
+
+        with patch.object(wrapper_main.urllib.request, "urlopen", return_value=Response(b"", "11")):
+            with self.assertRaisesRegex(RuntimeError, "declares 11 bytes"):
+                bounded_download("https://example.test/asset", 10)
+
+        with patch.object(wrapper_main.urllib.request, "urlopen", return_value=Response(b"123456")):
+            with self.assertRaisesRegex(RuntimeError, "exceeded the limit of 5 bytes"):
+                bounded_download("https://example.test/asset", 5)
 
 
 if __name__ == "__main__":

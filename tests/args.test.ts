@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseArgs } from '../src/args.js'
+import { parseArgs, validateCommandModes } from '../src/args.js'
 
 describe('parseArgs', () => {
   it('parses create options', () => {
@@ -163,5 +163,90 @@ describe('parseArgs', () => {
     expect(migration.migrate).toBe('.')
     expect(migration.target).toBe('./new-project')
     expect(migration.dryRun).toBe(true)
+  })
+})
+
+describe('validateCommandModes', () => {
+  it.each([
+    {
+      argv: [
+        '--doctor',
+        '--sync',
+        'version',
+        '--version',
+        '9.9.9',
+      ],
+      modes: '--doctor, --sync',
+    },
+    {
+      argv: [
+        '--clean-cache',
+        '--restore',
+        'backup-1',
+      ],
+      modes: '--restore, --clean-cache',
+    },
+    {
+      argv: [
+        '--update',
+        'schema',
+        '--add',
+        'github',
+      ],
+      modes: '--update, --add',
+    },
+    {
+      argv: [
+        '--mcp',
+        '--doctor',
+      ],
+      modes: '--doctor, --mcp',
+    },
+    {
+      argv: [
+        'new-project',
+        '--doctor',
+      ],
+      modes: 'create, --doctor',
+    },
+  ])('rejects conflicting command modes: $modes', ({ argv, modes }) => {
+    expect(() => validateCommandModes(parseArgs(argv))).toThrow(
+      `Command modes are mutually exclusive; choose only one: ${modes}`,
+    )
+  })
+
+  it.each([
+    { argv: [] },
+    {
+      argv: [
+        '--doctor',
+        '--report',
+      ],
+    },
+    {
+      argv: [
+        '--update',
+        'schema',
+        '--update',
+        'node-deps',
+      ],
+    },
+    {
+      argv: [
+        '--add',
+        'dev-tools',
+        '--add',
+        'github',
+      ],
+    },
+    {
+      argv: [
+        'new-project',
+        '--add',
+        'github',
+      ],
+    },
+  ])('accepts a single command mode: $argv', ({ argv }) => {
+    expect(() => validateCommandModes(parseArgs(argv))).not.toThrow()
   })
 })

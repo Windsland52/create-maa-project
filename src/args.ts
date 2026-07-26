@@ -192,6 +192,23 @@ export function parseArgs(argv: string[]): CliOptions {
   return options
 }
 
+export function validateCommandModes(options: CliOptions): void {
+  const modes: string[] = []
+
+  if (options.name !== undefined) modes.push('create')
+  if (options.doctor) modes.push('--doctor')
+  if (options.sync !== undefined) modes.push('--sync')
+  if (options.update.length > 0) modes.push('--update')
+  if (options.add.length > 0 && options.name === undefined) modes.push('--add')
+  if (options.restore !== undefined) modes.push('--restore')
+  if (options.cleanCache) modes.push('--clean-cache')
+  if (options.mcp) modes.push('--mcp')
+
+  if (modes.length > 1) {
+    throw new Error(`Command modes are mutually exclusive; choose only one: ${modes.join(', ')}`)
+  }
+}
+
 function parseControllerOption(value: string): ControllerKind[] {
   const kinds: ControllerKind[] = []
   for (const item of value.split(',')) {

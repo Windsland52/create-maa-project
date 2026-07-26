@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { parseArgs } from './args.js'
+import { parseArgs, validateCommandModes } from './args.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger, type Logger } from './log.js'
@@ -42,6 +42,7 @@ async function main(): Promise<void> {
 
   try {
     const options = parseArgs(argv)
+    validateCommandModes(options)
     if (options.mcp) {
       const { startMcpServer } = await import('./mcp.js')
       await startMcpServer()

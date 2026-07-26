@@ -122,7 +122,14 @@ const TEXT = {
 } satisfies Record<string, LocalizedText>
 
 export async function promptForCreateOptions(options: CliOptions): Promise<CliOptions> {
-  if (options.noInteractive || !process.stdin.isTTY || !process.stdout.isTTY) return options
+  if (options.noInteractive || !process.stdin.isTTY || !process.stdout.isTTY) {
+    if (options.name === undefined) {
+      throw new Error(
+        'Non-interactive project creation requires an explicit target name or "." for the current directory.',
+      )
+    }
+    return options
+  }
 
   const language = resolvePromptLanguage(options.lang)
   const rl = createInterface({ input, output })

@@ -98,4 +98,11 @@ describe('interactive project identity defaults', () => {
       displayName: 'Kept Display Name',
     })
   })
+
+  it('requires non-interactive callers to explicitly select a target directory', async () => {
+    await expect(promptForCreateOptions(parseArgs(['--no-interactive']))).rejects.toThrow(
+      'requires an explicit target name or "."',
+    )
+    await expect(promptForCreateOptions(parseArgs(['.', '--no-interactive']))).resolves.toMatchObject({ name: '.' })
+  })
 })

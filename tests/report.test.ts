@@ -54,6 +54,39 @@ afterEach(async () => {
 
 describe('CLI JSON reports', () => {
   it(
+    'requires an explicit target for non-interactive project creation',
+    async () => {
+      const reportRoot = await tempRoot()
+      const reported = await runCli(['--skip-download', '--report'], reportRoot)
+      const report = parseStdoutReport(reported.stdout, reported.stderr)
+
+      expect(reported.exitCode).toBe(1)
+      expect(report).toMatchObject({ command: 'create', ok: false, exitCode: 1 })
+      expect(report.error?.message).toContain('requires an explicit target name or "."')
+      await expect(readFile(join(reportRoot, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+
+      const nonInteractiveRoot = await tempRoot()
+      const nonInteractive = await runCli(['--skip-download', '--no-interactive'], nonInteractiveRoot)
+      expect(nonInteractive.exitCode).toBe(1)
+      expect(nonInteractive.stdout).toBe('')
+      expect(nonInteractive.stderr).toContain('requires an explicit target name or "."')
+      await expect(readFile(join(nonInteractiveRoot, 'maa-project.json'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+
+      const explicitCurrentRoot = await tempRoot()
+      const explicitCurrent = await runCli(['.', '--skip-download', '--report'], explicitCurrentRoot)
+      const explicitCurrentReport = parseStdoutReport(explicitCurrent.stdout, explicitCurrent.stderr)
+      expect(explicitCurrent.exitCode).toBe(0)
+      expect(explicitCurrentReport).toMatchObject({ command: 'create', ok: true, root: explicitCurrentRoot })
+      await expect(readFile(join(explicitCurrentRoot, 'maa-project.json'), 'utf8')).resolves.toContain(
+        '"schemaVersion": 2',
+      )
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'reports create as pure stdout JSON',
     async () => {
       const root = await tempRoot()

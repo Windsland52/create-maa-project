@@ -13,13 +13,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: pnpm
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
       - run: node scripts/sync-release-version.mjs
@@ -38,7 +38,7 @@ jobs:
           smoke_root="$RUNNER_TEMP/npm-package-smoke"
           npm install --prefix "$smoke_root" --no-audit --no-fund "$PWD/$package"
           node scripts/smoke-cli-artifact.mjs "$smoke_root/node_modules/.bin/create-maa-project"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: npm-package
           path: dist/npm/*.tgz
@@ -76,9 +76,9 @@ jobs:
             binary: dist/sea/create-maa-project-macos-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: pnpm
@@ -90,7 +90,7 @@ jobs:
           CREATE_MAA_PROJECT_RELEASE_ARCH: ${{ matrix.arch }}
       - name: Smoke SEA binary
         run: node scripts/smoke-cli-artifact.mjs "${{ matrix.binary }}"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sea-${{ matrix.asset_os }}-${{ matrix.arch }}
           path: dist/sea/create-maa-project-${{ matrix.asset_os }}-${{ matrix.arch }}*
@@ -100,18 +100,18 @@ jobs:
     needs: sea
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
       - run: node scripts/sync-release-version.mjs
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: sea-*
           merge-multiple: true
           path: dist/release-assets
       - run: node scripts/create-release-manifest.mjs dist/release-assets dist/release/create-maa-project-manifest.json
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-manifest
           path: dist/release/create-maa-project-manifest.json
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       - name: Generate release notes
@@ -156,7 +156,7 @@ jobs:
           echo "[INFO] Generating release notes for $previous_stable_tag..$GITHUB_REF_NAME"
           "$git_cliff" --config .github/cliff.toml "$previous_stable_tag..HEAD" --strip header --output CHANGES.md
       - name: Upload release notes
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-notes
           path: CHANGES.md
@@ -168,20 +168,20 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: sea-*
           merge-multiple: true
           path: dist/release
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: release-manifest
           path: dist/release
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: release-notes
           path: dist/release-notes
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           body_path: dist/release-notes/CHANGES.md
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -195,11 +195,11 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: npm-package
           path: dist/npm
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -215,16 +215,16 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
-      - uses: astral-sh/setup-uv@v8.1.0
-      - uses: actions/setup-node@v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
       - run: node scripts/sync-release-version.mjs
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: release-manifest
           path: .release
@@ -244,4 +244,4 @@ jobs:
           uv venv "$smoke_venv"
           uv pip install --python "$smoke_venv/bin/python" "$wheel"
           node scripts/smoke-cli-artifact.mjs "$smoke_venv/bin/create-maa-project"
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1

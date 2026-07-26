@@ -79,6 +79,7 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--yes':
         options.yes = true
+        options.noInteractive = true
         break
       case '--no-interactive':
         options.noInteractive = true
@@ -263,6 +264,7 @@ Creation options:
   --allow-non-git-dir               Permit a forced non-Git target directory.
   --allow-pending-commit            Permit an initial commit with pending work.
   --skip-download                   Defer dependency and asset downloads.
+  --yes                             Accept defaults without prompting.
   --no-interactive                  Disable interactive creation prompts.
 
 Maintenance modes:

@@ -146,6 +146,14 @@ describe('parseArgs', () => {
     ).toBe(true)
   })
 
+  it('makes --yes non-interactive while preserving its distinct intent', () => {
+    expect(parseArgs(['my-project', '--yes'])).toMatchObject({
+      name: 'my-project',
+      yes: true,
+      noInteractive: true,
+    })
+  })
+
   it('rejects removed managed-file options', () => {
     expect(() => parseArgs(['--diff'])).toThrow('Unknown option: --diff')
     expect(() => parseArgs(['--accept-changes'])).toThrow('Unknown option: --accept-changes')

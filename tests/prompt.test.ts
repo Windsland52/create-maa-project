@@ -103,6 +103,14 @@ describe('interactive project identity defaults', () => {
     await expect(promptForCreateOptions(parseArgs(['--no-interactive']))).rejects.toThrow(
       'requires an explicit target name or "."',
     )
+    await expect(promptForCreateOptions(parseArgs(['--yes']))).rejects.toThrow(
+      'requires an explicit target name or "."',
+    )
     await expect(promptForCreateOptions(parseArgs(['.', '--no-interactive']))).resolves.toMatchObject({ name: '.' })
+    await expect(promptForCreateOptions(parseArgs(['.', '--yes']))).resolves.toMatchObject({
+      name: '.',
+      yes: true,
+      noInteractive: true,
+    })
   })
 })

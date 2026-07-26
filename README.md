@@ -199,7 +199,7 @@ CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`
 - `--list-backups` 和 `--show-backup <id>` 可检查备份；`--restore <id> --dry-run` 会列出恢复/删除动作但不改文件。
 - `.git` 属于受保护的仓库状态，不进入受管文件备份。创建项目时 Git 初始化在受管文件事务完成后执行；`git init` 失败产生的新 `.git` 会被安全清理。
 - `--force` 跳过确认，但不跳过备份。
-- `--yes` 不等于 `--force`。
+- `--yes` 接受创建默认值并关闭交互，但不等于 `--force`，也不会允许覆盖非空目录。
 - 非空且不在 Git 仓库中的目标目录需要显式 `--force --allow-non-git-dir`。
 - `--doctor` 只读，并直接检查当前项目文件状态。
 

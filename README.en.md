@@ -224,7 +224,8 @@ Safety rules:
   lists restore/remove actions without changing files.
 - `.git` is protected repository state and is excluded from managed-file backups.
 - `--force` skips prompts but still keeps backups.
-- `--yes` is not the same as `--force`.
+- `--yes` accepts creation defaults without prompting, but it is not `--force` and does not
+  permit overwriting a non-empty target.
 - Non-empty non-Git targets require explicit `--force --allow-non-git-dir`.
 - `--doctor` is read-only and checks the current project files directly.
 

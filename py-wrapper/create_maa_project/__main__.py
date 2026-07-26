@@ -6,15 +6,32 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import urllib.request
-from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from . import __version__
 from .release_manifest import RELEASE_MANIFEST_SHA256
 
 RELEASE_REPOSITORY = "Windsland52/create-maa-project"
+
+SYSTEM_NAMES = {
+    "windows": "win",
+    "win": "win",
+    "linux": "linux",
+    "darwin": "macos",
+    "macos": "macos",
+}
+
+ARCHITECTURE_NAMES = {
+    "x86_64": "x86_64",
+    "amd64": "x86_64",
+    "x64": "x86_64",
+    "aarch64": "aarch64",
+    "arm64": "aarch64",
+}
 
 
 def main() -> None:
@@ -61,7 +78,8 @@ def execution_failure_message(
 
 def ensure_binary() -> Path:
     cache_dir = Path(os.getenv("CREATE_MAA_PROJECT_CACHE", Path.home() / ".cache" / "create-maa-project"))
-    target = cache_dir / __version__ / binary_name()
+    system, arch = resolve_platform()
+    target = cache_dir / __version__ / system / arch / binary_name(system)
     if cached_binary_is_valid(target):
         return target
     if not RELEASE_MANIFEST_SHA256:
@@ -88,7 +106,7 @@ def ensure_binary() -> Path:
 
     manifest = parse_manifest(manifest_bytes)
     validate_manifest_version(manifest)
-    asset = select_asset(manifest)
+    asset = select_asset_for_platform(manifest, system, arch)
     try:
         binary_bytes = download(asset["url"])
     except OSError as error:
@@ -99,10 +117,10 @@ def ensure_binary() -> Path:
     if binary_digest != asset["sha256"]:
         raise RuntimeError("Downloaded CLI binary failed sha256 verification.")
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(binary_bytes)
-    binary_digest_path(target).write_text(f"{binary_digest}\n", encoding="utf8")
-    target.chmod(0o755)
+    try:
+        install_cached_binary(target, binary_bytes, binary_digest)
+    except OSError as error:
+        raise RuntimeError(f"Unable to install downloaded CLI binary in cache at {target}.") from error
     return target
 
 
@@ -128,9 +146,76 @@ def binary_digest_path(target: Path) -> Path:
     return target.with_name(f"{target.name}.sha256")
 
 
-def binary_name() -> str:
-    suffix = ".exe" if platform.system() == "Windows" else ""
+def binary_name(system_name: Optional[str] = None) -> str:
+    system = normalize_system(system_name if system_name is not None else platform.system())
+    suffix = ".exe" if system == "win" else ""
     return f"create-maa-project{suffix}"
+
+
+def normalize_system(system_name: str) -> str:
+    normalized = SYSTEM_NAMES.get(system_name.strip().lower())
+    if normalized is None:
+        name = system_name or "<unknown>"
+        raise RuntimeError(f"Unsupported operating system '{name}'.")
+    return normalized
+
+
+def resolve_platform(
+    system_name: Optional[str] = None,
+    machine_name: Optional[str] = None,
+) -> tuple[str, str]:
+    raw_system = system_name if system_name is not None else platform.system()
+    raw_machine = machine_name if machine_name is not None else platform.machine()
+    system = normalize_system(raw_system)
+    arch = ARCHITECTURE_NAMES.get(raw_machine.strip().lower())
+    if arch is None:
+        name = raw_machine or "<unknown>"
+        raise RuntimeError(
+            f"Unsupported CPU architecture '{name}'. "
+            "Supported architectures are x86_64/amd64 and aarch64/arm64."
+        )
+    return system, arch
+
+
+def install_cached_binary(target: Path, binary_bytes: bytes, binary_digest: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    digest_target = binary_digest_path(target)
+    staged_binary: Optional[Path] = stage_cache_file(target, binary_bytes, mode=0o755)
+    staged_digest: Optional[Path] = None
+    try:
+        staged_digest = stage_cache_file(digest_target, f"{binary_digest}\n".encode())
+        os.replace(staged_binary, target)
+        staged_binary = None
+        os.replace(staged_digest, digest_target)
+        staged_digest = None
+    finally:
+        if staged_binary is not None:
+            staged_binary.unlink(missing_ok=True)
+        if staged_digest is not None:
+            staged_digest.unlink(missing_ok=True)
+
+
+def stage_cache_file(target: Path, contents: bytes, mode: Optional[int] = None) -> Path:
+    staged: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            dir=target.parent,
+            delete=False,
+        ) as temporary_file:
+            staged = Path(temporary_file.name)
+            temporary_file.write(contents)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        if mode is not None:
+            staged.chmod(mode)
+        return staged
+    except BaseException:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
 
 
 def parse_manifest(manifest_bytes: bytes) -> dict[str, object]:
@@ -158,9 +243,15 @@ def select_asset(
     machine_name: Optional[str] = None,
 ) -> dict[str, str]:
     validate_manifest_version(manifest)
-    system = {"Windows": "win", "Linux": "linux", "Darwin": "macos"}.get(system_name or platform.system())
-    machine = (machine_name or platform.machine()).lower()
-    arch = "aarch64" if machine in {"arm64", "aarch64"} else "x86_64"
+    system, arch = resolve_platform(system_name, machine_name)
+    return select_asset_for_platform(manifest, system, arch)
+
+
+def select_asset_for_platform(
+    manifest: dict[str, object],
+    system: str,
+    arch: str,
+) -> dict[str, str]:
     for asset in manifest.get("assets", []):
         if not isinstance(asset, dict):
             continue

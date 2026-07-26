@@ -114,16 +114,17 @@ class PyWrapperTrustChainTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as cache_dir:
             with patch.dict(wrapper_main.os.environ, {"CREATE_MAA_PROJECT_CACHE": cache_dir}):
                 with patch.object(wrapper_main.platform, "system", return_value="Linux"):
-                    target = Path(cache_dir) / __version__ / "create-maa-project"
-                    target.parent.mkdir(parents=True)
-                    target.write_bytes(binary_bytes)
-                    wrapper_main.binary_digest_path(target).write_text(
-                        f"{hashlib.sha256(binary_bytes).hexdigest()}\n",
-                        encoding="utf8",
-                    )
+                    with patch.object(wrapper_main.platform, "machine", return_value="x86_64"):
+                        target = Path(cache_dir) / __version__ / "linux" / "x86_64" / "create-maa-project"
+                        target.parent.mkdir(parents=True)
+                        target.write_bytes(binary_bytes)
+                        wrapper_main.binary_digest_path(target).write_text(
+                            f"{hashlib.sha256(binary_bytes).hexdigest()}\n",
+                            encoding="utf8",
+                        )
 
-                    with patch.object(wrapper_main, "download") as download:
-                        self.assertEqual(wrapper_main.ensure_binary(), target)
+                        with patch.object(wrapper_main, "download") as download:
+                            self.assertEqual(wrapper_main.ensure_binary(), target)
 
         download.assert_not_called()
 
@@ -153,7 +154,9 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                 with patch.object(wrapper_main, "RELEASE_MANIFEST_SHA256", manifest_digest):
                     with patch.object(wrapper_main.platform, "system", return_value="Linux"):
                         with patch.object(wrapper_main.platform, "machine", return_value="x86_64"):
-                            target = Path(cache_dir) / __version__ / "create-maa-project"
+                            target = (
+                                Path(cache_dir) / __version__ / "linux" / "x86_64" / "create-maa-project"
+                            )
                             target.parent.mkdir(parents=True)
                             target.write_bytes(b"stale binary")
                             wrapper_main.binary_digest_path(target).write_text("not-a-sha256\n", encoding="utf8")
@@ -172,6 +175,149 @@ class PyWrapperTrustChainTest(unittest.TestCase):
                             )
 
         self.assertEqual(download.call_count, 2)
+
+    def test_ensure_binary_rejects_unknown_cpu_architecture_before_download(self) -> None:
+        with tempfile.TemporaryDirectory() as cache_dir:
+            with patch.dict(wrapper_main.os.environ, {"CREATE_MAA_PROJECT_CACHE": cache_dir}):
+                with patch.object(wrapper_main.platform, "system", return_value="Linux"):
+                    with patch.object(wrapper_main.platform, "machine", return_value="riscv64"):
+                        with patch.object(wrapper_main, "download") as download:
+                            with self.assertRaisesRegex(
+                                RuntimeError,
+                                "Unsupported CPU architecture 'riscv64'",
+                            ):
+                                wrapper_main.ensure_binary()
+
+        download.assert_not_called()
+
+    def test_ensure_binary_cache_is_isolated_by_os_and_architecture(self) -> None:
+        x86_binary = b"x86_64 binary"
+        arm_binary = b"aarch64 binary"
+        manifest_bytes = json.dumps(
+            {
+                "version": __version__,
+                "assets": [
+                    {
+                        "kind": "sea",
+                        "os": "linux",
+                        "arch": "x86_64",
+                        "version": __version__,
+                        "url": "https://example.test/create-maa-project-linux-x64",
+                        "sha256": hashlib.sha256(x86_binary).hexdigest(),
+                    },
+                    {
+                        "kind": "sea",
+                        "os": "linux",
+                        "arch": "aarch64",
+                        "version": __version__,
+                        "url": "https://example.test/create-maa-project-linux-arm64",
+                        "sha256": hashlib.sha256(arm_binary).hexdigest(),
+                    },
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+        manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            with patch.dict(wrapper_main.os.environ, {"CREATE_MAA_PROJECT_CACHE": cache_dir}):
+                with patch.object(wrapper_main, "RELEASE_MANIFEST_SHA256", manifest_digest):
+                    with patch.object(wrapper_main.platform, "system", return_value="Linux"):
+                        with patch.object(wrapper_main.platform, "machine", return_value="x86_64"):
+                            with patch.object(
+                                wrapper_main,
+                                "download",
+                                side_effect=[manifest_bytes, x86_binary],
+                            ):
+                                x86_target = wrapper_main.ensure_binary()
+
+                        with patch.object(wrapper_main.platform, "machine", return_value="aarch64"):
+                            with patch.object(
+                                wrapper_main,
+                                "download",
+                                side_effect=[manifest_bytes, arm_binary],
+                            ):
+                                arm_target = wrapper_main.ensure_binary()
+
+                        self.assertEqual(
+                            x86_target,
+                            Path(cache_dir) / __version__ / "linux" / "x86_64" / "create-maa-project",
+                        )
+                        self.assertEqual(
+                            arm_target,
+                            Path(cache_dir) / __version__ / "linux" / "aarch64" / "create-maa-project",
+                        )
+                        self.assertNotEqual(x86_target, arm_target)
+                        self.assertEqual(x86_target.read_bytes(), x86_binary)
+                        self.assertEqual(arm_target.read_bytes(), arm_binary)
+
+                        with patch.object(wrapper_main.platform, "machine", return_value="x86_64"):
+                            with patch.object(wrapper_main, "download") as download:
+                                self.assertEqual(wrapper_main.ensure_binary(), x86_target)
+
+        download.assert_not_called()
+
+    def test_ensure_binary_uses_temporary_files_and_atomic_replace(self) -> None:
+        binary_bytes = b"fresh atomic binary"
+        binary_digest = hashlib.sha256(binary_bytes).hexdigest()
+        manifest_bytes = json.dumps(
+            {
+                "version": __version__,
+                "assets": [
+                    {
+                        "kind": "sea",
+                        "os": "linux",
+                        "arch": "x86_64",
+                        "version": __version__,
+                        "url": "https://example.test/create-maa-project-linux-x64",
+                        "sha256": binary_digest,
+                    }
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+        manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            target = Path(cache_dir) / __version__ / "linux" / "x86_64" / "create-maa-project"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"existing binary")
+            wrapper_main.binary_digest_path(target).write_text("invalid digest\n", encoding="utf8")
+
+            def fail_atomic_replace(source: Path, destination: Path) -> None:
+                source_path = Path(source)
+                destination_path = Path(destination)
+                self.assertEqual(source_path.parent, destination_path.parent)
+                self.assertTrue(source_path.name.startswith(f".{destination_path.name}."))
+                self.assertEqual(source_path.suffix, ".tmp")
+                raise OSError("atomic rename failed")
+
+            with patch.dict(wrapper_main.os.environ, {"CREATE_MAA_PROJECT_CACHE": cache_dir}):
+                with patch.object(wrapper_main, "RELEASE_MANIFEST_SHA256", manifest_digest):
+                    with patch.object(wrapper_main.platform, "system", return_value="Linux"):
+                        with patch.object(wrapper_main.platform, "machine", return_value="x86_64"):
+                            with patch.object(
+                                wrapper_main,
+                                "download",
+                                side_effect=[manifest_bytes, binary_bytes],
+                            ):
+                                with patch.object(
+                                    wrapper_main.os,
+                                    "replace",
+                                    side_effect=fail_atomic_replace,
+                                ):
+                                    with self.assertRaisesRegex(
+                                        RuntimeError,
+                                        "Unable to install downloaded CLI binary in cache",
+                                    ):
+                                        wrapper_main.ensure_binary()
+
+            self.assertEqual(target.read_bytes(), b"existing binary")
+            self.assertEqual(
+                wrapper_main.binary_digest_path(target).read_text(encoding="utf8"),
+                "invalid digest\n",
+            )
+            self.assertEqual(list(target.parent.glob("*.tmp")), [])
 
     def test_parse_manifest_requires_json_object(self) -> None:
         self.assertEqual(parse_manifest(b'{"version":"v0.1.0","assets":[]}')["version"], "v0.1.0")
@@ -222,6 +368,9 @@ class PyWrapperTrustChainTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "No CLI binary is available"):
             select_asset(manifest, system_name="Darwin", machine_name="x86_64")
+
+        with self.assertRaisesRegex(RuntimeError, "Unsupported CPU architecture 'riscv64'"):
+            select_asset(manifest, system_name="Linux", machine_name="riscv64")
 
     def test_select_asset_validates_asset_url_and_digest(self) -> None:
         manifest = {

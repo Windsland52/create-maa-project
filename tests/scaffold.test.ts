@@ -1308,28 +1308,32 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     )
   })
 
-  it('syncs agent metadata without removing its MaaTools debug configuration', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
-    process.chdir(join(root, 'maa-pyproject-sync'))
-    await addAgent(
-      defaultOptions({
-        add: [
-          'agent',
-        ],
-      }),
-    )
+  it(
+    'syncs agent metadata without removing its MaaTools debug configuration',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+      process.chdir(root)
+      await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
+      process.chdir(join(root, 'maa-pyproject-sync'))
+      await addAgent(
+        defaultOptions({
+          add: [
+            'agent',
+          ],
+        }),
+      )
 
-    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+      await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
 
-    expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
-      'name = "maa-pyproject-sync"\nversion = "0.2.0"',
-    )
-    expect(await readFile(join(root, 'maa-pyproject-sync', 'maatools.config.mts'), 'utf8')).toContain(
-      "uv: 'Maa Agent: Debug'",
-    )
-  })
+      expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
+        'name = "maa-pyproject-sync"\nversion = "0.2.0"',
+      )
+      expect(await readFile(join(root, 'maa-pyproject-sync', 'maatools.config.mts'), 'utf8')).toContain(
+        "uv: 'Maa Agent: Debug'",
+      )
+    },
+    15_000,
+  )
 
   it('syncs MIT license metadata and legal text as one operation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))

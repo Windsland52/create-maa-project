@@ -307,6 +307,7 @@ create-maa-project --clean-cache
 - 创建项目时会在相关场景尝试 OCR 下载和 `pnpm install`。
 - 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令。
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
+- `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>` 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值。
 - `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产。
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。
 - `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` 同步全部桌面 MaaFramework 和 MFAAvalonia runtime 平台。

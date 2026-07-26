@@ -33,6 +33,7 @@ import {
   PYTHON_EMBED_VERSION,
   downloadManifestAssets,
   downloadProjectManifestAssets,
+  downloadUrl,
   resolveProductAssetManifestFromGithubRelease,
   type DownloadProgress,
 } from '../src/assets.js'
@@ -356,6 +357,36 @@ describe('scaffold', () => {
         content,
       }),
     ])
+  })
+
+  it('rejects oversized downloads before or during response streaming', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock.mockResolvedValueOnce(
+      new Response(Buffer.from('large'), {
+        headers: { 'content-length': '5' },
+      }),
+    )
+
+    await expect(downloadUrl('https://example.test/declared-large.bin', { maxBytes: 4 })).rejects.toThrow(
+      'Download exceeds the 4-byte limit (received at least 5 bytes)',
+    )
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(Uint8Array.from([1, 2]))
+            controller.enqueue(Uint8Array.from([3, 4, 5]))
+            controller.close()
+          },
+        }),
+      ),
+    )
+
+    await expect(downloadUrl('https://example.test/streamed-large.bin', { maxBytes: 4 })).rejects.toThrow(
+      'Download exceeds the 4-byte limit (received at least 5 bytes)',
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('does not install node dependencies during creation when downloads are skipped', async () => {

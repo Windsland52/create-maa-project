@@ -76,6 +76,7 @@ export type DownloadProgress = {
 export type DownloadProgressReporter = (progress: DownloadProgress) => void
 export type AssetDownloaderOptions = {
   onProgress?: DownloadProgressReporter
+  maxBytes?: number
 }
 export type AssetDownloader = (url: string, options?: AssetDownloaderOptions) => Promise<Buffer>
 export type AssetManifestResolver = () => Promise<AssetManifest | undefined>
@@ -115,6 +116,7 @@ const PRODUCT_RELEASES: ProductReleaseConfig[] = [
   },
 ]
 const DEFAULT_DOWNLOAD_ATTEMPTS = 3
+const DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
 export const PYTHON_EMBED_VERSION = '3.13.14'
 const PYTHON_STANDALONE_MINOR = '3.13'
 
@@ -203,11 +205,11 @@ export async function downloadManifestAssets(
   const downloaded: DownloadedAsset[] = []
   let completedBytes = 0
   for (const asset of assets) {
-    const content = await downloader(
-      asset.url,
-      options.onProgress
+    const content = await downloader(asset.url, {
+      ...(asset.size !== undefined ? { maxBytes: asset.size } : {}),
+      ...(options.onProgress
         ? {
-            onProgress: (progress) => {
+            onProgress: (progress: DownloadProgress) => {
               options.onProgress?.({
                 url: progress.url,
                 path: asset.path,
@@ -216,8 +218,8 @@ export async function downloadManifestAssets(
               })
             },
           }
-        : undefined,
-    )
+        : {}),
+    })
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
       throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
@@ -269,11 +271,11 @@ export async function downloadProjectManifestAssets(
   const downloaded: DownloadedAsset[] = []
   let completedBytes = 0
   for (const asset of assets) {
-    const content = await downloader(
-      asset.url,
-      options.onProgress
+    const content = await downloader(asset.url, {
+      ...(asset.size !== undefined ? { maxBytes: asset.size } : {}),
+      ...(options.onProgress
         ? {
-            onProgress: (progress) => {
+            onProgress: (progress: DownloadProgress) => {
               options.onProgress?.({
                 url: progress.url,
                 path: asset.path,
@@ -282,8 +284,8 @@ export async function downloadProjectManifestAssets(
               })
             },
           }
-        : undefined,
-    )
+        : {}),
+    })
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
       throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
@@ -887,13 +889,20 @@ async function defaultDownload(url: string, options: AssetDownloaderOptions = {}
 }
 
 async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
+  const maxBytes = configuredMaxDownloadBytes(options.maxBytes)
   const response = await fetch(url)
   if (!response.ok) {
     throw new DownloadHttpError(response.status)
   }
   const totalBytes = parseContentLength(response.headers.get('content-length'))
+  if (totalBytes !== undefined && totalBytes > maxBytes) {
+    throw new DownloadSizeError(maxBytes, totalBytes)
+  }
   if (!response.body) {
     const content = Buffer.from(await response.arrayBuffer())
+    if (content.byteLength > maxBytes) {
+      throw new DownloadSizeError(maxBytes, content.byteLength)
+    }
     options.onProgress?.({
       url,
       downloadedBytes: content.byteLength,
@@ -909,8 +918,12 @@ async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): 
     const { done, value } = await reader.read()
     if (done) break
     if (!value) continue
-    chunks.push(value)
     downloadedBytes += value.byteLength
+    if (downloadedBytes > maxBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw new DownloadSizeError(maxBytes, downloadedBytes)
+    }
+    chunks.push(value)
     options.onProgress?.({
       url,
       downloadedBytes,
@@ -929,9 +942,28 @@ class DownloadHttpError extends Error {
   }
 }
 
+class DownloadSizeError extends Error {
+  constructor(maxBytes: number, receivedBytes: number) {
+    super(`Download exceeds the ${maxBytes}-byte limit (received at least ${receivedBytes} bytes)`)
+  }
+}
+
+class DownloadConfigurationError extends Error {}
+
 function configuredDownloadAttempts(): number {
   const value = Number(process.env.CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS ?? '')
   return Number.isSafeInteger(value) && value > 0 ? value : DEFAULT_DOWNLOAD_ATTEMPTS
+}
+
+function configuredMaxDownloadBytes(explicit?: number): number {
+  if (explicit !== undefined) {
+    if (!Number.isSafeInteger(explicit) || explicit < 0) {
+      throw new DownloadConfigurationError('Download maxBytes must be a non-negative safe integer')
+    }
+    return explicit
+  }
+  const value = Number(process.env.CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES ?? '')
+  return Number.isSafeInteger(value) && value > 0 ? value : DEFAULT_MAX_DOWNLOAD_BYTES
 }
 
 function downloadRetryDelayMs(failedAttempt: number): number {
@@ -941,6 +973,7 @@ function downloadRetryDelayMs(failedAttempt: number): number {
 
 function isRetryableDownloadError(error: unknown): boolean {
   if (error instanceof DownloadHttpError) return error.retryable
+  if (error instanceof DownloadSizeError || error instanceof DownloadConfigurationError) return false
   return true
 }
 

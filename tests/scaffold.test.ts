@@ -619,7 +619,7 @@ describe('scaffold', () => {
       }),
     )
 
-    expect(result.config.project.displayName).toBe('maa-resource-create')
+    expect(result.config.project.displayName).toBe('maa-resource-test')
     expect(result.config.resources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ slug: 'pack-a', label: 'Pack A' }),

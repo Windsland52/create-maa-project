@@ -31,6 +31,7 @@
         "format": "prettier --write . --ignore-unknown",
         "format:check": "prettier --check . --ignore-unknown",
         "release:manifest": "node scripts/create-release-manifest.mjs",
+        "release:sbom": "node scripts/create-sbom.mjs",
         "release:prepare-pypi": "node scripts/prepare-pypi-release.mjs",
         "release:sync-version": "node scripts/sync-release-version.mjs",
         "sync:schema": "node scripts/sync-schema.mjs",

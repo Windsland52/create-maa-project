@@ -277,6 +277,32 @@ describe('MCP server', () => {
   )
 
   it(
+    'rejects missing or inapplicable MCP sync values',
+    async () => {
+      const session = await startSession(await tempRoot())
+      await initialize(session)
+
+      const missingNetwork = await session.request('tools/call', {
+        name: 'sync',
+        arguments: { target: 'network' },
+      })
+      const missingNetworkReport = parseToolReport(missingNetwork)
+      expect(missingNetworkReport.result.isError).toBe(true)
+      expect(missingNetworkReport.report.error?.message).toContain('sync target "network" requires value')
+
+      const extraMetadata = await session.request('tools/call', {
+        name: 'sync',
+        arguments: { target: 'metadata', value: 'ignored' },
+      })
+      const extraMetadataReport = parseToolReport(extraMetadata)
+      expect(extraMetadataReport.result.isError).toBe(true)
+      expect(extraMetadataReport.report.error?.message).toContain('sync target "metadata" does not accept value')
+      expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'rejects update calls with an empty target list',
     async () => {
       const session = await startSession(await tempRoot())

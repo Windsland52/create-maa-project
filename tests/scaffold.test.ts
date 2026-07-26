@@ -1264,6 +1264,39 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
   })
 
+  it('honors positional values for every value-bearing sync target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-positional-sync' }))
+    const projectRoot = join(root, 'maa-positional-sync')
+    process.chdir(projectRoot)
+
+    await syncProject(defaultOptions({ sync: 'display-name', syncValue: 'Positional Display' }))
+    await syncProject(defaultOptions({ sync: 'version', syncValue: '0.3.0' }))
+    await syncProject(defaultOptions({ sync: 'license', syncValue: 'MIT' }))
+    await syncProject(defaultOptions({ sync: 'github-url', syncValue: 'https://github.com/MaaXYZ/Positional' }))
+    await syncProject(defaultOptions({ sync: 'network', syncValue: 'official' }))
+
+    expect(await readJson(join(projectRoot, 'maa-project.json'))).toMatchObject({
+      project: {
+        displayName: 'Positional Display',
+        version: '0.3.0',
+        github: 'https://github.com/MaaXYZ/Positional',
+      },
+      license: { spdx: 'MIT' },
+      network: { mode: 'official' },
+    })
+    await expect(syncProject(defaultOptions({ sync: 'metadata', syncValue: 'ignored' }))).rejects.toThrow(
+      '--sync metadata does not accept a value',
+    )
+    await expect(syncProject(defaultOptions({ sync: 'license', syncValue: 'Apache-2.0' }))).rejects.toThrow(
+      'Invalid license "Apache-2.0"',
+    )
+    await expect(syncProject(defaultOptions({ sync: 'network', syncValue: 'mirror' }))).rejects.toThrow(
+      'Invalid network mode "mirror"',
+    )
+  })
+
   it('rejects blank display names during sync', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

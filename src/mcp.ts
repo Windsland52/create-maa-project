@@ -260,7 +260,7 @@ async function callCreateProject(context: McpServerContext, input: unknown): Pro
 async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = await syncOptions(argsRecord(input), context.root)
+    options = syncOptions(argsRecord(input))
   } catch (error) {
     return errorToolResult(context, 'sync', error)
   }
@@ -453,7 +453,7 @@ function createProjectOptions(args: JsonObject): CliOptions {
   return baseOptions(overrides)
 }
 
-async function syncOptions(args: JsonObject, root: string): Promise<CliOptions> {
+function syncOptions(args: JsonObject): CliOptions {
   const target = requiredEnum(args, 'target', SYNC_TARGETS)
   const value = optionalString(args, 'value')
   if (
@@ -462,11 +462,13 @@ async function syncOptions(args: JsonObject, root: string): Promise<CliOptions> 
       'version',
       'license',
       'github-url',
+      'network',
     ].includes(target) &&
     !value
   ) {
     throw new Error(`sync target "${target}" requires value.`)
   }
+  if (target === 'metadata' && value !== undefined) throw new Error('sync target "metadata" does not accept value.')
 
   const options = baseOptions({
     sync: target,
@@ -475,9 +477,7 @@ async function syncOptions(args: JsonObject, root: string): Promise<CliOptions> 
   if (target === 'version') options.version = requiredString(args, 'value')
   if (target === 'license') options.license = requiredEnum(args, 'value', LICENSE_KINDS)
   if (target === 'github-url') options.syncValue = requiredString(args, 'value')
-  if (target === 'network') {
-    options.network = value ? valueAsEnum(value, NETWORK_MODES, 'value') : (await readProjectConfig(root)).network.mode
-  }
+  if (target === 'network') options.network = requiredEnum(args, 'value', NETWORK_MODES)
   return options
 }
 

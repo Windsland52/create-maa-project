@@ -14,7 +14,14 @@ import {
   licenseText,
   maatoolsConfigFile,
 } from './templates.js'
-import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } from './types.js'
+import type {
+  CliOptions,
+  LicenseKind,
+  MaaProjectConfig,
+  ManagedFileInput,
+  NetworkMode,
+  ScaffoldResult,
+} from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
@@ -42,6 +49,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
 
   switch (sync) {
     case 'metadata':
+      if (options.syncValue !== undefined) throw new Error('--sync metadata does not accept a value.')
       break
     case 'display-name': {
       config.project.displayName = requiredNonBlank(
@@ -60,15 +68,27 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
       break
     }
     case 'license': {
-      const license = options.license
-      if (!license) throw new Error('--sync license requires --license <spdx>')
+      const license =
+        options.license ??
+        requiredChoice<LicenseKind>(
+          options.syncValue,
+          ['AGPL-3.0-or-later', 'MIT', 'None'],
+          '--sync license requires a value such as MIT.',
+          'license',
+        )
       config.license.spdx = license
       if (packageJson) packageJson.license = license === 'None' ? 'UNLICENSED' : license
       break
     }
     case 'network': {
-      const network = options.network
-      if (!network) throw new Error('--sync network requires --network <mode>')
+      const network =
+        options.network ??
+        requiredChoice<NetworkMode>(
+          options.syncValue,
+          ['auto', 'official'],
+          '--sync network requires a value such as official.',
+          'network mode',
+        )
       config.network.mode = network
       break
     }
@@ -211,6 +231,19 @@ function requiredNonBlank(value: string | undefined, message: string): string {
   const normalized = value?.trim()
   if (!normalized) throw new Error(message)
   return normalized
+}
+
+function requiredChoice<T extends string>(
+  value: string | undefined,
+  allowed: readonly T[],
+  missingMessage: string,
+  label: string,
+): T {
+  const normalized = requiredNonBlank(value, missingMessage)
+  if (!allowed.includes(normalized as T)) {
+    throw new Error(`Invalid ${label} "${normalized}". Expected one of: ${allowed.join(', ')}.`)
+  }
+  return normalized as T
 }
 
 function normalizeGithubRepoUrl(value: string | undefined): string {

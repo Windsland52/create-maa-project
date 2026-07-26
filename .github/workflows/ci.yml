@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  cli-smoke:
+    name: CLI smoke (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Create a minimal project
+        run: >-
+          node dist/index.js .ci-smoke-project
+          --no-interactive
+          --skip-download
+          --no-git
+          --template pipeline
+          --slug ci-smoke
+          --name "CI Smoke"
+      - name: Diagnose the generated project
+        working-directory: .ci-smoke-project
+        run: node ../dist/index.js --doctor

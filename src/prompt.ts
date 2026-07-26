@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
 import { stdin as input, stdout as output } from 'node:process'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import type { CliOptions, ControllerKind, LicenseKind, TemplateName } from './types.js'
 import { exists, normalizeSlug } from './utils.js'
 import { CONTROLLER_KINDS, DEFAULT_CONTROLLER_KINDS } from './controllers.js'
@@ -127,23 +127,23 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
   const language = resolvePromptLanguage(options.lang)
   const rl = createInterface({ input, output })
   try {
-    let rawProjectName = options.name
     if (!options.name) {
       const answer = await rl.question(question(label(language, TEXT.projectFolder), 'maa-project'))
-      rawProjectName = answer.trim() || 'maa-project'
-      options.name = rawProjectName
+      options.name = answer.trim() || 'maa-project'
     }
-    const inferredSlug = normalizeSlug(options.name)
-    if (!inferredSlug) {
-      options.slug = await askAsciiProjectId(rl, language)
-    } else if (options.name !== inferredSlug) {
-      output.write(`${label(language, TEXT.usingProjectId)}: ${inferredSlug}\n`)
-      options.slug = inferredSlug
-    } else {
-      options.slug = inferredSlug
+    const identity = inferPromptProjectIdentity(options)
+    if (options.slug === undefined) {
+      if (!identity.slug) {
+        options.slug = await askAsciiProjectId(rl, language)
+      } else if (identity.targetName !== identity.slug) {
+        output.write(`${label(language, TEXT.usingProjectId)}: ${identity.slug}\n`)
+        options.slug = identity.slug
+      } else {
+        options.slug = identity.slug
+      }
     }
     if (!options.displayName) {
-      const fallbackDisplayName = rawProjectName ?? options.name
+      const fallbackDisplayName = identity.displayName
       const answer = await rl.question(question(label(language, TEXT.displayName), fallbackDisplayName))
       options.displayName = answer.trim() || fallbackDisplayName
     }
@@ -207,6 +207,18 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
     return options
   } finally {
     rl.close()
+  }
+}
+
+export function inferPromptProjectIdentity(
+  options: Pick<CliOptions, 'name' | 'slug' | 'displayName'>,
+  cwd = process.cwd(),
+): { targetName: string; slug: string; displayName: string } {
+  const targetName = basename(resolve(cwd, options.name ?? '.'))
+  return {
+    targetName,
+    slug: options.slug ?? normalizeSlug(targetName),
+    displayName: options.displayName ?? targetName,
   }
 }
 

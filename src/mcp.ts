@@ -44,6 +44,7 @@ const NETWORK_MODES = [
   'official',
 ] as const
 const SYNC_TARGETS = [
+  'config',
   'metadata',
   'display-name',
   'version',
@@ -468,7 +469,15 @@ function syncOptions(args: JsonObject): CliOptions {
   ) {
     throw new Error(`sync target "${target}" requires value.`)
   }
-  if (target === 'metadata' && value !== undefined) throw new Error('sync target "metadata" does not accept value.')
+  if (
+    [
+      'config',
+      'metadata',
+    ].includes(target) &&
+    value !== undefined
+  ) {
+    throw new Error(`sync target "${target}" does not accept value.`)
+  }
 
   const options = baseOptions({
     sync: target,

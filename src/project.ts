@@ -4,9 +4,9 @@ import { realpathSync, statSync } from 'node:fs'
 import { appendFile, cp, link, lstat, mkdir, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { MaaProjectConfig, ManagedFileInput, PendingItem, ReleaseChannel } from './types.js'
+import type { MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
 import { exists, nowIso, readText, stableJson, writeFileAtomic, writeText } from './utils.js'
-import { validateProjectConfig } from './project-config.js'
+import { migrateProjectConfigValue, validateProjectConfig } from './project-config.js'
 
 export const CONFIG_FILE = 'maa-project.json'
 export const LOCAL_STATE_DIR = '.create-maa-project'
@@ -197,65 +197,59 @@ export async function restoreTrackedProjectPaths(root: string, filePaths: string
 }
 
 export async function readProjectConfig(root: string): Promise<MaaProjectConfig> {
+  const config = await readStoredProjectConfig(root)
+  if (config.schemaVersion === 1) {
+    throw new Error(
+      `${CONFIG_FILE} schemaVersion 1 requires an explicit migration. Run create-maa-project --sync config.`,
+    )
+  }
+  return config
+}
+
+export async function migrateStoredProjectConfig(root: string, clearStale = false): Promise<ScaffoldResult> {
+  const command = 'create-maa-project --sync config'
+  return withProjectLock(
+    root,
+    command,
+    async () => {
+      const config = await readStoredProjectConfig(root)
+      if (config.schemaVersion === 2) {
+        return {
+          root,
+          config,
+          written: [],
+          skipped: [
+            `${CONFIG_FILE} (already schemaVersion 2)`,
+          ],
+          pending: [],
+        }
+      }
+      const migrated = migrateProjectConfigValue(config)
+      return withProjectOperation(root, command, async (operation) => {
+        await writeProjectState(root, migrated)
+        return {
+          root,
+          config: migrated,
+          written: [
+            CONFIG_FILE,
+          ],
+          skipped: [],
+          pending: [],
+          backupId: operation.backupId,
+        }
+      })
+    },
+    { clearStale },
+  )
+}
+
+async function readStoredProjectConfig(root: string): Promise<MaaProjectConfig> {
   await assertNoSymlinkSegments(root, CONFIG_FILE)
   const configPath = join(root, CONFIG_FILE)
   if (!(await exists(configPath))) {
     throw new Error(`No ${CONFIG_FILE} found. Run this command in a MaaFW project root.`)
   }
-  const config = validateProjectConfig(JSON.parse(await readText(configPath)) as unknown)
-  return migrateProjectConfig(config)
-}
-
-function migrateProjectConfig(config: MaaProjectConfig): MaaProjectConfig {
-  if (config.schemaVersion !== 1 && config.schemaVersion !== 2) {
-    throw new Error(`Unsupported maa-project.json schemaVersion: ${String(config.schemaVersion)}`)
-  }
-  if (config.schemaVersion === 1) {
-    migrateReleaseSelector(config.maafw)
-    migrateReleaseSelector(config.runtime.mfa)
-    if (config.runtime.mxu) migrateReleaseSelector(config.runtime.mxu)
-    config.schemaVersion = 2
-  }
-  normalizeReleaseSelector(config.maafw, 'maafw')
-  normalizeReleaseSelector(config.runtime.mfa, 'runtime.mfa')
-  if (config.runtime.mxu) normalizeReleaseSelector(config.runtime.mxu, 'runtime.mxu')
-  return config
-}
-
-function normalizeReleaseSelector(selector: { channel: string; version?: string }, path: string): void {
-  selector.channel = selector.channel.trim()
-  selector.version = selector.version?.trim() ?? ''
-  if (!isReleaseChannel(selector.channel)) {
-    throw new Error(`${path}.channel must be one of: stable, beta, alpha`)
-  }
-}
-
-function migrateReleaseSelector(selector: { channel: string; version?: string }): void {
-  const legacy = selector.channel.trim()
-  if (legacy === 'latest') {
-    selector.channel = 'stable'
-    selector.version = ''
-    return
-  }
-  if (isReleaseChannel(legacy)) {
-    selector.channel = legacy
-    selector.version = ''
-    return
-  }
-  selector.channel = inferReleaseChannel(legacy)
-  selector.version = legacy
-}
-
-function isReleaseChannel(value: string): value is ReleaseChannel {
-  return value === 'stable' || value === 'beta' || value === 'alpha'
-}
-
-function inferReleaseChannel(version: string): ReleaseChannel {
-  const lower = version.toLowerCase()
-  if (/(?:^|[.-])alpha(?:[.-]|$)/.test(lower)) return 'alpha'
-  if (/(?:^|[.-])beta(?:[.-]|$)/.test(lower)) return 'beta'
-  if (/(?:^|[.-])rc(?:[.-]|$)/.test(lower)) return 'beta'
-  return 'stable'
+  return validateProjectConfig(JSON.parse(await readText(configPath)) as unknown)
 }
 
 export async function writeProjectState(root: string, config: MaaProjectConfig): Promise<void> {

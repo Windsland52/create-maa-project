@@ -271,7 +271,7 @@ Maintenance modes:
              optimize-images, community, dependabot, schema-sync
   --label <name>                    Label a resource-pack add-on.
   --sync <target> [value]           Sync metadata into generated files.
-    Targets: metadata, display-name, version, license, github-url, network
+    Targets: config, metadata, display-name, version, license, github-url, network
   --update <target>                 Update schemas, assets, or dependencies.
     Targets: schema, maafw, runtime:mfa, runtime:mxu, ocr-models, node-deps,
              python-deps, python-runtime

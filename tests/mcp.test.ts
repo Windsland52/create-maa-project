@@ -123,6 +123,12 @@ describe('MCP server', () => {
       expect(toolByName(tools, 'sync').inputSchema.required).toEqual([
         'target',
       ])
+      expect(toolByName(tools, 'sync').inputSchema.properties?.target).toMatchObject({
+        enum: expect.arrayContaining([
+          'config',
+          'metadata',
+        ]),
+      })
       expect(toolByName(tools, 'update').inputSchema.required).toEqual([
         'targets',
       ])
@@ -243,6 +249,51 @@ describe('MCP server', () => {
       expect(report.root).toBe(firstRoot)
       expect(firstConfig.project.displayName).toBe('First MCP Project')
       expect(secondConfig.project.displayName).toBe('maa-mcp-second')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'migrates legacy project config only through an explicit sync target',
+    async () => {
+      const root = await createValidProject('maa-mcp-migrate')
+      const configPath = join(root, 'maa-project.json')
+      const legacy = JSON.parse(await readFile(configPath, 'utf8')) as {
+        schemaVersion: number
+        maafw: { channel: string; version?: string }
+        runtime: { mfa: { channel: string; version?: string; enabled: boolean } }
+      }
+      legacy.schemaVersion = 1
+      legacy.maafw = { channel: 'v5.11.0-rc.1' }
+      legacy.runtime.mfa = { channel: 'latest', enabled: true }
+      await writeFile(configPath, `${JSON.stringify(legacy, null, 4)}\n`, 'utf8')
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'sync',
+        arguments: { target: 'config' },
+      })
+      const { result, report } = parseToolReport(response)
+      const migrated = JSON.parse(await readFile(configPath, 'utf8')) as {
+        schemaVersion: number
+        maafw: { channel: string; version?: string }
+      }
+
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({
+        command: 'sync',
+        ok: true,
+        root,
+        written: [
+          'maa-project.json',
+        ],
+      })
+      expect(report.backupId).toBeTruthy()
+      expect(migrated).toMatchObject({
+        schemaVersion: 2,
+        maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
+      })
     },
     MCP_TEST_TIMEOUT_MS,
   )

@@ -2,6 +2,7 @@ import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   CONFIG_FILE,
+  migrateStoredProjectConfig,
   readProjectConfig,
   withProjectWriteLock,
   writeGeneratedFiles,
@@ -14,14 +15,7 @@ import {
   licenseText,
   maatoolsConfigFile,
 } from './templates.js'
-import type {
-  CliOptions,
-  LicenseKind,
-  MaaProjectConfig,
-  ManagedFileInput,
-  NetworkMode,
-  ScaffoldResult,
-} from './types.js'
+import type { CliOptions, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
@@ -34,10 +28,13 @@ type SyncEnvironment = {
 
 export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
   const root = environment.root ?? process.cwd()
-  const config = await readProjectConfig(root)
   const sync = options.sync
   if (!sync) throw new Error('Missing --sync target')
-  normalizeConfig(config)
+  if (sync === 'config') {
+    if (options.syncValue !== undefined) throw new Error('--sync config does not accept a value.')
+    return migrateStoredProjectConfig(root, options.clearStaleLock)
+  }
+  const config = await readProjectConfig(root)
 
   const interfaceJson = JSON.parse(await readText(join(root, 'interface.json'))) as Record<string, unknown>
   const packagePath = join(root, 'package.json')
@@ -336,13 +333,4 @@ function syncTomlProjectField(content: string, key: 'name' | 'version', value: s
   const pattern = new RegExp(`^${key}\\s*=\\s*"[^"]*"\\s*$`, 'm')
   if (!pattern.test(section)) return content
   return `${before}${section.replace(pattern, `${key} = "${value}"`)}${after}`
-}
-
-function normalizeConfig(config: MaaProjectConfig): void {
-  const configWithOptionalController = config as MaaProjectConfig & {
-    controller?: { kinds?: unknown; kind?: unknown }
-  }
-  if (!Array.isArray(configWithOptionalController.controller?.kinds)) {
-    configWithOptionalController.controller = { kinds: projectControllerKinds(config) }
-  }
 }

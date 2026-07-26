@@ -1,5 +1,5 @@
 import { isValidSemVer } from './semver.js'
-import type { ControllerKind, MaaProjectConfig } from './types.js'
+import type { ControllerKind, MaaProjectConfig, ReleaseChannel } from './types.js'
 
 const CONTROLLER_KINDS = [
   'Adb',
@@ -51,6 +51,45 @@ export function validateProjectConfig(value: unknown): MaaProjectConfig {
   ])
 
   return config as MaaProjectConfig
+}
+
+export function migrateProjectConfigValue(config: MaaProjectConfig): MaaProjectConfig {
+  const migrated = structuredClone(config)
+  if (migrated.schemaVersion === 1) {
+    migrateReleaseSelector(migrated.maafw)
+    migrateReleaseSelector(migrated.runtime.mfa)
+    if (migrated.runtime.mxu) migrateReleaseSelector(migrated.runtime.mxu)
+    migrated.schemaVersion = 2
+  }
+  return validateProjectConfig(migrated)
+}
+
+function migrateReleaseSelector(selector: { channel: string; version?: string }): void {
+  const legacy = selector.channel.trim()
+  if (legacy === 'latest') {
+    selector.channel = 'stable'
+    selector.version = ''
+    return
+  }
+  if (isReleaseChannel(legacy)) {
+    selector.channel = legacy
+    selector.version = ''
+    return
+  }
+  selector.channel = inferReleaseChannel(legacy)
+  selector.version = legacy
+}
+
+function isReleaseChannel(value: string): value is ReleaseChannel {
+  return value === 'stable' || value === 'beta' || value === 'alpha'
+}
+
+function inferReleaseChannel(version: string): ReleaseChannel {
+  const lower = version.toLowerCase()
+  if (/(?:^|[.-])alpha(?:[.-]|$)/.test(lower)) return 'alpha'
+  if (/(?:^|[.-])beta(?:[.-]|$)/.test(lower)) return 'beta'
+  if (/(?:^|[.-])rc(?:[.-]|$)/.test(lower)) return 'beta'
+  return 'stable'
 }
 
 function validateProject(project: Record<string, unknown>): void {

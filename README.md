@@ -239,6 +239,7 @@ create-maa-project --add schema-sync
 元数据同步：
 
 ```bash
+create-maa-project --sync config
 create-maa-project --sync metadata
 create-maa-project --sync display-name --name "新显示名"
 create-maa-project --sync version --version 0.2.0
@@ -246,6 +247,9 @@ create-maa-project --sync license --license MIT
 create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
 create-maa-project --sync network --network official
 ```
+
+旧版 `maa-project.json` 不会在其他维护命令中被静默改写。遇到 schema v1 时，请显式运行
+`create-maa-project --sync config`；迁移会进入项目备份，可用 `--restore` 回退。
 
 更新：
 

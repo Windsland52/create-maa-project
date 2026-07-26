@@ -126,18 +126,54 @@ describe('project config validation', () => {
     )
   })
 
-  it('continues to migrate valid v1 release selectors after validation', async () => {
+  it('requires and performs an explicit v1 config migration', async () => {
     const config = validConfig()
     config.schemaVersion = 1
     config.maafw = { channel: 'v5.11.0-rc.1' }
     config.runtime.mfa = { channel: 'latest', enabled: true }
     const root = await projectRoot(config)
+    const before = await readFile(join(root, 'maa-project.json'), 'utf8')
 
+    await expect(readProjectConfig(root)).rejects.toThrow(
+      'maa-project.json schemaVersion 1 requires an explicit migration. Run create-maa-project --sync config.',
+    )
+    await expect(syncProject(parseArgs(['--sync', 'metadata']), { root })).rejects.toThrow(
+      'Run create-maa-project --sync config.',
+    )
+    await expect(readFile(join(root, 'maa-project.json'), 'utf8')).resolves.toBe(before)
+
+    const result = await syncProject(parseArgs(['--sync', 'config']), { root })
+
+    expect(result).toMatchObject({
+      root,
+      written: [
+        'maa-project.json',
+      ],
+      skipped: [],
+      config: {
+        schemaVersion: 2,
+        maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
+        runtime: { mfa: { channel: 'stable', version: '' } },
+      },
+    })
+    expect(result.backupId).toBeTruthy()
     await expect(readProjectConfig(root)).resolves.toMatchObject({
       schemaVersion: 2,
       maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },
       runtime: { mfa: { channel: 'stable', version: '' } },
     })
+  })
+
+  it('reports a current config migration as an unchanged no-op', async () => {
+    const root = await projectRoot(validConfig())
+
+    const result = await syncProject(parseArgs(['--sync', 'config']), { root })
+
+    expect(result.written).toEqual([])
+    expect(result.skipped).toEqual([
+      'maa-project.json (already schemaVersion 2)',
+    ])
+    expect(result.backupId).toBeUndefined()
   })
 
   it('prevents maintenance writes when the config is invalid', async () => {

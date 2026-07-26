@@ -265,6 +265,7 @@ create-maa-project --add schema-sync
 Metadata sync:
 
 ```bash
+create-maa-project --sync config
 create-maa-project --sync metadata
 create-maa-project --sync display-name --name "New Display Name"
 create-maa-project --sync version --version 0.2.0
@@ -272,6 +273,10 @@ create-maa-project --sync license --license MIT
 create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
 create-maa-project --sync network --network official
 ```
+
+Other maintenance commands never rewrite a legacy `maa-project.json` implicitly. For schema v1,
+run `create-maa-project --sync config` explicitly; the migration creates a project backup that can
+be rolled back with `--restore`.
 
 Updates:
 

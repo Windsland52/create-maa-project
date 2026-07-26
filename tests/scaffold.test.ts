@@ -3378,7 +3378,7 @@ jobs:
     expect(doctorOutput).toContain('pnpm-lock.yaml is missing')
     expect(doctorOutput).toContain('To fix: pnpm install')
   })
-  it('migrates v1 release tags into v2 channel and version selectors', async () => {
+  it('migrates v1 release tags only through explicit config sync', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-migrate-selector' }))
@@ -3392,6 +3392,10 @@ jobs:
     legacy.maafw = { channel: 'v5.11.0-rc.1' }
     legacy.runtime.mfa = { channel: 'latest', enabled: true }
     await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8')
+    await expect(readProjectConfig(projectRoot)).rejects.toThrow('Run create-maa-project --sync config')
+
+    await syncProject(defaultOptions({ sync: 'config' }), { root: projectRoot })
+
     await expect(readProjectConfig(projectRoot)).resolves.toMatchObject({
       schemaVersion: 2,
       maafw: { channel: 'beta', version: 'v5.11.0-rc.1' },

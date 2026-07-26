@@ -143,7 +143,9 @@ const MCP_TOOLS: Tool[] = [
       'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
     inputSchema: objectSchema(
       {
-        name: stringSchema('Project folder path or name. Ask the user for this before calling.'),
+        name: stringSchema(
+          'Project folder path relative to the MCP server root. Use forward slashes for nested folders. Ask the user for this before calling.',
+        ),
         template: enumSchema(
           TEMPLATE_NAMES,
           'Project template. Use "pipeline" for task/resource projects and "agent" when the user wants Python Agent custom logic.',
@@ -269,13 +271,17 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
 
 async function callCreateProject(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
+  let targetRoot: string
   try {
     options = createProjectOptions(argsRecord(input, CREATE_PROJECT_ARGUMENTS, 'create_project'))
+    if (!options.name) throw new Error('name is required.')
+    targetRoot = await resolveMcpCreateTarget(context.root, options.name)
   } catch (error) {
     return errorToolResult(context, 'create', error)
   }
   return withReport(context, 'create', async (reportContext) => {
     const createOptions = await promptForCreateOptions(options)
+    createOptions.name = targetRoot
     const result = await createProject(createOptions, {
       cwd: context.root,
       installNodeDeps: true,
@@ -614,6 +620,44 @@ function argsRecord(input: unknown, allowed: readonly string[], tool: ToolName):
 
 async function resolveMcpProjectRoot(serverRoot: string, args: JsonObject): Promise<string> {
   const projectPath = optionalString(args, 'projectPath') ?? '.'
+  assertMcpRelativePath(projectPath, 'projectPath')
+
+  const canonicalServerRoot = await realpath(serverRoot)
+  const candidate = await realpath(resolve(canonicalServerRoot, projectPath))
+  assertMcpPathInsideRoot(canonicalServerRoot, candidate, 'projectPath')
+  if (!(await stat(candidate)).isDirectory()) {
+    throw new Error(`projectPath must resolve to a directory: ${projectPath}`)
+  }
+  return candidate
+}
+
+async function resolveMcpCreateTarget(serverRoot: string, projectPath: string): Promise<string> {
+  assertMcpRelativePath(projectPath, 'name')
+  const canonicalServerRoot = await realpath(serverRoot)
+  const segments = projectPath === '.' ? [] : projectPath.split('/')
+  let candidate = canonicalServerRoot
+
+  for (let index = 0; index < segments.length; index += 1) {
+    candidate = resolve(candidate, segments[index]!)
+    assertMcpPathInsideRoot(canonicalServerRoot, candidate, 'name')
+    try {
+      const canonicalCandidate = await realpath(candidate)
+      assertMcpPathInsideRoot(canonicalServerRoot, canonicalCandidate, 'name')
+      candidate = canonicalCandidate
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        const unresolvedTarget = resolve(candidate, ...segments.slice(index + 1))
+        assertMcpPathInsideRoot(canonicalServerRoot, unresolvedTarget, 'name')
+        return unresolvedTarget
+      }
+      throw error
+    }
+  }
+
+  return candidate
+}
+
+function assertMcpRelativePath(projectPath: string, label: 'name' | 'projectPath'): void {
   const segments = projectPath.split('/')
   if (
     projectPath.trim() !== projectPath ||
@@ -623,22 +667,22 @@ async function resolveMcpProjectRoot(serverRoot: string, args: JsonObject): Prom
     /^[A-Za-z]:/.test(projectPath) ||
     (projectPath !== '.' && segments.some((segment) => segment === '' || segment === '.' || segment === '..'))
   ) {
-    throw new Error('projectPath must be "." or a forward-slash relative path inside the MCP server root.')
+    throw new Error(`${label} must be "." or a forward-slash relative path inside the MCP server root.`)
   }
+}
 
-  const canonicalServerRoot = await realpath(serverRoot)
-  const candidate = await realpath(resolve(canonicalServerRoot, projectPath))
-  const relativePath = relative(canonicalServerRoot, candidate)
+function assertMcpPathInsideRoot(serverRoot: string, candidate: string, label: 'name' | 'projectPath'): void {
+  const relativePath = relative(serverRoot, candidate)
   if (
     relativePath !== '' &&
     (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith(`..${sep}`))
   ) {
-    throw new Error('projectPath must resolve inside the MCP server root.')
+    throw new Error(`${label} must resolve inside the MCP server root.`)
   }
-  if (!(await stat(candidate)).isDirectory()) {
-    throw new Error(`projectPath must resolve to a directory: ${projectPath}`)
-  }
-  return candidate
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error
 }
 
 function requiredString(args: JsonObject, key: string): string {

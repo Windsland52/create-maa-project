@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
@@ -374,6 +374,39 @@ describe('MCP server', () => {
         )
         expect(result.isError, projectPath).toBe(true)
         expect(report.error?.message, projectPath).toContain('MCP server root')
+      }
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'confines create_project targets to the MCP server root',
+    async () => {
+      const serverRoot = await tempRoot()
+      const outsideRoot = await tempRoot()
+      await symlink(outsideRoot, join(serverRoot, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+      const session = await startSession(serverRoot)
+      await initialize(session)
+
+      const attempts = [
+        { name: `../${basename(outsideRoot)}/traversal-child`, target: join(outsideRoot, 'traversal-child') },
+        { name: join(outsideRoot, 'absolute-child'), target: join(outsideRoot, 'absolute-child') },
+        { name: 'escape/symlink-child', target: join(outsideRoot, 'symlink-child') },
+      ]
+      for (const attempt of attempts) {
+        const { result, report } = parseToolReport(
+          await session.request('tools/call', {
+            name: 'create_project',
+            arguments: {
+              name: attempt.name,
+              skipDownload: true,
+              git: false,
+            },
+          }),
+        )
+        expect(result.isError, attempt.name).toBe(true)
+        expect(report.error?.message, attempt.name).toContain('MCP server root')
+        await expect(readFile(join(attempt.target, 'maa-project.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
       }
     },
     MCP_TEST_TIMEOUT_MS,

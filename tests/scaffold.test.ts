@@ -619,6 +619,12 @@ describe('scaffold', () => {
       }),
     )
 
+    expect(result.config.project.displayName).toBe('maa-resource-create')
+    expect(result.config.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: 'pack-a', label: 'Pack A' }),
+      ]),
+    )
     expect(result.config.resources.map((pack) => pack.path)).toEqual([
       'resource/base',
       'resource/pack-a',

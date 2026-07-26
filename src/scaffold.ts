@@ -90,10 +90,7 @@ export async function createProject(
     )
   }
   assertValidSlug(slug)
-  const displayName = requiredNonBlank(
-    options.displayName ?? options.label ?? defaultName,
-    'Project display name cannot be blank.',
-  )
+  const displayName = requiredNonBlank(options.displayName ?? defaultName, 'Project display name cannot be blank.')
   const version = stripV(options.version ?? '0.1.0')
   assertValidSemVer(version)
 

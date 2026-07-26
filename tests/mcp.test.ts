@@ -151,6 +151,43 @@ describe('MCP server', () => {
   )
 
   it(
+    'keeps resource-pack labels separate from the project display name',
+    async () => {
+      const root = await tempRoot()
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'create_project',
+        arguments: {
+          name: 'maa-mcp-labeled-pack',
+          add: [
+            'resource-pack',
+          ],
+          resourcePackSlug: 'extra',
+          resourcePackLabel: 'Extra Resource',
+          skipDownload: true,
+        },
+      })
+      const { result, report } = parseToolReport(response)
+      const config = JSON.parse(await readFile(join(root, 'maa-mcp-labeled-pack', 'maa-project.json'), 'utf8')) as {
+        project: { displayName: string }
+        resources: Array<{ slug: string; label: string }>
+      }
+
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({ command: 'create', ok: true, root: join(root, 'maa-mcp-labeled-pack') })
+      expect(config.project.displayName).toBe('maa-mcp-labeled-pack')
+      expect(config.resources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ slug: 'extra', label: 'Extra Resource' }),
+        ]),
+      )
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'returns a successful CliJsonReport for doctor on a valid project',
     async () => {
       const projectRoot = await createValidProject('maa-mcp-doctor')

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { gzipSync } from 'node:zlib'
+import { crc32, gzipSync, gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createProject,
@@ -427,6 +427,32 @@ describe('scaffold', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('rejects ZIP CRC and TAR header checksum corruption', () => {
+    const archiveAsset = (format: 'zip' | 'tar.gz', archive: Buffer) => ({
+      path: `plugins/win-x64/runtime.${format === 'zip' ? 'zip' : 'tar.gz'}`,
+      url: 'https://example.test/runtime',
+      sha256: sha256(archive),
+      size: archive.byteLength,
+      extract: { product: 'MFAAvalonia' as const, platform: 'win-x64', format },
+    })
+
+    const zip = createZipArchive([{ path: 'MFAAvalonia.exe', content: Buffer.from('runtime') }])
+    const corruptZip = Buffer.from(zip)
+    const zipContentOffset = 30 + Buffer.byteLength('MFAAvalonia.exe')
+    corruptZip.writeUInt8(corruptZip.readUInt8(zipContentOffset) ^ 0xff, zipContentOffset)
+    expect(() => extractProjectArchiveAssets(corruptZip, archiveAsset('zip', corruptZip))).toThrow(
+      'ZIP entry CRC32 mismatch',
+    )
+
+    const tarGzip = createTarGzArchive([{ path: 'MFAAvalonia', content: Buffer.from('runtime'), mode: 0o755 }])
+    const corruptTar = gunzipSync(tarGzip)
+    corruptTar.writeUInt8(corruptTar.readUInt8(0) ^ 0x01, 0)
+    const corruptTarGzip = gzipSync(corruptTar)
+    expect(() => extractProjectArchiveAssets(corruptTarGzip, archiveAsset('tar.gz', corruptTarGzip))).toThrow(
+      'Invalid TAR header checksum',
+    )
   })
 
   it('does not install node dependencies during creation when downloads are skipped', async () => {
@@ -4482,13 +4508,14 @@ function createZipArchive(
   let offset = 0
   for (const file of files) {
     const name = Buffer.from(file.path, 'utf8')
+    const checksum = crc32(file.content)
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
     local.writeUInt16LE(20, 4)
     local.writeUInt16LE(0x0800, 6)
     local.writeUInt16LE(0, 8)
     local.writeUInt32LE(0, 10)
-    local.writeUInt32LE(0, 14)
+    local.writeUInt32LE(checksum, 14)
     local.writeUInt32LE(file.content.byteLength, 18)
     local.writeUInt32LE(file.content.byteLength, 22)
     local.writeUInt16LE(name.byteLength, 26)
@@ -4502,7 +4529,7 @@ function createZipArchive(
     central.writeUInt16LE(0x0800, 8)
     central.writeUInt16LE(0, 10)
     central.writeUInt32LE(0, 12)
-    central.writeUInt32LE(0, 16)
+    central.writeUInt32LE(checksum, 16)
     central.writeUInt32LE(file.content.byteLength, 20)
     central.writeUInt32LE(file.content.byteLength, 24)
     central.writeUInt16LE(name.byteLength, 28)

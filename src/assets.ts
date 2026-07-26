@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { gunzipSync, inflateRawSync } from 'node:zlib'
+import { crc32, gunzipSync, inflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { sha256, stableJson, writeFileAtomic } from './utils.js'
 
@@ -1170,6 +1170,11 @@ function readTarEntries(tar: Buffer): ArchiveFileEntry[] {
     entryCount += 1
     if (entryCount > maxEntries) throw new ArchiveLimitError('entries', maxEntries)
     const header = tar.subarray(offset, offset + 512)
+    const expectedChecksum = parseTarOctal(header.subarray(148, 156), 'checksum')
+    const actualChecksum = tarHeaderChecksum(header)
+    if (expectedChecksum !== actualChecksum) {
+      throw new Error(`Invalid TAR header checksum: expected ${expectedChecksum}, got ${actualChecksum}.`)
+    }
     const size = parseTarOctal(header.subarray(124, 136), 'size')
     const mode = parseTarOctal(header.subarray(100, 108), 'mode')
     const type = String.fromCharCode(header[156] ?? 0)
@@ -1247,6 +1252,7 @@ function readZipEntries(zip: Buffer): ArchiveFileEntry[] {
     }
     const flags = zip.readUInt16LE(offset + 8)
     const method = zip.readUInt16LE(offset + 10)
+    const checksum = zip.readUInt32LE(offset + 16)
     const compressedSize = zip.readUInt32LE(offset + 20)
     const uncompressedSize = zip.readUInt32LE(offset + 24)
     const nameLength = zip.readUInt16LE(offset + 28)
@@ -1271,6 +1277,7 @@ function readZipEntries(zip: Buffer): ArchiveFileEntry[] {
         compressedSize,
         uncompressedSize,
         method,
+        checksum,
       },
       maxExtractedBytes - extractedBytes,
       maxExtractedBytes,
@@ -1293,6 +1300,7 @@ function readZipEntryContent(
     compressedSize: number
     uncompressedSize: number
     method: number
+    checksum: number
   },
   maxOutputBytes: number,
   maxExtractedBytes: number,
@@ -1314,6 +1322,7 @@ function readZipEntryContent(
     if (compressed.byteLength !== entry.uncompressedSize) {
       throw new Error('ZIP entry size mismatch.')
     }
+    assertZipEntryChecksum(compressed, entry.checksum)
     return compressed
   }
   if (entry.method === 8) {
@@ -1327,9 +1336,17 @@ function readZipEntryContent(
     if (content.byteLength !== entry.uncompressedSize) {
       throw new Error('ZIP entry size mismatch after inflate.')
     }
+    assertZipEntryChecksum(content, entry.checksum)
     return content
   }
   throw new Error(`Unsupported ZIP compression method: ${entry.method}`)
+}
+
+function assertZipEntryChecksum(content: Buffer, expected: number): void {
+  const actual = crc32(content)
+  if (actual !== expected) {
+    throw new Error(`ZIP entry CRC32 mismatch: expected ${expected}, got ${actual}.`)
+  }
 }
 
 class ArchiveLimitError extends Error {
@@ -1351,6 +1368,14 @@ function tarHeaderPath(header: Buffer): string {
   const name = readNullTerminatedString(header.subarray(0, 100))
   const prefix = readNullTerminatedString(header.subarray(345, 500))
   return prefix ? `${prefix}/${name}` : name
+}
+
+function tarHeaderChecksum(header: Buffer): number {
+  let checksum = 0
+  for (let index = 0; index < header.byteLength; index += 1) {
+    checksum += index >= 148 && index < 156 ? 0x20 : (header[index] ?? 0)
+  }
+  return checksum
 }
 
 function parseTarOctal(value: Buffer, label: string): number {

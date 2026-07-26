@@ -184,7 +184,7 @@ describe('CLI JSON reports', () => {
           '--sync',
           'version',
           '--version',
-          'not-semver',
+          '1.0.0-alpha..1',
           '--report',
         ],
         projectRoot,

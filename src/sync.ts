@@ -18,6 +18,7 @@ import type { CliOptions, MaaProjectConfig, ManagedFileInput, ScaffoldResult } f
 import { projectControllerKinds } from './controllers.js'
 import { hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { assertValidSemVer } from './semver.js'
 
 type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
@@ -51,7 +52,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
     case 'version': {
       const version = stripV(options.version ?? options.syncValue ?? '')
       if (!version) throw new Error('--sync version requires --version <semver>')
-      assertSemver(version)
+      assertValidSemVer(version)
       config.project.version = version
       interfaceJson.version = addV(version)
       if (packageJson) packageJson.version = version
@@ -196,12 +197,6 @@ async function applySyncFileTransaction(
       )
     }
     throw error
-  }
-}
-
-function assertSemver(version: string): void {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
-    throw new Error(`Invalid version "${version}". Use a SemVer version such as 0.1.0.`)
   }
 }
 

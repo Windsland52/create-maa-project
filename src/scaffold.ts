@@ -31,6 +31,7 @@ import type {
   ScaffoldResult,
 } from './types.js'
 import { assertValidSlug, exists, normalizeSlug, prettyJson, readText, stableJson, stripV } from './utils.js'
+import { assertValidSemVer } from './semver.js'
 import {
   backupProjectSnapshot,
   listDirectoryEntries,
@@ -89,7 +90,7 @@ export async function createProject(
     'Project display name cannot be blank.',
   )
   const version = stripV(options.version ?? '0.1.0')
-  assertValidVersion(version)
+  assertValidSemVer(version)
 
   const targetHadEntries = (await listDirectoryEntries(targetRoot)).length > 0
   await assertCanCreateTarget(targetRoot, options, detectGitTree)
@@ -977,12 +978,6 @@ function pythonPending(): PendingItem[] {
       command: 'create-maa-project --update python-deps',
     },
   ]
-}
-
-function assertValidVersion(version: string): void {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
-    throw new Error(`Invalid version "${version}". Use a SemVer version such as 0.1.0.`)
-  }
 }
 
 function requiredNonBlank(value: string, message: string): string {

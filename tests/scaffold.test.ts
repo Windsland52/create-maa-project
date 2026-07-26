@@ -2657,6 +2657,42 @@ jobs:
     ])
   })
 
+  it('rejects conflicting target files across project archives', async () => {
+    const first = createZipArchive([{ path: 'MFAAvalonia.exe', content: Buffer.from('first') }])
+    const second = createZipArchive([{ path: 'MFAAvalonia.exe', content: Buffer.from('second') }])
+
+    await expect(
+      downloadProjectManifestAssets(
+        {
+          schemaVersion: 1,
+          product: 'MFAAvalonia',
+          assets: [
+            {
+              path: '.create-maa-project/runtime/downloads/first.zip',
+              url: 'https://example.test/first.zip',
+              sha256: sha256(first),
+              size: first.byteLength,
+              extract: { product: 'MFAAvalonia', platform: 'win-x64', format: 'zip' },
+            },
+            {
+              path: '.create-maa-project/runtime/downloads/second.zip',
+              url: 'https://example.test/second.zip',
+              sha256: sha256(second),
+              size: second.byteLength,
+              extract: { product: 'MFAAvalonia', platform: 'win-x64', format: 'zip' },
+            },
+          ],
+        },
+        {
+          downloader: async (url) => (url.endsWith('first.zip') ? first : second),
+          allowedPathPrefixes: ['.create-maa-project/runtime/'],
+        },
+      ),
+    ).rejects.toThrow(
+      'Project assets contain conflicting content for .create-maa-project/runtime/mfaa/win-x64/MFAAvalonia.exe.',
+    )
+  })
+
   it('downloads MFA runtime assets from a product manifest and clears runtime pending', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

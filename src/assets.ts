@@ -271,6 +271,7 @@ export async function downloadProjectManifestAssets(
     ? assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0)
     : undefined
   const downloaded: DownloadedAsset[] = []
+  const downloadedByPath = new Map<string, DownloadedAsset>()
   let completedBytes = 0
   for (const asset of assets) {
     const content = await downloader(asset.url, {
@@ -303,9 +304,11 @@ export async function downloadProjectManifestAssets(
       ...(totalBytes !== undefined ? { totalBytes } : {}),
     })
     if (asset.extract) {
-      downloaded.push(...extractProjectArchiveAsset(content, asset))
+      for (const extracted of extractProjectArchiveAsset(content, asset)) {
+        mergeProjectAsset(downloaded, downloadedByPath, extracted)
+      }
     } else {
-      downloaded.push({
+      mergeProjectAsset(downloaded, downloadedByPath, {
         path: asset.path,
         content,
         sha256: actualSha256,
@@ -315,6 +318,22 @@ export async function downloadProjectManifestAssets(
     }
   }
   return downloaded
+}
+
+function mergeProjectAsset(
+  downloaded: DownloadedAsset[],
+  downloadedByPath: Map<string, DownloadedAsset>,
+  asset: DownloadedAsset,
+): void {
+  const existing = downloadedByPath.get(asset.path.toLowerCase())
+  if (!existing) {
+    downloadedByPath.set(asset.path.toLowerCase(), asset)
+    downloaded.push(asset)
+    return
+  }
+  if (existing.sha256 !== asset.sha256 || existing.mode !== asset.mode) {
+    throw new Error(`Project assets contain conflicting content for ${asset.path}.`)
+  }
 }
 
 export async function downloadUrl(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
@@ -457,11 +476,12 @@ function extractProjectArchiveAsset(archive: Buffer, asset: ProductAssetEntry): 
         url: `${asset.url}#${entry.sourcePath}`,
         ...(entry.mode !== undefined ? { mode: entry.mode } : {}),
       }
-      const existing = selected.get(targetPath)
+      const targetKey = targetPath.toLowerCase()
+      const existing = selected.get(targetKey)
       if (existing && existing.sha256 !== downloaded.sha256) {
         throw new Error(`Archive extraction would overwrite ${targetPath} with different content.`)
       }
-      selected.set(targetPath, downloaded)
+      selected.set(targetKey, downloaded)
     }
   }
   if (selected.size === 0) {

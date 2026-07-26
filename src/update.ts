@@ -5,9 +5,9 @@ import {
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { spawn } from 'node:child_process'
-import { chmod, copyFile, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, cp, lstat, mkdir, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import {
   downloadDefaultOcrZip,
   downloadUrl,
@@ -233,16 +233,25 @@ export async function recordUpdateRequests(
             if (!subPath) {
               throw new Error('ocr.submodulePath is required when ocr.source is "submodule"')
             }
-            const ocrDest = join(root, 'resource/base/model/ocr')
-            const subRoot = join(root, subPath)
+            const projectRoot = await realpath(root)
+            const subRoot = await resolveContainedExistingPath(projectRoot, subPath, 'ocr.submodulePath')
+            const ocrDest = resolve(projectRoot, 'resource/base/model/ocr')
             await mkdir(ocrDest, { recursive: true })
+            const resolvedOcrDest = await realpath(ocrDest)
+            assertPathWithin(projectRoot, resolvedOcrDest, 'OCR destination')
             if (config.ocr.files) {
               for (const [destName, srcRel] of Object.entries(config.ocr.files)) {
-                await cp(join(subRoot, srcRel), join(ocrDest, destName))
+                assertSafeRelativePath(destName, 'ocr.files destination', { allowNested: false })
+                const source = await resolveContainedExistingPath(subRoot, srcRel, `ocr.files["${destName}"]`)
+                if (!(await stat(source)).isFile()) {
+                  throw new Error(`ocr.files["${destName}"] must reference a file inside the OCR submodule.`)
+                }
+                await cp(source, resolve(resolvedOcrDest, destName), { force: true })
                 written.add(['resource/base/model/ocr', destName].join('/'))
               }
             } else {
-              await cp(subRoot, ocrDest, { recursive: true, force: true })
+              await assertTreeContainsNoSymlinks(subRoot)
+              await cp(subRoot, resolvedOcrDest, { recursive: true, force: true })
               written.add('resource/base/model/ocr')
             }
             environment.onProgress?.('OCR models copied from submodule.')
@@ -834,4 +843,53 @@ function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     pythonDevCommand: config.python?.devCommand,
     resources: config.resources,
   }).filter((file) => file.path.startsWith('tools/schema/'))
+}
+
+function assertSafeRelativePath(
+  value: string,
+  label: string,
+  options: { allowNested: boolean } = { allowNested: true },
+): void {
+  const segments = value.split('/')
+  if (
+    value.trim() !== value ||
+    value === '' ||
+    value.includes('\\') ||
+    isAbsolute(value) ||
+    /^[A-Za-z]:/.test(value) ||
+    segments.some((segment) => segment === '' || segment === '.' || segment === '..') ||
+    (!options.allowNested && segments.length !== 1)
+  ) {
+    const expectation = options.allowNested ? 'a project-relative path' : 'a single file name'
+    throw new Error(`${label} must be ${expectation} without absolute, empty, dot, or backslash segments: ${value}`)
+  }
+}
+
+async function resolveContainedExistingPath(base: string, value: string, label: string): Promise<string> {
+  assertSafeRelativePath(value, label)
+  const resolvedBase = await realpath(base)
+  const candidate = await realpath(resolve(resolvedBase, value))
+  assertPathWithin(resolvedBase, candidate, label)
+  return candidate
+}
+
+function assertPathWithin(base: string, candidate: string, label: string): void {
+  const relativePath = relative(base, candidate)
+  if (
+    relativePath === '' ||
+    (!isAbsolute(relativePath) && relativePath !== '..' && !relativePath.startsWith(`..${sep}`))
+  ) {
+    return
+  }
+  throw new Error(`${label} must stay within ${base}: ${candidate}`)
+}
+
+async function assertTreeContainsNoSymlinks(path: string): Promise<void> {
+  for (const entry of await readdir(path, { withFileTypes: true })) {
+    const child = join(path, entry.name)
+    if (entry.isSymbolicLink() || (await lstat(child)).isSymbolicLink()) {
+      throw new Error(`OCR submodule directory copy does not allow symbolic links: ${child}`)
+    }
+    if (entry.isDirectory()) await assertTreeContainsNoSymlinks(child)
+  }
 }

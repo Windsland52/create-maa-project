@@ -1956,6 +1956,74 @@ jobs:
     ).rejects.toThrow('--update all is not supported')
   })
 
+  it('copies explicitly mapped OCR submodule files within the configured roots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(minimalOptions({ name: 'maa-ocr-submodule' }))
+    const projectRoot = join(root, 'maa-ocr-submodule')
+    const submoduleRoot = join(projectRoot, 'vendor/ocr-assets')
+    await mkdir(join(submoduleRoot, 'models'), { recursive: true })
+    await writeFile(join(submoduleRoot, 'models/det.onnx'), 'verified detector', 'utf8')
+    const config = await readProjectConfig(projectRoot)
+    config.ocr = {
+      source: 'submodule',
+      submodulePath: 'vendor/ocr-assets',
+      files: {
+        'det.onnx': 'models/det.onnx',
+      },
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+    )
+
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('verified detector')
+    expect(result.written).toContain('resource/base/model/ocr/det.onnx')
+  })
+
+  it('rejects OCR submodule source and destination paths outside their allowed roots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(minimalOptions({ name: 'maa-ocr-traversal' }))
+    const projectRoot = join(root, 'maa-ocr-traversal')
+    const submoduleRoot = join(projectRoot, 'vendor/ocr-assets')
+    await mkdir(submoduleRoot, { recursive: true })
+    await writeFile(join(submoduleRoot, 'safe.onnx'), 'safe source', 'utf8')
+    await writeFile(join(projectRoot, 'secret.onnx'), 'project secret', 'utf8')
+    const outsidePath = join(projectRoot, 'outside.txt')
+    await writeFile(outsidePath, 'keep me', 'utf8')
+    const config = await readProjectConfig(projectRoot)
+    config.ocr = {
+      source: 'submodule',
+      submodulePath: 'vendor/ocr-assets',
+      files: {
+        'keys.txt': '../secret.onnx',
+      },
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+    const options = defaultOptions({
+      update: [
+        'ocr-models',
+      ],
+    })
+
+    await expect(recordUpdateRequests(options)).rejects.toThrow('must be a project-relative path')
+
+    config.ocr.files = {
+      '../../../../outside.txt': 'safe.onnx',
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    await expect(recordUpdateRequests(options)).rejects.toThrow('must be a single file name')
+    expect(await readFile(outsidePath, 'utf8')).toBe('keep me')
+  })
+
   it('resolves MaaFramework, MFAAvalonia, and Python assets from GitHub release metadata', async () => {
     const mfa = await resolveProductAssetManifestFromGithubRelease(
       { product: 'MFAAvalonia', channel: 'stable', version: '', platform: 'win-x64' },

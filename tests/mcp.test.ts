@@ -377,6 +377,36 @@ describe('MCP server', () => {
   )
 
   it(
+    'rejects undeclared arguments for every MCP tool',
+    async () => {
+      const root = await tempRoot()
+      const session = await startSession(root)
+      await initialize(session)
+      const calls = [
+        { name: 'create_project', arguments: { name: 'must-not-exist', skipDownloads: true } },
+        { name: 'doctor', arguments: { verbose: true } },
+        { name: 'sync', arguments: { target: 'metadata', force: true } },
+        { name: 'update', arguments: { targets: ['schema'], force: true } },
+        { name: 'add', arguments: { addon: 'community', force: true } },
+        { name: 'restore', arguments: { backupId: 'missing', force: true } },
+        { name: 'clean_cache', arguments: { dryRun: true } },
+      ]
+
+      for (const call of calls) {
+        const response = await session.request('tools/call', call)
+        const { result, report } = parseToolReport(response)
+        expect(result.isError, call.name).toBe(true)
+        expect(report.error?.message, call.name).toContain(`Unknown argument for MCP tool ${call.name}:`)
+      }
+      await expect(readFile(join(root, 'must-not-exist', 'maa-project.json'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+      expect(session.exitCode()).toBeNull()
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'rejects update calls with an empty target list',
     async () => {
       const session = await startSession(await tempRoot())

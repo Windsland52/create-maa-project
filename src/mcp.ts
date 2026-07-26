@@ -74,6 +74,35 @@ const ADDONS = [
   'dependabot',
   'schema-sync',
 ] as const
+const CREATE_PROJECT_ARGUMENTS = [
+  'name',
+  'template',
+  'slug',
+  'displayName',
+  'controller',
+  'license',
+  'network',
+  'add',
+  'resourcePackSlug',
+  'resourcePackLabel',
+  'skipDownload',
+  'git',
+] as const
+const SYNC_ARGUMENTS = [
+  'target',
+  'value',
+] as const
+const UPDATE_ARGUMENTS = [
+  'targets',
+] as const
+const ADD_ARGUMENTS = [
+  'addon',
+  'resourcePackSlug',
+  'label',
+] as const
+const RESTORE_ARGUMENTS = [
+  'backupId',
+] as const
 
 type ToolName = 'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'restore' | 'clean_cache'
 
@@ -214,21 +243,7 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
     case 'create_project':
       return callCreateProject(context, input)
     case 'doctor':
-      return withReport(
-        context,
-        'doctor',
-        async (reportContext) => {
-          const root = context.root
-          if (!(await stat(root)).isDirectory()) throw new Error(`MCP project root is not a directory: ${root}`)
-          const doctor = await runDoctor(root)
-          return createDoctorJsonReport({
-            context: reportContext,
-            root,
-            doctor,
-          })
-        },
-        { reportFailureIsError: false },
-      )
+      return callDoctor(context, input)
     case 'sync':
       return callSync(context, input)
     case 'update':
@@ -238,7 +253,7 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
     case 'restore':
       return callRestore(context, input)
     case 'clean_cache':
-      return callCleanCache(context)
+      return callCleanCache(context, input)
     default:
       return errorToolResult(context, 'create', new Error(`Unknown MCP tool: ${name}`))
   }
@@ -247,7 +262,7 @@ async function callTool(context: McpServerContext, name: string, input: unknown)
 async function callCreateProject(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = createProjectOptions(argsRecord(input))
+    options = createProjectOptions(argsRecord(input, CREATE_PROJECT_ARGUMENTS, 'create_project'))
   } catch (error) {
     return errorToolResult(context, 'create', error)
   }
@@ -264,10 +279,33 @@ async function callCreateProject(context: McpServerContext, input: unknown): Pro
   })
 }
 
+async function callDoctor(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  try {
+    argsRecord(input, [], 'doctor')
+  } catch (error) {
+    return errorToolResult(context, 'doctor', error)
+  }
+  return withReport(
+    context,
+    'doctor',
+    async (reportContext) => {
+      const root = context.root
+      if (!(await stat(root)).isDirectory()) throw new Error(`MCP project root is not a directory: ${root}`)
+      const doctor = await runDoctor(root)
+      return createDoctorJsonReport({
+        context: reportContext,
+        root,
+        doctor,
+      })
+    },
+    { reportFailureIsError: false },
+  )
+}
+
 async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = syncOptions(argsRecord(input))
+    options = syncOptions(argsRecord(input, SYNC_ARGUMENTS, 'sync'))
   } catch (error) {
     return errorToolResult(context, 'sync', error)
   }
@@ -279,7 +317,7 @@ async function callSync(context: McpServerContext, input: unknown): Promise<Call
 async function callUpdate(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = updateOptions(argsRecord(input))
+    options = updateOptions(argsRecord(input, UPDATE_ARGUMENTS, 'update'))
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
@@ -297,7 +335,7 @@ async function callUpdate(context: McpServerContext, input: unknown): Promise<Ca
 async function callAdd(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let options: CliOptions
   try {
-    options = addOptions(argsRecord(input))
+    options = addOptions(argsRecord(input, ADD_ARGUMENTS, 'add'))
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
@@ -319,7 +357,7 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
 async function callRestore(context: McpServerContext, input: unknown): Promise<CallToolResult> {
   let backupId: string
   try {
-    backupId = requiredString(argsRecord(input), 'backupId')
+    backupId = requiredString(argsRecord(input, RESTORE_ARGUMENTS, 'restore'), 'backupId')
   } catch (error) {
     return errorToolResult(context, 'backup', error)
   }
@@ -340,7 +378,12 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
   })
 }
 
-async function callCleanCache(context: McpServerContext): Promise<CallToolResult> {
+async function callCleanCache(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  try {
+    argsRecord(input, [], 'clean_cache')
+  } catch (error) {
+    return errorToolResult(context, 'update', error)
+  }
   return withReport(context, 'update', async (reportContext) => {
     const root = context.root
     return createBaseReport(reportContext, root, [
@@ -550,12 +593,21 @@ function baseOptions(overrides: Partial<CliOptions> = {}): CliOptions {
   }
 }
 
-function argsRecord(input: unknown): JsonObject {
+function argsRecord(input: unknown, allowed: readonly string[], tool: ToolName): JsonObject {
   if (input === undefined) return {}
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new Error('Tool arguments must be an object.')
   }
-  return input as JsonObject
+  const args = input as JsonObject
+  const allowedSet = new Set(allowed)
+  const unknown = Object.keys(args)
+    .filter((key) => !allowedSet.has(key))
+    .sort()
+  if (unknown.length > 0) {
+    const label = unknown.length === 1 ? 'argument' : 'arguments'
+    throw new Error(`Unknown ${label} for MCP tool ${tool}: ${unknown.join(', ')}.`)
+  }
+  return args
 }
 
 function requiredString(args: JsonObject, key: string): string {

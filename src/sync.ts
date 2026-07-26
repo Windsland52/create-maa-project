@@ -86,7 +86,12 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   if (packageJson) applyPackageMetadata(packageJson, config)
   const pyproject = await syncedPyproject(root, config)
 
-  files.push(maatoolsConfigFile(config.resources.map((pack) => `./${pack.path}`)))
+  files.push(
+    maatoolsConfigFile(
+      config.resources.map((pack) => `./${pack.path}`),
+      config.python !== undefined,
+    ),
+  )
   files.push({ path: CONFIG_FILE, content: stableJson(config), managed: false })
   // interface.json is intentionally unmanaged: projects may carry a hand-tuned
   // controller/resource layout (e.g. multi-server packs) that the template-

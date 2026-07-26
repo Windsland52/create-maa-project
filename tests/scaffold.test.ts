@@ -1269,7 +1269,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     )
   })
 
-  it('syncs agent pyproject version metadata', async () => {
+  it('syncs agent metadata without removing its MaaTools debug configuration', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
@@ -1286,6 +1286,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 
     expect(await readFile(join(root, 'maa-pyproject-sync', 'pyproject.toml'), 'utf8')).toContain(
       'name = "maa-pyproject-sync"\nversion = "0.2.0"',
+    )
+    expect(await readFile(join(root, 'maa-pyproject-sync', 'maatools.config.mts'), 'utf8')).toContain(
+      "uv: 'Maa Agent: Debug'",
     )
   })
 

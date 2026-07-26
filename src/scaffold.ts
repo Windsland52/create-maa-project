@@ -312,6 +312,33 @@ export function addAgent(options: CliOptions, root = process.cwd()): Promise<Sca
 async function addAgentLocked(_options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (config.python) {
+    const dependencyPaths = new Set(['requirements.in', 'requirements.txt', 'uv.lock'])
+    const candidates = [
+      ...agentFiles({
+        slug: config.project.slug,
+        version: config.project.version,
+        displayName: config.project.displayName,
+      }),
+      ...projectCustomSchemaFiles(true),
+    ].filter((file) => !dependencyPaths.has(file.path))
+    const repairFiles: ManagedFileInput[] = []
+    for (const file of candidates) {
+      const fullPath = join(root, file.path)
+      if (!(await exists(fullPath))) {
+        repairFiles.push(file)
+        continue
+      }
+      if (file.path === '.python-version') {
+        if ((await readText(fullPath)).trim() !== config.python.recommendedPython) repairFiles.push(file)
+        continue
+      }
+      if (file.path === 'pyproject.toml') {
+        const content = await readText(fullPath)
+        const repaired = syncRequiresPython(content, config.python.requiresPython)
+        if (repaired !== content) repairFiles.push({ ...file, content: repaired })
+      }
+    }
+    if (repairFiles.length > 0) return writeAddonFiles(root, config, repairFiles, _options)
     return {
       root,
       config,
@@ -421,6 +448,12 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
     },
     { clearStale: _options.clearStaleLock },
   )
+}
+
+function syncRequiresPython(content: string, requiresPython: string): string {
+  const field = /^requires-python\s*=\s*["'][^"']*["']\s*$/m
+  if (field.test(content)) return content.replace(field, `requires-python = "${requiresPython}"`)
+  return content.replace(/^\[project\]\s*$/m, `[project]\nrequires-python = "${requiresPython}"`)
 }
 
 export function addResourcePack(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {

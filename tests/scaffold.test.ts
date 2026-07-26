@@ -2311,6 +2311,19 @@ jobs:
     expect(output).toContain('pyproject.toml requires-python must match python.requiresPython (>=3.13,<3.14)')
     expect(output).toContain('create-maa-project --add agent')
     expect(output).toContain('create-maa-project --update python-deps')
+
+    process.chdir(projectRoot)
+    const repair = await addAgent(defaultOptions({ add: ['agent'] }))
+    expect(repair.written).toEqual(expect.arrayContaining(['.python-version', 'pyproject.toml', 'agent/main.py']))
+    expect(await readFile(join(projectRoot, '.python-version'), 'utf8')).toBe('3.13\n')
+    expect(await readFile(pyprojectPath, 'utf8')).toContain('requires-python = ">=3.13,<3.14"')
+    expect(await pathExists(join(projectRoot, 'agent/main.py'))).toBe(true)
+    expect(await pathExists(join(projectRoot, 'requirements.txt'))).toBe(false)
+
+    const remainingReport = await runDoctor(projectRoot)
+    const remainingOutput = remainingReport.lines.join('\n')
+    expect(remainingOutput).not.toContain('create-maa-project --add agent')
+    expect(remainingOutput).toContain('create-maa-project --update python-deps')
   })
 
   it('updates schema files explicitly without creating project lock state', async () => {

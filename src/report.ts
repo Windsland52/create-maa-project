@@ -6,6 +6,15 @@ import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './t
 
 export type CliReportCommand = 'create' | 'sync' | 'update' | 'add' | 'doctor' | 'backup' | 'clean-cache'
 
+export type CliErrorCode =
+  | 'CMP_CREATE_FAILED'
+  | 'CMP_SYNC_FAILED'
+  | 'CMP_UPDATE_FAILED'
+  | 'CMP_ADD_FAILED'
+  | 'CMP_DOCTOR_FAILED'
+  | 'CMP_BACKUP_FAILED'
+  | 'CMP_CLEAN_CACHE_FAILED'
+
 export type SuggestedCommand = {
   command: string
   description: string
@@ -43,7 +52,8 @@ export type CliJsonReport = {
   backup?: BackupJsonResult
   error?: {
     message: string
-    code?: string
+    code: CliErrorCode | string
+    causeCode?: string
   }
 }
 
@@ -166,15 +176,13 @@ export function createErrorJsonReport(input: { context: ReportContext; root: str
     exitCode: 1,
     root: input.root,
   })
-  const code = errorCode(input.error)
-  report.error = code
-    ? {
-        message: errorMessage(input.error),
-        code,
-      }
-    : {
-        message: errorMessage(input.error),
-      }
+  const explicitCode = errorCode(input.error)
+  const code = explicitCode?.startsWith('CMP_') ? explicitCode : commandErrorCode(input.context.command)
+  report.error = {
+    message: errorMessage(input.error),
+    code,
+    ...(explicitCode && explicitCode !== code ? { causeCode: explicitCode } : {}),
+  }
   return report
 }
 
@@ -269,4 +277,23 @@ function errorCode(error: unknown): string | undefined {
   if (typeof value === 'string') return value
   if (typeof value === 'number') return String(value)
   return undefined
+}
+
+function commandErrorCode(command: CliReportCommand): CliErrorCode {
+  switch (command) {
+    case 'create':
+      return 'CMP_CREATE_FAILED'
+    case 'sync':
+      return 'CMP_SYNC_FAILED'
+    case 'update':
+      return 'CMP_UPDATE_FAILED'
+    case 'add':
+      return 'CMP_ADD_FAILED'
+    case 'doctor':
+      return 'CMP_DOCTOR_FAILED'
+    case 'backup':
+      return 'CMP_BACKUP_FAILED'
+    case 'clean-cache':
+      return 'CMP_CLEAN_CACHE_FAILED'
+  }
 }

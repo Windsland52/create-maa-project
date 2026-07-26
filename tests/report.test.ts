@@ -37,7 +37,7 @@ type JsonReport = {
     lines: string[]
     checks: Array<{ id: string; status: 'pass' | 'fail' | 'skipped'; summary: string; details: string[] }>
   }
-  error?: { message: string; code?: string }
+  error?: { message: string; code: string; causeCode?: string }
 }
 
 type CliResult = {
@@ -499,6 +499,7 @@ describe('CLI JSON reports', () => {
         root: projectRoot,
       })
       expect(report.error?.message).toContain('Invalid version')
+      expect(report.error?.code).toBe('CMP_SYNC_FAILED')
     },
     CLI_TEST_TIMEOUT_MS,
   )

@@ -407,9 +407,23 @@ type CliJsonReport = {
               removed: string[];
               preRestoreBackupId: string;
           };
-    error?: {message: string; code?: string};
+    error?: {
+        message: string;
+        code:
+            | "CMP_CREATE_FAILED"
+            | "CMP_SYNC_FAILED"
+            | "CMP_UPDATE_FAILED"
+            | "CMP_ADD_FAILED"
+            | "CMP_DOCTOR_FAILED"
+            | "CMP_BACKUP_FAILED"
+            | "CMP_CLEAN_CACHE_FAILED";
+        causeCode?: string;
+    };
 };
 ```
+
+失败报告始终包含稳定的 `CMP_*` 命令错误码；如果底层系统还提供了 `ENOENT` 等原生错误码，会另外保存在
+`causeCode`，避免调用方依赖操作系统相关信息。
 
 失败报告示例：
 
@@ -431,7 +445,8 @@ type CliJsonReport = {
     "pending": [],
     "suggestedCommands": [],
     "error": {
-        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."
+        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0.",
+        "code": "CMP_SYNC_FAILED"
     }
 }
 ```

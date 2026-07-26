@@ -183,8 +183,9 @@ const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
       properties: {
         message: { type: 'string' },
         code: { type: 'string' },
+        causeCode: { type: 'string' },
       },
-      required: ['message'],
+      required: ['message', 'code'],
     },
   },
   required: [

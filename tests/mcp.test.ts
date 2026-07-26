@@ -50,7 +50,7 @@ type JsonReport = {
     lines: string[]
     checks: Array<{ id: string; status: 'pass' | 'fail' | 'skipped'; summary: string; details: string[] }>
   }
-  error?: { message: string; code?: string }
+  error?: { message: string; code: string; causeCode?: string }
 }
 
 type ToolCallResult = {
@@ -610,6 +610,7 @@ describe('MCP server', () => {
       const missingNetworkReport = parseToolReport(missingNetwork)
       expect(missingNetworkReport.result.isError).toBe(true)
       expect(missingNetworkReport.report.error?.message).toContain('sync target "network" requires value')
+      expect(missingNetworkReport.report.error?.code).toBe('CMP_SYNC_FAILED')
 
       const extraMetadata = await session.request('tools/call', {
         name: 'sync',
@@ -955,6 +956,7 @@ describe('MCP server', () => {
         root,
       })
       expect(report.error?.message).toEqual(expect.any(String))
+      expect(report.error).toMatchObject({ code: 'CMP_DOCTOR_FAILED', causeCode: 'ENOENT' })
       expect(session.exitCode()).toBeNull()
 
       const listAfterError = await session.request('tools/list')

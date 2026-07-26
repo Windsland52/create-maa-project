@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:p
 import { setTimeout as delay } from 'node:timers/promises'
 import type { MaaProjectConfig, ManagedFileInput, PendingItem, ReleaseChannel } from './types.js'
 import { exists, nowIso, readText, stableJson, writeFileAtomic, writeText } from './utils.js'
+import { validateProjectConfig } from './project-config.js'
 
 export const CONFIG_FILE = 'maa-project.json'
 export const LOCAL_STATE_DIR = '.create-maa-project'
@@ -201,7 +202,7 @@ export async function readProjectConfig(root: string): Promise<MaaProjectConfig>
   if (!(await exists(configPath))) {
     throw new Error(`No ${CONFIG_FILE} found. Run this command in a MaaFW project root.`)
   }
-  const config = JSON.parse(await readText(configPath)) as MaaProjectConfig
+  const config = validateProjectConfig(JSON.parse(await readText(configPath)) as unknown)
   return migrateProjectConfig(config)
 }
 

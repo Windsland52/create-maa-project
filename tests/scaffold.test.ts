@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { link, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp as fsMkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -41,6 +41,7 @@ import {
 import { sha256 } from '../src/utils.js'
 
 const cwdStack: string[] = []
+const tempRoots: string[] = []
 const execFileAsync = promisify(execFile)
 const repoNodeModules = join(dirname(dirname(fileURLToPath(import.meta.url))), 'node_modules')
 
@@ -111,11 +112,18 @@ beforeEach(() => {
   cwdStack.push(process.cwd())
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks()
   const cwd = cwdStack.pop()
   if (cwd) process.chdir(cwd)
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
+
+async function mkdtemp(prefix: string): Promise<string> {
+  const root = await fsMkdtemp(prefix)
+  tempRoots.push(root)
+  return root
+}
 
 describe('scaffold', () => {
   it('creates minimal project without repository add-ons', async () => {

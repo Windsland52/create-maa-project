@@ -1818,6 +1818,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-node-tooling-test' }))
     const projectRoot = join(root, 'maa-node-tooling-test')
+    await clearPending(projectRoot)
     await writeFile(join(projectRoot, '.node-version'), '22\n', 'utf8')
     await writeFile(
       join(projectRoot, '.github/workflows/check.yml'),
@@ -1838,7 +1839,13 @@ jobs:
     expect(report.ok).toBe(false)
     expect(output).toContain('.node-version must pin Node 24')
     expect(output).toContain('.github/workflows/check.yml must use Node 24')
-    expect(output).toContain('To fix: set .node-version to 24')
+    expect(output).toContain('To fix: create-maa-project --add dev-tools')
+    expect(output).toContain('To fix: create-maa-project --add github')
+
+    process.chdir(projectRoot)
+    await addDevTools(defaultOptions({ add: ['dev-tools'] }))
+    await addGithub(defaultOptions({ add: ['github'] }))
+    expect((await runDoctor(projectRoot)).ok).toBe(true)
   })
 
   it('doctor reports VS Code settings drift with a repair command', async () => {
@@ -2264,7 +2271,7 @@ jobs:
 
     expect(report.ok).toBe(false)
     expect(output).toContain('Required project file is missing: tools/check-project.mjs')
-    expect(output).toContain('restore it from version control or a project backup')
+    expect(output).toContain('create-maa-project --add dev-tools')
   })
 
   it('doctor reports a missing pnpm lockfile', async () => {

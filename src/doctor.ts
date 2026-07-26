@@ -266,18 +266,22 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
   ]) {
     if (await exists(join(root, path))) continue
     lines.push(`[ERR] Required project file is missing: ${path}`)
-    lines.push('      To fix: restore it from version control or a project backup.')
+    lines.push(
+      path === 'package.json' || path === 'pnpm-workspace.yaml'
+        ? '      To fix: restore it from version control or a project backup.'
+        : '      To fix: create-maa-project --add dev-tools',
+    )
     ok = false
   }
 
   const nodeVersionPath = join(root, '.node-version')
   if (!(await exists(nodeVersionPath))) {
     lines.push('[ERR] .node-version is missing.')
-    lines.push('      To fix: restore it from version control or a project backup.')
+    lines.push('      To fix: create-maa-project --add dev-tools')
     ok = false
   } else if ((await readText(nodeVersionPath)).trim() !== '24') {
     lines.push('[ERR] .node-version must pin Node 24.')
-    lines.push('      To fix: set .node-version to 24.')
+    lines.push('      To fix: create-maa-project --add dev-tools')
     ok = false
   }
 
@@ -293,19 +297,25 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
     const workflowPath = join(root, workflow)
     if (!(await exists(workflowPath))) {
       lines.push(`[ERR] ${workflow} is missing.`)
-      lines.push('      To fix: restore it from version control or a project backup.')
+      lines.push(`      To fix: ${workflowRepairCommand(workflow)}`)
       ok = false
       continue
     }
     if (!workflowPinsNode24(await readText(workflowPath))) {
       lines.push(`[ERR] ${workflow} must use Node 24 in actions/setup-node.`)
-      lines.push('      To fix: update the workflow to use Node 24.')
+      lines.push(`      To fix: ${workflowRepairCommand(workflow)}`)
       ok = false
     }
   }
 
   if (ok) lines.push('[OK] Node tooling files pin Node 24.')
   return ok
+}
+
+function workflowRepairCommand(workflow: string): string {
+  if (workflow.endsWith('/schema-sync.yml')) return 'create-maa-project --add schema-sync'
+  if (workflow.endsWith('/optimize-images.yml')) return 'create-maa-project --add optimize-images'
+  return 'create-maa-project --add github'
 }
 
 async function checkPythonTooling(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {

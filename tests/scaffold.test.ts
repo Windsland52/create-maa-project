@@ -166,6 +166,11 @@ describe('scaffold', () => {
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(false)
     expect(await pathExists(join(projectRoot, 'tools/schema/interface.schema.json'))).toBe(false)
+    const readme = await readFile(join(projectRoot, 'README.md'), 'utf8')
+    expect(readme).toContain('如果根目录存在 `package.json`')
+    expect(readme).toContain('create-maa-project --add dev-tools')
+    expect(readme).toContain('如果存在 `.github/workflows/release.yml`')
+    expect(readme).toContain('create-maa-project --add github')
     expect(await pathExists(join(projectRoot, 'maa-project.lock.json'))).toBe(false)
     expect(result.pending).toEqual(
       expect.arrayContaining([
@@ -858,6 +863,10 @@ describe('scaffold', () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-agent-dependabot', template: 'agent' }))
+    const agentReadme = await readFile(join(root, 'maa-agent-dependabot', 'README.md'), 'utf8')
+    expect(agentReadme).toContain('uv run python agent/bootstrap.py')
+    expect(agentReadme).toContain('如果根目录存在 `package.json`')
+    expect(agentReadme).toContain('如果存在 `.github/workflows/release.yml`')
     process.chdir(join(root, 'maa-agent-dependabot'))
 
     await addDependabot(

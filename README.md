@@ -85,7 +85,8 @@ create-maa-project --lang en
 
 ## 配合 MCP Client 使用
 
-MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交互式的：agent 应该先向你问清项目名、要 Pipeline 还是 Python Agent、要启用哪些 add-ons，以及 resource pack 的文件夹名，再调用 MCP tool。
+MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交互式的：`create_project` 要求 agent 先向你问清项目名、
+要 Pipeline 还是 Python Agent、支持哪些控制器、要启用哪些 add-ons，以及 resource pack 的文件夹名，再调用 MCP tool。
 
 如果已经全局安装 CLI，可以这样配置 MCP server：
 

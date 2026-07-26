@@ -139,7 +139,15 @@ describe('MCP server', () => {
       ])
       expect(toolByName(tools, 'create_project').inputSchema.required).toEqual([
         'name',
+        'template',
+        'controllers',
       ])
+      expect(toolByName(tools, 'create_project').inputSchema.properties?.controllers).toMatchObject({
+        type: 'array',
+        items: {
+          enum: ['Adb', 'Win32', 'MacOS', 'PlayCover', 'Gamepad', 'WlRoots'],
+        },
+      })
       expect(toolByName(tools, 'sync').inputSchema.required).toEqual([
         'target',
       ])
@@ -231,6 +239,8 @@ describe('MCP server', () => {
         name: 'create_project',
         arguments: {
           name: 'maa-mcp-labeled-pack',
+          template: 'pipeline',
+          controllers: ['Adb'],
           add: [
             'resource-pack',
           ],
@@ -331,6 +341,8 @@ describe('MCP server', () => {
           name: 'create_project',
           arguments: {
             name: projectPath,
+            template: 'pipeline',
+            controllers: ['Adb'],
             skipDownload: true,
             git: false,
           },
@@ -442,6 +454,8 @@ describe('MCP server', () => {
             name: 'create_project',
             arguments: {
               name: attempt.name,
+              template: 'pipeline',
+              controllers: ['Adb'],
               skipDownload: true,
               git: false,
             },
@@ -666,6 +680,45 @@ describe('MCP server', () => {
   )
 
   it(
+    'requires an explicit project template and controller list',
+    async () => {
+      const session = await startSession(await tempRoot())
+      await initialize(session)
+
+      const cases = [
+        {
+          arguments: { name: 'missing-template', controllers: ['Adb'], skipDownload: true },
+          message: 'template is required',
+        },
+        {
+          arguments: { name: 'missing-controllers', template: 'pipeline', skipDownload: true },
+          message: 'controllers is required',
+        },
+        {
+          arguments: {
+            name: 'duplicate-controllers',
+            template: 'pipeline',
+            controllers: ['Adb', 'Adb'],
+            skipDownload: true,
+          },
+          message: 'controllers must not contain duplicate values',
+        },
+      ]
+      for (const testCase of cases) {
+        const { result, report } = parseToolReport(
+          await session.request('tools/call', {
+            name: 'create_project',
+            arguments: testCase.arguments,
+          }),
+        )
+        expect(result.isError).toBe(true)
+        expect(report.error?.message).toContain(testCase.message)
+      }
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'rejects create_project resource-pack add-ons without a resourcePackSlug',
     async () => {
       const session = await startSession(await tempRoot())
@@ -675,6 +728,8 @@ describe('MCP server', () => {
         name: 'create_project',
         arguments: {
           name: 'maa-mcp-resource-pack',
+          template: 'pipeline',
+          controllers: ['Adb'],
           add: [
             'resource-pack',
           ],

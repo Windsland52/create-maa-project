@@ -11,7 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import packageJson from '../package.json' with { type: 'json' }
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
-import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
+import { CONTROLLER_KINDS } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { cleanCache, inspectProjectBackup, listProjectBackups, restoreBackup, withProjectLock } from './project.js'
@@ -29,7 +29,7 @@ import {
 } from './report.js'
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
-import type { CliOptions, ControllerKind } from './types.js'
+import type { CliOptions } from './types.js'
 import { recordUpdateRequests } from './update.js'
 import { UPDATE_TARGETS } from './update-targets.js'
 
@@ -72,7 +72,7 @@ const CREATE_PROJECT_ARGUMENTS = [
   'template',
   'slug',
   'displayName',
-  'controller',
+  'controllers',
   'license',
   'network',
   'add',
@@ -238,7 +238,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
   {
     name: 'create_project',
     description:
-      'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
+      'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, controller targets, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
     inputSchema: objectSchema(
       {
         name: stringSchema(
@@ -250,7 +250,10 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
         ),
         slug: stringSchema('ASCII kebab-case project id.'),
         displayName: stringSchema('Human-readable project display name.'),
-        controller: stringSchema('Comma-separated controller targets.'),
+        controllers: arraySchema(
+          enumSchema(CONTROLLER_KINDS, 'MaaFW controller target.'),
+          'One or more controller targets. Ask the user which platforms the project supports.',
+        ),
         license: enumSchema(LICENSE_KINDS, 'Project license.'),
         network: enumSchema(NETWORK_MODES, 'Network asset source mode.'),
         add: arraySchema(
@@ -268,6 +271,8 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
       },
       [
         'name',
+        'template',
+        'controllers',
       ],
     ),
   },
@@ -657,8 +662,11 @@ function reportToolResult(report: CliJsonReport, isError = !report.ok): CallTool
 }
 
 function createProjectOptions(args: JsonObject): CliOptions {
-  const template = optionalEnum(args, 'template', TEMPLATE_NAMES) ?? 'pipeline'
-  const controller = optionalString(args, 'controller')
+  const template = requiredEnum(args, 'template', TEMPLATE_NAMES)
+  const controllers = requiredStringArray(args, 'controllers', CONTROLLER_KINDS)
+  if (new Set(controllers).size !== controllers.length) {
+    throw new Error('controllers must not contain duplicate values.')
+  }
   const resourcePackSlug = optionalString(args, 'resourcePackSlug')
   const resourcePackLabel = optionalString(args, 'resourcePackLabel')
   const add = [
@@ -675,7 +683,8 @@ function createProjectOptions(args: JsonObject): CliOptions {
   const overrides: Partial<CliOptions> = {
     name: requiredString(args, 'name'),
     template,
-    explicitTemplate: optionalString(args, 'template') !== undefined,
+    explicitTemplate: true,
+    controllers,
     add,
     skipDownload: optionalBoolean(args, 'skipDownload') ?? false,
   }
@@ -688,7 +697,6 @@ function createProjectOptions(args: JsonObject): CliOptions {
   if (displayName !== undefined) overrides.displayName = displayName
   if (resourcePackSlug !== undefined) overrides.resourcePackSlug = resourcePackSlug
   if (resourcePackLabel !== undefined) overrides.label = resourcePackLabel
-  if (controller) overrides.controllers = parseControllerOption(controller)
   if (license !== undefined) overrides.license = license
   if (network !== undefined) overrides.network = network
   if (initializeGit !== undefined) overrides.initializeGit = initializeGit
@@ -935,16 +943,6 @@ function optionalStringArray<T extends readonly string[]>(
     strings.push(item)
   }
   return strings as T extends readonly string[] ? T[number][] : string[]
-}
-
-function parseControllerOption(value: string): ControllerKind[] {
-  const kinds: ControllerKind[] = []
-  for (const item of value.split(',')) {
-    const kind = normalizeControllerKind(item)
-    if (!kind) throw new Error(controllerUnavailableMessage(item.trim() || value))
-    kinds.push(kind)
-  }
-  return uniqueControllerKinds(kinds)
 }
 
 async function runMcpChildCommand(root: string, command: string, args: string[]): Promise<void> {

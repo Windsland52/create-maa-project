@@ -117,6 +117,8 @@ const PRODUCT_RELEASES: ProductReleaseConfig[] = [
 ]
 const DEFAULT_DOWNLOAD_ATTEMPTS = 3
 const DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
+const DEFAULT_MAX_EXTRACTED_BYTES = 512 * 1024 * 1024
+const DEFAULT_MAX_ARCHIVE_ENTRIES = 100_000
 export const PYTHON_EMBED_VERSION = '3.13.14'
 const PYTHON_STANDALONE_MINOR = '3.13'
 
@@ -1122,11 +1124,22 @@ type ArchiveFileEntry = {
 }
 
 function readTarGzipEntries(archive: Buffer): ArchiveFileEntry[] {
-  return readTarEntries(gunzipSync(archive))
+  const maxExtractedBytes = configuredArchiveLimit(
+    'CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES',
+    DEFAULT_MAX_EXTRACTED_BYTES,
+  )
+  try {
+    return readTarEntries(gunzipSync(archive, { maxOutputLength: maxExtractedBytes }))
+  } catch (error) {
+    if (isZlibOutputLimitError(error)) throw new ArchiveLimitError('extracted bytes', maxExtractedBytes)
+    throw error
+  }
 }
 
 function readTarEntries(tar: Buffer): ArchiveFileEntry[] {
+  const maxEntries = configuredArchiveLimit('CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES', DEFAULT_MAX_ARCHIVE_ENTRIES)
   const entries: ArchiveFileEntry[] = []
+  let entryCount = 0
   let offset = 0
   let globalPax: Record<string, string> = {}
   let nextPax: Record<string, string> | undefined
@@ -1134,6 +1147,8 @@ function readTarEntries(tar: Buffer): ArchiveFileEntry[] {
 
   while (offset + 512 <= tar.byteLength) {
     if (isZeroBlock(tar, offset)) break
+    entryCount += 1
+    if (entryCount > maxEntries) throw new ArchiveLimitError('entries', maxEntries)
     const header = tar.subarray(offset, offset + 512)
     const size = parseTarOctal(header.subarray(124, 136), 'size')
     const mode = parseTarOctal(header.subarray(100, 108), 'mode')
@@ -1190,14 +1205,23 @@ function readTarEntries(tar: Buffer): ArchiveFileEntry[] {
 }
 
 function readZipEntries(zip: Buffer): ArchiveFileEntry[] {
+  const maxExtractedBytes = configuredArchiveLimit(
+    'CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES',
+    DEFAULT_MAX_EXTRACTED_BYTES,
+  )
+  const maxEntries = configuredArchiveLimit('CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES', DEFAULT_MAX_ARCHIVE_ENTRIES)
   const eocdOffset = findEndOfCentralDirectory(zip)
   const centralDirectorySize = zip.readUInt32LE(eocdOffset + 12)
   const centralDirectoryOffset = zip.readUInt32LE(eocdOffset + 16)
   const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize
   const entries: ArchiveFileEntry[] = []
   let offset = centralDirectoryOffset
+  let entryCount = 0
+  let extractedBytes = 0
 
   while (offset < centralDirectoryEnd) {
+    entryCount += 1
+    if (entryCount > maxEntries) throw new ArchiveLimitError('entries', maxEntries)
     if (zip.readUInt32LE(offset) !== 0x02014b50) {
       throw new Error('Invalid ZIP central directory.')
     }
@@ -1215,17 +1239,27 @@ function readZipEntries(zip: Buffer): ArchiveFileEntry[] {
     offset += 46 + nameLength + extraLength + commentLength
 
     if (sourcePath.endsWith('/')) continue
+    if (uncompressedSize > maxExtractedBytes - extractedBytes) {
+      throw new ArchiveLimitError('extracted bytes', maxExtractedBytes)
+    }
     const path = normalizeArchiveFilePath(sourcePath, 'ZIP')
     const mode = (externalAttributes >>> 16) & 0xffff
-    entries.push({
-      path,
-      sourcePath,
-      content: readZipEntryContent(zip, {
+    const content = readZipEntryContent(
+      zip,
+      {
         localHeaderOffset,
         compressedSize,
         uncompressedSize,
         method,
-      }),
+      },
+      maxExtractedBytes - extractedBytes,
+      maxExtractedBytes,
+    )
+    extractedBytes += content.byteLength
+    entries.push({
+      path,
+      sourcePath,
+      content,
       ...(mode > 0 ? { mode } : {}),
     })
   }
@@ -1240,6 +1274,8 @@ function readZipEntryContent(
     uncompressedSize: number
     method: number
   },
+  maxOutputBytes: number,
+  maxExtractedBytes: number,
 ): Buffer {
   const offset = entry.localHeaderOffset
   if (zip.readUInt32LE(offset) !== 0x04034b50) {
@@ -1248,16 +1284,47 @@ function readZipEntryContent(
   const nameLength = zip.readUInt16LE(offset + 26)
   const extraLength = zip.readUInt16LE(offset + 28)
   const dataOffset = offset + 30 + nameLength + extraLength
-  const compressed = zip.subarray(dataOffset, dataOffset + entry.compressedSize)
-  if (entry.method === 0) return compressed
+  const dataEnd = dataOffset + entry.compressedSize
+  if (dataEnd > zip.byteLength) {
+    throw new Error('Invalid ZIP entry: compressed data extends beyond archive size.')
+  }
+  const compressed = zip.subarray(dataOffset, dataEnd)
+  if (entry.method === 0) {
+    if (compressed.byteLength > maxOutputBytes) throw new ArchiveLimitError('extracted bytes', maxExtractedBytes)
+    if (compressed.byteLength !== entry.uncompressedSize) {
+      throw new Error('ZIP entry size mismatch.')
+    }
+    return compressed
+  }
   if (entry.method === 8) {
-    const content = inflateRawSync(compressed)
+    let content: Buffer
+    try {
+      content = inflateRawSync(compressed, { maxOutputLength: maxOutputBytes })
+    } catch (error) {
+      if (isZlibOutputLimitError(error)) throw new ArchiveLimitError('extracted bytes', maxExtractedBytes)
+      throw error
+    }
     if (content.byteLength !== entry.uncompressedSize) {
       throw new Error('ZIP entry size mismatch after inflate.')
     }
     return content
   }
   throw new Error(`Unsupported ZIP compression method: ${entry.method}`)
+}
+
+class ArchiveLimitError extends Error {
+  constructor(kind: 'entries' | 'extracted bytes', limit: number) {
+    super(`Archive extraction exceeds the ${limit}-${kind === 'entries' ? 'entry' : 'byte'} limit.`)
+  }
+}
+
+function configuredArchiveLimit(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? '')
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback
+}
+
+function isZlibOutputLimitError(error: unknown): boolean {
+  return isRecord(error) && error.code === 'ERR_BUFFER_TOO_LARGE'
 }
 
 function tarHeaderPath(header: Buffer): string {

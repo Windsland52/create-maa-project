@@ -171,7 +171,6 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
         ]
       : []),
     managed('.vscode/tasks.json', vscodeTasks(input.includeGithub)),
-    managed('tools/check-project.mjs', checkProjectScript()),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
     ...schemaFiles(input.includeAgent),
     once('package.json', generatedPackageJson(input)),
@@ -415,10 +414,9 @@ function packageScripts(
   const scripts: Record<string, string> = {
     format: 'prettier --write .',
     'format:check': 'prettier --check .',
-    lint: 'node tools/check-project.mjs',
     'check:schema': 'node tools/validate-schema.mjs',
     'check:maa': 'pnpm exec maa-tools check',
-    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa && pnpm lint',
+    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa',
   }
   if (input.includeGithub) {
     scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
@@ -536,10 +534,6 @@ function vscodeLaunch(): string {
   return template('addons/dev-tools/.vscode/launch.agent.json', {
     agentDebugSessionName: AGENT_DEBUG_SESSION_NAME,
   })
-}
-
-function checkProjectScript(): string {
-  return template('addons/dev-tools/tools/check-project.mjs')
 }
 
 function validateSchemaScript(): string {

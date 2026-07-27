@@ -445,8 +445,8 @@ describe('CLI JSON reports', () => {
     'reports doctor failures as pure stdout JSON',
     async () => {
       const projectRoot = await createReportProject('maa-report-doctor')
-      const checkProjectPath = join(projectRoot, 'tools/check-project.mjs')
-      await rm(checkProjectPath)
+      const validateSchemaPath = join(projectRoot, 'tools/validate-schema.mjs')
+      await rm(validateSchemaPath)
 
       const result = await runCli(
         [
@@ -464,7 +464,7 @@ describe('CLI JSON reports', () => {
         exitCode: 1,
         root: projectRoot,
       })
-      expect(report.doctor?.lines.join('\n')).toContain('Required project file is missing: tools/check-project.mjs')
+      expect(report.doctor?.lines.join('\n')).toContain('Required project file is missing: tools/validate-schema.mjs')
       expect(report.doctor?.checks).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'node-tooling', status: 'fail' }),

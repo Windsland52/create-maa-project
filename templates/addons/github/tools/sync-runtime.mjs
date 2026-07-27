@@ -28,7 +28,11 @@ if (project.runtime?.mfa?.enabled !== false) {
     updateArgs.push("--update", "runtime:mfa");
 }
 if (project.runtime?.mxu?.enabled) {
-    updateArgs.push("--update", "runtime:mxu");
+    if (requestedRuntimePlatform() === "linux-arm64") {
+        console.warn("[WARN] Skipping MXU runtime sync for linux-arm64 because no MXU runtime asset is available.");
+    } else {
+        updateArgs.push("--update", "runtime:mxu");
+    }
 }
 const invocation = resolveCreateMaaProject();
 
@@ -113,6 +117,14 @@ function runtimePlatformAll() {
         process.env.CREATE_MAA_PROJECT_PLATFORM?.trim() ||
         "";
     return value.toLowerCase() === "all";
+}
+
+function requestedRuntimePlatform() {
+    return normalizeRuntimePlatform(
+        process.env.CREATE_MAA_PROJECT_RUNTIME_PLATFORM?.trim() ||
+            process.env.CREATE_MAA_PROJECT_PLATFORM?.trim() ||
+            "",
+    );
 }
 
 function packageName(dir) {

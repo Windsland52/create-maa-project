@@ -260,7 +260,6 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
   for (const path of [
     'package.json',
     'pnpm-workspace.yaml',
-    'tools/check-project.mjs',
     'tools/validate-schema.mjs',
     'tools/schema/interface.schema.json',
   ]) {

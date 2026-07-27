@@ -300,7 +300,7 @@ create-maa-project --clean-cache
 
 ## 工具链
 
-生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查、项目状态 lint 和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。
+生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。
 
 资产和依赖操作是显式且可恢复的：
 

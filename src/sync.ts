@@ -126,7 +126,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   // interface.json is intentionally unmanaged: projects may carry a hand-tuned
   // controller/resource layout (e.g. multi-server packs) that the template-
   // generated content would clobber. Only write it on first creation; once it
-  // exists, leave it untouched and let lint/doctor drift checks surface any
+  // exists, leave it untouched and let doctor drift checks surface any
   // metadata divergence instead of overwriting it.
   if (config.project.interfaceUnmanaged && (await exists(join(root, 'interface.json')))) {
     // interface.json is unmanaged: projects may carry a hand-tuned

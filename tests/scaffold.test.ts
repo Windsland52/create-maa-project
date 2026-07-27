@@ -954,6 +954,50 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     ])
   })
 
+  it('skips unavailable MXU runtime assets on linux-arm64', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-linux-arm64-runtime' }))
+    const projectRoot = join(root, 'maa-linux-arm64-runtime')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = (await readJson(configPath)) as {
+      runtime: { mxu?: { enabled?: boolean } }
+    }
+    config.runtime.mxu = { ...config.runtime.mxu, enabled: true }
+    await writeFile(configPath, JSON.stringify(config, null, 4) + '\n', 'utf8')
+
+    const fakeBin = join(root, 'fake-create-maa-project.mjs')
+    await writeFile(
+      fakeBin,
+      `import { writeFileSync } from 'node:fs'
+writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
+`,
+      'utf8',
+    )
+    const result = await execFileAsync(
+      process.execPath,
+      [
+        'tools/sync-runtime.mjs',
+      ],
+      {
+        cwd: projectRoot,
+        env: {
+          ...process.env,
+          CREATE_MAA_PROJECT_BIN: `${JSON.stringify(process.execPath)} ${JSON.stringify(fakeBin)}`,
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'linux-arm64',
+        },
+      },
+    )
+
+    expect(result.stderr).toContain('Skipping MXU runtime sync for linux-arm64')
+    expect(JSON.parse(await readFile(join(projectRoot, 'sync-runtime-args.json'), 'utf8'))).toEqual([
+      '--update',
+      'maafw',
+      '--update',
+      'runtime:mfa',
+    ])
+  })
+
   it('refreshes enabled managed add-on templates without overwriting project-owned files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
@@ -963,18 +1007,20 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     const packageJson = (await readJson(packagePath)) as Record<string, unknown>
     packageJson.userMetadata = { preserved: true }
     await writeFile(packagePath, JSON.stringify(packageJson, null, 4) + '\n', 'utf8')
-    await writeFile(join(projectRoot, 'tools/check-project.mjs'), '// stale dev tool\n', 'utf8')
+    await writeFile(join(projectRoot, 'tools/validate-schema.mjs'), '// stale dev tool\n', 'utf8')
     await writeFile(join(projectRoot, '.github/workflows/release.yml'), 'name: stale release\n', 'utf8')
     process.chdir(projectRoot)
 
     const devToolsResult = await addDevTools(defaultOptions({ add: ['dev-tools'] }))
     const githubResult = await addGithub(defaultOptions({ add: ['github'] }))
 
-    expect(devToolsResult.written).toContain('tools/check-project.mjs')
+    expect(devToolsResult.written).toContain('tools/validate-schema.mjs')
     expect(githubResult.written).toContain('.github/workflows/release.yml')
     expect(devToolsResult.backupId).toBeTruthy()
     expect(githubResult.backupId).toBeTruthy()
-    expect(await readFile(join(projectRoot, 'tools/check-project.mjs'), 'utf8')).toContain('Node 24')
+    expect(await readFile(join(projectRoot, 'tools/validate-schema.mjs'), 'utf8')).toContain(
+      'local project schema is valid',
+    )
     expect(await readFile(join(projectRoot, '.github/workflows/release.yml'), 'utf8')).toContain(
       '3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  rcedit.exe',
     )
@@ -1184,7 +1230,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         autoFormat: { enabled: true },
       },
     })
-    await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
+    await expect(pathExists(join(projectRoot, 'tools/validate-schema.mjs'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/format.yml'))).resolves.toBe(true)
@@ -1277,7 +1323,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         'optimize:images': 'node tools/optimize-images.mjs',
       },
     })
-    await expect(pathExists(join(projectRoot, 'tools/check-project.mjs'))).resolves.toBe(true)
+    await expect(pathExists(join(projectRoot, 'tools/validate-schema.mjs'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/check.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/release.yml'))).resolves.toBe(true)
     await expect(pathExists(join(projectRoot, '.github/workflows/optimize-images.yml'))).resolves.toBe(true)
@@ -1378,7 +1424,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
     expect(await pathExists(join(projectRoot, '.github/workflows/check.yml'))).toBe(true)
     expect(await pathExists(join(projectRoot, '.github/workflows/release.yml'))).toBe(true)
-    expect(await pathExists(join(projectRoot, 'tools/check-project.mjs'))).toBe(true)
+    expect(await pathExists(join(projectRoot, 'tools/validate-schema.mjs'))).toBe(true)
     expect(await readJson(join(projectRoot, 'package.json'))).toMatchObject({
       scripts: {
         'sync:schema': 'node tools/sync-schema.mjs',
@@ -1951,122 +1997,10 @@ export default defineConfig({
         `interface.json import path must stay within project root: ${unsafePath}`,
       )
 
-      await expect(execFileAsync(process.execPath, ['tools/check-project.mjs'], { cwd: projectRoot })).rejects.toThrow(
-        'interface/import paths must stay within the project root',
-      )
       await expect(
         execFileAsync(process.execPath, ['tools/build-release.mjs', '--dry-run'], { cwd: projectRoot }),
       ).rejects.toThrow('release paths must stay within the project root')
     }
-  })
-
-  it('generated project lint script checks project state', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-lint-test' }))
-    const projectRoot = join(root, 'maa-lint-test')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('pnpm-lock.yaml is missing; run pnpm install')
-
-    await clearPending(projectRoot)
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).resolves.toBeDefined()
-  })
-
-  it('generated project lint script checks Node tooling files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-node-tooling-lint' }))
-    const projectRoot = join(root, 'maa-node-tooling-lint')
-    await clearPending(projectRoot)
-
-    await writeFile(join(projectRoot, '.node-version'), '22\n', 'utf8')
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('.node-version must pin Node 24')
-
-    await writeFile(join(projectRoot, '.node-version'), '24\n', 'utf8')
-    await writeFile(
-      join(projectRoot, '.github/workflows/release.yml'),
-      `name: Release
-jobs:
-  release:
-    steps:
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-`,
-      'utf8',
-    )
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('.github/workflows/release.yml must use Node 24')
-  })
-
-  it('generated project lint script checks VS Code settings', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
-    process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-vscode-lint' }))
-    const projectRoot = join(root, 'maa-vscode-lint')
-    await clearPending(projectRoot)
-    const settingsPath = join(projectRoot, '.vscode/settings.json')
-    const settings = (await readJson(settingsPath)) as Record<string, unknown>
-    settings['[jsonc]'] = {}
-    await writeFile(settingsPath, JSON.stringify(settings, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('.vscode/settings.json [jsonc] editor.defaultFormatter must be esbenp.prettier-vscode')
-
-    settings['[jsonc]'] = { 'editor.defaultFormatter': 'esbenp.prettier-vscode' }
-    settings['json.schemas'] = []
-    await writeFile(settingsPath, JSON.stringify(settings, null, 4) + '\n', 'utf8')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow(
-      '.vscode/settings.json json.schemas must map /interface.json to ./tools/schema/interface.schema.json',
-    )
   })
 
   it('generated schema validation script checks local project JSON shape', async () => {
@@ -2117,16 +2051,6 @@ jobs:
     const report = await runDoctor(projectRoot)
     expect(report.ok).toBe(false)
     expect(report.lines.join('\n')).toContain('Required project file is missing: tools/schema/interface.schema.json')
-
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).rejects.toThrow('required project file is missing: tools/schema/interface.schema.json')
 
     await expect(runSchemaValidator(projectRoot)).rejects.toThrow('interface.schema.json')
   })
@@ -2264,13 +2188,13 @@ jobs:
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-missing-managed' }))
     const projectRoot = join(root, 'maa-missing-managed')
-    await rm(join(projectRoot, 'tools/check-project.mjs'))
+    await rm(join(projectRoot, 'tools/validate-schema.mjs'))
 
     const report = await runDoctor(projectRoot)
     const output = report.lines.join('\n')
 
     expect(report.ok).toBe(false)
-    expect(output).toContain('Required project file is missing: tools/check-project.mjs')
+    expect(output).toContain('Required project file is missing: tools/validate-schema.mjs')
     expect(output).toContain('create-maa-project --add dev-tools')
   })
 
@@ -3673,6 +3597,8 @@ jobs:
     }
     expect(packageJson.license).toBe('AGPL-3.0-or-later')
     expect(packageJson.scripts).not.toHaveProperty('sync:schema')
+    expect(packageJson.scripts).not.toHaveProperty('lint')
+    expect(packageJson.scripts?.check).toBe('pnpm format:check && pnpm check:schema && pnpm check:maa')
     const customActionSchema = await readJson(join(root, 'Maa Test', 'tools/schema/custom.action.schema.json'))
     const customRecognitionSchema = await readJson(
       join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json'),
@@ -3717,14 +3643,10 @@ jobs:
     const checkWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/check.yml'), 'utf8')
     const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
     expectWorkflowActionsPinned(checkWorkflow, releaseWorkflow)
-    expect(checkWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      checkWorkflow.indexOf('pnpm install --frozen-lockfile'),
-    )
+    expect(checkWorkflow).not.toContain('check-project.mjs')
     expect(checkWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
-    expect(releaseWorkflow.indexOf('node tools/check-project.mjs')).toBeLessThan(
-      releaseWorkflow.indexOf('pnpm install --frozen-lockfile'),
-    )
+    expect(releaseWorkflow).not.toContain('check-project.mjs')
     expect(releaseWorkflow).toContain('pnpm release:dry-run')
     expect(releaseWorkflow).toContain("if: github.event_name == 'workflow_dispatch'")
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
@@ -4409,15 +4331,7 @@ jobs:
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: projectRoot },
-      ),
-    ).resolves.toBeDefined()
+    await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
   })
 
   it('updates Python dependency files without modifying external hard links', async () => {
@@ -4478,15 +4392,7 @@ jobs:
     await writeFile(join(target, '.gitignore'), `${gitignore}local-only/\n`, 'utf8')
     await clearPending(target)
 
-    await expect(
-      execFileAsync(
-        process.execPath,
-        [
-          'tools/check-project.mjs',
-        ],
-        { cwd: target },
-      ),
-    ).resolves.toBeDefined()
+    await expect(runSchemaValidator(target)).resolves.toBeDefined()
   })
 })
 

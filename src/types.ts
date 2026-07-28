@@ -116,6 +116,7 @@ export type CliOptions = {
   cleanCache: boolean
   report: boolean
   mcp: boolean
+  mcpRoot?: string
   logFile?: string
   explicitTemplate: boolean
 }

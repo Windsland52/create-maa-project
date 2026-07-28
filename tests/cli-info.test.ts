@@ -57,6 +57,26 @@ describe('CLI help and version', () => {
     expect(result.stdout).toBe(`${packageJson.version}\n`)
     expect(await readdir(root)).toEqual([])
   })
+
+  it('validates an explicit MCP server root before starting the transport', async () => {
+    const root = await tempRoot()
+    const missingRoot = join(root, 'missing-workspace')
+
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [
+          cliEntry,
+          '--mcp',
+          '--root',
+          missingRoot,
+        ],
+        { cwd: root },
+      ),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(`MCP server root does not exist: ${missingRoot}`),
+    })
+  })
 })
 
 async function tempRoot(): Promise<string> {

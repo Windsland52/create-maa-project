@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     }
     if (options.mcp) {
       const { startMcpServer } = await import('./mcp.js')
-      await startMcpServer()
+      await startMcpServer(resolve(process.cwd(), options.mcpRoot ?? '.'))
       return
     }
     if (options.report) options.noInteractive = true

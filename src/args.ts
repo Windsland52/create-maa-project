@@ -91,6 +91,9 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--mcp':
         options.mcp = true
         break
+      case '--root':
+        options.mcpRoot = readValue(argv, ++index, arg)
+        break
       case '--yes':
         options.yes = true
         options.noInteractive = true
@@ -285,6 +288,7 @@ function validateOptionApplicability(options: CliOptions, mode: CommandMode): vo
     '--restore',
     '--clean-cache',
   ])
+  assertOptionAllowed(mode, '--root', options.mcpRoot !== undefined, ['--mcp'])
   assertOptionAllowed(mode, '--log-file', options.logFile !== undefined, [
     'create',
     '--doctor',
@@ -384,7 +388,7 @@ Usage:
   create-maa-project --show-backup <backup-id> [--report]
   create-maa-project --restore <backup-id> [--dry-run] [--report]
   create-maa-project --clean-cache
-  create-maa-project --mcp
+  create-maa-project --mcp [--root <path>]
 
 Creation options:
   --template <pipeline|agent>       Select the initial template.
@@ -419,6 +423,7 @@ Maintenance modes:
   --dry-run                         Preview --restore without changing files.
   --clean-cache                     Remove the local download cache.
   --mcp                             Start the MCP server over stdio.
+  --root <path>                     Set the MCP server root (defaults to cwd).
 
 Common options:
   --report                          Emit a machine-readable JSON result.

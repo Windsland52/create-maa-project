@@ -107,7 +107,9 @@ If the CLI is installed globally, configure the MCP server like this:
         "create-maa-project": {
             "command": "create-maa-project",
             "args": [
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -124,7 +126,9 @@ If you do not want a global install, let the MCP client run it through `npx`:
             "args": [
                 "-y",
                 "create-maa-project@latest",
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -140,7 +144,9 @@ For a Python-centric toolchain, let the MCP client launch it through `uvx`:
             "command": "uvx",
             "args": [
                 "create-maa-project",
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -156,9 +162,15 @@ and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
 
 If the agent adds a resource pack, it must pass a `resourcePackSlug` such as `extra` or
 `cn`; otherwise the MCP tool will reject the call.
+Always prefer an explicit `--root` for the workspace the MCP server may access. A relative
+root is resolved from the server process's startup directory; omitting it uses that directory.
+The agent can call the read-only `get_project_context` tool first to confirm the server root
+and the project directory resolved from `projectPath`.
+
 After creating a child project, the agent can pass a relative `projectPath` to `doctor`,
-`sync`, `update`, `add`, `restore`, and `clean_cache`. The path must resolve to a real
-directory under the MCP server root; absolute paths, `..`, and escaping symlinks are rejected.
+`sync`, `update`, `add`, `list_backups`, `show_backup`, `restore`, and `clean_cache`. The path
+must resolve to a real directory under the MCP server root; absolute paths, `..`, and escaping
+symlinks are rejected.
 
 ## Project Model
 

@@ -96,7 +96,9 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
         "create-maa-project": {
             "command": "create-maa-project",
             "args": [
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -113,7 +115,9 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
             "args": [
                 "-y",
                 "create-maa-project@latest",
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -129,7 +133,9 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
             "command": "uvx",
             "args": [
                 "create-maa-project",
-                "--mcp"
+                "--mcp",
+                "--root",
+                "/absolute/path/to/workspace"
             ]
         }
     }
@@ -144,6 +150,9 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 ```
 
 如果 agent 要添加 resource pack，必须传 `resourcePackSlug`，例如 `extra` 或 `cn`；否则 MCP tool 会拒绝调用。
+建议始终用 `--root` 显式指定允许 MCP 操作的工作区；相对的 `--root` 按 MCP server 启动时的当前目录解析，省略时默认使用当前目录。
+Agent 可先调用只读的 `get_project_context` 确认 server root，以及 `projectPath` 最终解析到的项目目录。
+
 创建子项目后，agent 可在 `doctor`、`sync`、`update`、`add`、`list_backups`、`show_backup`、`restore`
 和 `clean_cache` 中传相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、
 `..` 或根外符号链接。恢复前可先用 `list_backups` 查找备份、用 `show_backup` 检查内容，再以

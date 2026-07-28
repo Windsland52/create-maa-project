@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { realpath, stat } from 'node:fs/promises'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -110,10 +110,52 @@ const PROJECT_PATH_ARGUMENTS = [
 ] as const
 
 type ToolName =
-  'create_project' | 'doctor' | 'sync' | 'update' | 'add' | 'list_backups' | 'show_backup' | 'restore' | 'clean_cache'
+  | 'get_project_context'
+  | 'create_project'
+  | 'doctor'
+  | 'sync'
+  | 'update'
+  | 'add'
+  | 'list_backups'
+  | 'show_backup'
+  | 'restore'
+  | 'clean_cache'
 
 type JsonObject = Record<string, unknown>
 type McpServerContext = { root: string }
+
+const PROJECT_CONTEXT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+  type: 'object',
+  properties: {
+    schemaVersion: { type: 'integer', const: 1 },
+    tool: { type: 'string', const: 'get_project_context' },
+    ok: { type: 'boolean' },
+    serverRoot: { type: 'string' },
+    projectPath: { type: 'string' },
+    projectRoot: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    projectConfigPath: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    hasProjectConfig: { type: 'boolean' },
+    error: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+      required: ['message'],
+      additionalProperties: false,
+    },
+  },
+  required: [
+    'schemaVersion',
+    'tool',
+    'ok',
+    'serverRoot',
+    'projectPath',
+    'projectRoot',
+    'projectConfigPath',
+    'hasProjectConfig',
+  ],
+  additionalProperties: false,
+}
 
 const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
   type: 'object',
@@ -209,6 +251,7 @@ const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
 }
 
 const TOOL_ANNOTATIONS: Record<ToolName, NonNullable<Tool['annotations']>> = {
+  get_project_context: toolAnnotations('Get MCP Project Context', true, false, true, false),
   create_project: toolAnnotations('Create MaaFW Project', false, false, false, true),
   doctor: toolAnnotations('Diagnose MaaFW Project', true, false, true, false),
   sync: toolAnnotations('Synchronize Project Metadata', false, true, false, false),
@@ -238,8 +281,8 @@ export function createMcpServer(root = safeProcessCwd('.')): Server {
   return server
 }
 
-export async function startMcpServer(): Promise<void> {
-  const server = createMcpServer()
+export async function startMcpServer(root = safeProcessCwd('.')): Promise<void> {
+  const server = createMcpServer(await resolveMcpServerRoot(root))
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
@@ -248,6 +291,15 @@ export async function startMcpServer(): Promise<void> {
 }
 
 const MCP_TOOL_DEFINITIONS: Tool[] = [
+  {
+    name: 'get_project_context',
+    description:
+      'Return the configured MCP server root and the resolved project directory. Call this before path-sensitive operations to confirm how projectPath is interpreted.',
+    inputSchema: objectSchema({
+      projectPath: projectPathSchema(),
+    }),
+    outputSchema: PROJECT_CONTEXT_OUTPUT_SCHEMA,
+  },
   {
     name: 'create_project',
     description:
@@ -387,7 +439,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
 
 const MCP_TOOLS: Tool[] = MCP_TOOL_DEFINITIONS.map((tool) => ({
   ...tool,
-  outputSchema: REPORT_OUTPUT_SCHEMA,
+  outputSchema: tool.outputSchema ?? REPORT_OUTPUT_SCHEMA,
   annotations: TOOL_ANNOTATIONS[tool.name as ToolName],
 }))
 
@@ -400,6 +452,8 @@ async function callTool(
   throwIfAborted(signal)
   const toolName = name as ToolName
   switch (toolName) {
+    case 'get_project_context':
+      return callGetProjectContext(context, input)
     case 'create_project':
       return callCreateProject(context, input, signal)
     case 'doctor':
@@ -420,6 +474,49 @@ async function callTool(
       return callCleanCache(context, input, signal)
     default:
       return errorToolResult(context, 'create', new Error(`Unknown MCP tool: ${name}`))
+  }
+}
+
+async function callGetProjectContext(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+  let projectPath = '.'
+  try {
+    const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'get_project_context')
+    projectPath = optionalString(args, 'projectPath') ?? '.'
+    const serverRoot = await resolveMcpServerRoot(context.root)
+    const projectRoot = await resolveMcpProjectRoot(serverRoot, args)
+    const relativeProjectPath = relative(serverRoot, projectRoot).split(sep).join('/') || '.'
+    const projectConfigPath = join(projectRoot, 'maa-project.json')
+    let hasProjectConfig = false
+    try {
+      hasProjectConfig = (await stat(projectConfigPath)).isFile()
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'ENOENT') throw error
+    }
+    return projectContextToolResult({
+      schemaVersion: 1,
+      tool: 'get_project_context',
+      ok: true,
+      serverRoot,
+      projectPath: relativeProjectPath,
+      projectRoot,
+      projectConfigPath,
+      hasProjectConfig,
+    })
+  } catch (error) {
+    return projectContextToolResult(
+      {
+        schemaVersion: 1,
+        tool: 'get_project_context',
+        ok: false,
+        serverRoot: resolve(context.root),
+        projectPath,
+        projectRoot: null,
+        projectConfigPath: null,
+        hasProjectConfig: false,
+        error: { message: error instanceof Error ? error.message : String(error) },
+      },
+      true,
+    )
   }
 }
 
@@ -747,6 +844,19 @@ function reportToolResult(report: CliJsonReport, isError = !report.ok): CallTool
   }
 }
 
+function projectContextToolResult(output: JsonObject, isError = false): CallToolResult {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(output),
+      },
+    ],
+    structuredContent: output,
+    isError,
+  }
+}
+
 function createProjectOptions(args: JsonObject): CliOptions {
   const template = requiredEnum(args, 'template', TEMPLATE_NAMES)
   const controllers = requiredStringArray(args, 'controllers', CONTROLLER_KINDS)
@@ -904,6 +1014,23 @@ async function resolveMcpProjectRoot(serverRoot: string, args: JsonObject): Prom
     throw new Error(`projectPath must resolve to a directory: ${projectPath}`)
   }
   return candidate
+}
+
+async function resolveMcpServerRoot(root: string): Promise<string> {
+  const absoluteRoot = resolve(root)
+  let canonicalRoot: string
+  try {
+    canonicalRoot = await realpath(absoluteRoot)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      throw new Error(`MCP server root does not exist: ${absoluteRoot}`)
+    }
+    throw error
+  }
+  if (!(await stat(canonicalRoot)).isDirectory()) {
+    throw new Error(`MCP server root must be a directory: ${absoluteRoot}`)
+  }
+  return canonicalRoot
 }
 
 async function resolveMcpCreateTarget(serverRoot: string, projectPath: string): Promise<string> {

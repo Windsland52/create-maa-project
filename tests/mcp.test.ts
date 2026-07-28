@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -55,9 +55,21 @@ type JsonReport = {
   error?: { message: string; code: string; causeCode?: string }
 }
 
+type ProjectContextOutput = {
+  schemaVersion: 1
+  tool: 'get_project_context'
+  ok: boolean
+  serverRoot: string
+  projectPath: string
+  projectRoot: string | null
+  projectConfigPath: string | null
+  hasProjectConfig: boolean
+  error?: { message: string }
+}
+
 type ToolCallResult = {
   content: Array<{ type: 'text'; text: string }>
-  structuredContent?: JsonReport
+  structuredContent?: JsonReport | ProjectContextOutput
   isError?: boolean
 }
 
@@ -132,6 +144,7 @@ describe('MCP server', () => {
       expect(response.error).toBeUndefined()
       const tools = (response.result as ToolListResult).tools
       expect(tools.map((tool) => tool.name)).toEqual([
+        'get_project_context',
         'create_project',
         'doctor',
         'sync',
@@ -195,7 +208,10 @@ describe('MCP server', () => {
       })
       expect(toolByName(tools, 'show_backup').inputSchema.required).toEqual(['backupId'])
       expect(toolByName(tools, 'restore').inputSchema.properties?.dryRun).toMatchObject({ type: 'boolean' })
-      for (const tool of tools) {
+      expect(toolByName(tools, 'get_project_context').outputSchema?.required).toEqual(
+        expect.arrayContaining(['serverRoot', 'projectPath', 'projectRoot', 'hasProjectConfig']),
+      )
+      for (const tool of tools.filter((tool) => tool.name !== 'get_project_context')) {
         expect(tool.outputSchema?.type, tool.name).toBe('object')
         expect(tool.outputSchema?.required, tool.name).toEqual(
           expect.arrayContaining([
@@ -205,6 +221,8 @@ describe('MCP server', () => {
             'root',
           ]),
         )
+      }
+      for (const tool of tools) {
         expect(tool.annotations, tool.name).toMatchObject({
           title: expect.any(String),
           readOnlyHint: expect.any(Boolean),
@@ -213,10 +231,12 @@ describe('MCP server', () => {
           openWorldHint: expect.any(Boolean),
         })
       }
+      expect(toolByName(tools, 'get_project_context').annotations).toMatchObject({ readOnlyHint: true })
       expect(toolByName(tools, 'doctor').annotations).toMatchObject({ readOnlyHint: true })
       expect(toolByName(tools, 'list_backups').annotations).toMatchObject({ readOnlyHint: true })
       expect(toolByName(tools, 'restore').annotations).toMatchObject({ destructiveHint: true })
       for (const name of [
+        'get_project_context',
         'doctor',
         'sync',
         'update',
@@ -231,6 +251,42 @@ describe('MCP server', () => {
           description: expect.stringContaining('relative to the MCP server root'),
         })
       }
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'reports the configured server root and resolved project context',
+    async () => {
+      const root = await tempRoot()
+      const projectRoot = join(root, 'nested', 'project')
+      await mkdir(projectRoot, { recursive: true })
+      await writeFile(join(projectRoot, 'maa-project.json'), '{}\n', 'utf8')
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'get_project_context',
+        arguments: { projectPath: 'nested/project' },
+      })
+
+      expect(response.error).toBeUndefined()
+      const result = response.result as ToolCallResult
+      expect(result.isError).toBe(false)
+      const output = JSON.parse(result.content[0]!.text) as ProjectContextOutput
+      const canonicalRoot = await realpath(root)
+      const canonicalProjectRoot = await realpath(projectRoot)
+      expect(output).toEqual({
+        schemaVersion: 1,
+        tool: 'get_project_context',
+        ok: true,
+        serverRoot: canonicalRoot,
+        projectPath: 'nested/project',
+        projectRoot: canonicalProjectRoot,
+        projectConfigPath: join(canonicalProjectRoot, 'maa-project.json'),
+        hasProjectConfig: true,
+      })
+      expect(result.structuredContent).toEqual(output)
     },
     MCP_TEST_TIMEOUT_MS,
   )
@@ -449,6 +505,16 @@ describe('MCP server', () => {
         outsideRoot,
         'escape',
       ]) {
+        const contextResponse = await session.request('tools/call', {
+          name: 'get_project_context',
+          arguments: { projectPath },
+        })
+        expect(contextResponse.error).toBeUndefined()
+        const contextResult = contextResponse.result as ToolCallResult
+        const contextOutput = JSON.parse(contextResult.content[0]!.text) as ProjectContextOutput
+        expect(contextResult.isError, projectPath).toBe(true)
+        expect(contextOutput.error?.message, projectPath).toContain('MCP server root')
+
         const { result, report } = parseToolReport(
           await session.request('tools/call', {
             name: 'doctor',
@@ -632,6 +698,16 @@ describe('MCP server', () => {
       const root = await tempRoot()
       const session = await startSession(root)
       await initialize(session)
+      const contextResponse = await session.request('tools/call', {
+        name: 'get_project_context',
+        arguments: { force: true },
+      })
+      expect(contextResponse.error).toBeUndefined()
+      const contextResult = contextResponse.result as ToolCallResult
+      const contextOutput = JSON.parse(contextResult.content[0]!.text) as ProjectContextOutput
+      expect(contextResult.isError).toBe(true)
+      expect(contextOutput.error?.message).toContain('Unknown argument for MCP tool get_project_context:')
+
       const calls = [
         { name: 'create_project', arguments: { name: 'must-not-exist', skipDownloads: true } },
         { name: 'doctor', arguments: { verbose: true } },

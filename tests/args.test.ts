@@ -89,9 +89,13 @@ describe('parseArgs', () => {
   it('parses MCP server mode', () => {
     const options = parseArgs([
       '--mcp',
+      '--root',
+      './workspace',
     ])
 
     expect(options.mcp).toBe(true)
+    expect(options.mcpRoot).toBe('./workspace')
+    expect(() => validateCommandModes(options)).not.toThrow()
   })
 
   it('parses help and CLI version aliases without changing project --version', () => {
@@ -308,6 +312,7 @@ describe('validateCommandModes', () => {
     { argv: ['--clean-cache', '--clear-stale-lock'], message: '--clear-stale-lock is not valid' },
     { argv: ['--mcp', '--report'], message: '--report is not valid with --mcp.' },
     { argv: ['--mcp', '--verbose'], message: '--verbose is not valid with --mcp.' },
+    { argv: ['--doctor', '--root', './workspace'], message: '--root is not valid with --doctor.' },
     { argv: ['--help', '--no-color'], message: '--no-color is not valid with --help.' },
     { argv: ['--help', '--log-file', 'help.log'], message: '--log-file is not valid with --help.' },
     { argv: ['--add', 'github', '--label', 'Ignored'], message: '--label is only valid' },
@@ -360,6 +365,7 @@ describe('formatCliHelp', () => {
     expect(help).toContain('--dry-run')
     expect(help).toContain('--clean-cache')
     expect(help).toContain('--mcp')
+    expect(help).toContain('--root <path>')
     expect(help).toContain('--verbose')
     expect(help).toContain('--no-color')
     expect(help).toContain('-V, --cli-version')

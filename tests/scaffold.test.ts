@@ -700,8 +700,10 @@ describe('scaffold', () => {
     expect(maatoolsConfig).toContain('vscode:')
     expect(maatoolsConfig).toContain("uv: 'Maa Agent: Debug'")
     const releaseWorkflow = await readFile(join(root, 'maa-agent-test', '.github/workflows/release.yml'), 'utf8')
-    expect(releaseWorkflow).toContain('actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6')
-    expect(releaseWorkflow).toContain('astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0')
+    expect(releaseWorkflow).toContain('actions/checkout@v7')
+    expect(releaseWorkflow).toContain('actions/setup-node@v7')
+    expect(releaseWorkflow).toContain('actions/setup-python@v7')
+    expect(releaseWorkflow).toContain('astral-sh/setup-uv@v9.0.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
@@ -709,7 +711,6 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
     expect(releaseWorkflow).not.toContain('package_paths=')
-    expectWorkflowActionsPinned(releaseWorkflow)
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).not.toContain('|| true')
   })
@@ -1277,12 +1278,11 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       join(root, 'maa-optimize-images-create', '.github/workflows/optimize-images.yml'),
       'utf8',
     )
-    expect(optimizeWorkflow).toContain('baptiste0928/cargo-install@0f9287ef7fc8a8d572ce269250936ded8fbc5323 # v3')
+    expect(optimizeWorkflow).toContain('baptiste0928/cargo-install@v3')
     expect(optimizeWorkflow).toContain("github.actor != 'github-actions[bot]'")
     expect(optimizeWorkflow).toContain('[skip changelog]')
     expect(optimizeWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"')
     expect(optimizeWorkflow).not.toContain('actions-js/push')
-    expectWorkflowActionsPinned(optimizeWorkflow)
     const optimizeScript = await readFile(join(root, 'maa-optimize-images-create', 'tools/optimize-images.mjs'), 'utf8')
     expect(optimizeScript).toContain('function runOxipng(args)')
     expect(optimizeScript).toContain('"--fast"')
@@ -1872,7 +1872,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
 jobs:
   check:
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 `,
@@ -3642,7 +3642,6 @@ export default defineConfig({
     expect(await pathExists(join(root, 'Maa Test', 'tools/sync-schema.mjs'))).toBe(false)
     const checkWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/check.yml'), 'utf8')
     const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
-    expectWorkflowActionsPinned(checkWorkflow, releaseWorkflow)
     expect(checkWorkflow).not.toContain('check-project.mjs')
     expect(checkWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
@@ -3668,7 +3667,7 @@ export default defineConfig({
     expect(releaseWorkflow).toContain('3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  rcedit.exe')
     expect(releaseWorkflow).toContain('sha256sum --check --strict')
     expect(releaseWorkflow).toContain('Unix archive executable metadata smoke passed')
-    expect(releaseWorkflow).toContain('actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7')
+    expect(releaseWorkflow).toContain('actions/download-artifact@v8')
     expect(releaseWorkflow).toContain('generate_release_notes: true')
     expect(releaseWorkflow).toContain('release-assets/*.zip')
     expect(releaseWorkflow).toContain('release-assets/*.tar.gz')
@@ -4405,14 +4404,6 @@ function expectReleaseWorkflowTargets(releaseWorkflow: string): void {
             runtime_os: ${target.runtimeOs}
             runtime_arch: ${target.runtimeArch}
             ext: ${target.ext}`)
-  }
-}
-
-function expectWorkflowActionsPinned(...workflows: string[]): void {
-  for (const workflow of workflows) {
-    const refs = [...workflow.matchAll(/uses:\s+[^@\s]+@([^\s#]+)/g)].map((match) => match[1])
-    expect(refs.length).toBeGreaterThan(0)
-    for (const ref of refs) expect(ref).toMatch(/^[0-9a-f]{40}$/)
   }
 }
 

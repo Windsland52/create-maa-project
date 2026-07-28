@@ -475,7 +475,7 @@ function gitCliffWorkflowJob(): string {
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Generate release notes
@@ -507,7 +507,7 @@ function gitCliffWorkflowJob(): string {
           echo "[INFO] Generating release notes for $previous_stable_tag..$GITHUB_REF_NAME"
           "$git_cliff" --config .github/cliff.toml "$previous_stable_tag..HEAD" --strip header --output CHANGES.md
       - name: Upload release notes
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: CHANGES.md

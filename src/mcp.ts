@@ -633,7 +633,7 @@ async function callListBackups(context: McpServerContext, input: unknown): Promi
     return errorToolResult(context, 'backup', error)
   }
   return withReport({ root }, 'backup', async (reportContext) => {
-    const backups = await withProjectLock(root, 'MCP list backups', () => listProjectBackups(root))
+    const backups = await listProjectBackups(root)
     return createBackupJsonReport({
       context: reportContext,
       root,
@@ -653,7 +653,7 @@ async function callShowBackup(context: McpServerContext, input: unknown): Promis
     return errorToolResult(context, 'backup', error)
   }
   return withReport({ root }, 'backup', async (reportContext) => {
-    const backup = await withProjectLock(root, 'MCP show backup', () => inspectProjectBackup(root, backupId))
+    const backup = await inspectProjectBackup(root, backupId)
     return createBackupJsonReport({
       context: reportContext,
       root,

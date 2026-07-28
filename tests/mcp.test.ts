@@ -10,7 +10,7 @@ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import packageJson from '../package.json' with { type: 'json' }
 import { createMcpServer } from '../src/mcp.js'
-import { inspectProjectBackup, listProjectBackups } from '../src/project.js'
+import { inspectProjectBackup, listProjectBackups, withProjectWriteLock, writeGeneratedFiles } from '../src/project.js'
 import { testChildEnv } from './child-env.js'
 
 type JsonRpcResponse = {
@@ -44,6 +44,7 @@ type JsonReport = {
     backups?: Array<{ id: string }>
     backup?: {
       id: string
+      status?: string
       entries: Array<{ path: string; action: string }>
     }
   }
@@ -857,6 +858,67 @@ describe('MCP server', () => {
         backup: { id: backupId, entries: expect.any(Array) },
       })
       expect(await readFile(join(root, 'maa-project.json'), 'utf8')).toBe(configBefore)
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'lists and inspects a stable backup snapshot without joining the write-lock queue',
+    async () => {
+      const root = await createValidProject('maa-mcp-live-backup')
+      const session = await startSession(root)
+      await initialize(session)
+      let activeBackupId = ''
+      let markReady: () => void = () => undefined
+      let releaseWriter: () => void = () => undefined
+      const ready = new Promise<void>((resolve) => {
+        markReady = resolve
+      })
+      const writerGate = new Promise<void>((resolve) => {
+        releaseWriter = resolve
+      })
+      const writer = withProjectWriteLock(root, 'held writer for read-only MCP test', async (operation) => {
+        await writeGeneratedFiles(root, [{ path: 'held-writer.txt', content: 'written', managed: true }], {
+          force: true,
+          backup: true,
+        })
+        activeBackupId = operation.backupId
+        markReady()
+        await writerGate
+      })
+
+      await ready
+      const queuePath = join(root, '.create-maa-project', 'run-locks', 'queue.log')
+      const queueBefore = await readFile(queuePath, 'utf8')
+      try {
+        const listed = parseToolReport(
+          await session.request('tools/call', {
+            name: 'list_backups',
+            arguments: {},
+          }),
+        )
+        const shown = parseToolReport(
+          await session.request('tools/call', {
+            name: 'show_backup',
+            arguments: { backupId: activeBackupId },
+          }),
+        )
+
+        expect(listed.result.isError).toBeFalsy()
+        expect(listed.report.backup?.backups).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: activeBackupId })]),
+        )
+        expect(shown.result.isError).toBeFalsy()
+        expect(shown.report.backup?.backup).toMatchObject({
+          id: activeBackupId,
+          status: 'in-progress',
+          entries: [{ path: 'held-writer.txt', action: 'remove' }],
+        })
+        expect(await readFile(queuePath, 'utf8')).toBe(queueBefore)
+      } finally {
+        releaseWriter()
+        await writer
+      }
     },
     MCP_TEST_TIMEOUT_MS,
   )

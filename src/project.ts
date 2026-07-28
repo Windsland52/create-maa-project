@@ -13,6 +13,7 @@ export const LOCAL_STATE_DIR = '.create-maa-project'
 const BACKUP_MANIFEST_FILE = '.create-maa-project-backup.json'
 const BACKUP_FILES_DIR = 'files'
 const BACKUP_FORMAT = 'create-maa-project-backup'
+const BACKUP_STAGING_DIR = 'backup-staging'
 const WRITE_LOCKS_DIR = 'run-locks'
 const WRITE_LOCK_QUEUE_FILE = 'queue.log'
 const LEGACY_WRITE_LOCK_FILE = 'run.lock'
@@ -485,15 +486,17 @@ async function restoreDirectory(
 async function createBackupOperation(root: string, command: string): Promise<BackupOperation> {
   const id = `${nowIso().replace(/[:.]/g, '-')}-${randomUUID()}`
   const backupRoot = join(root, LOCAL_STATE_DIR, 'backups', id)
-  await assertNoSymlinkSegments(root, join(LOCAL_STATE_DIR, 'backups', id))
-  await mkdir(backupRoot, { recursive: true })
+  const stagingRoot = join(root, LOCAL_STATE_DIR, BACKUP_STAGING_DIR, `${id}-${randomUUID()}`)
   const owner = currentWriteLockOwner(root)
   if (!owner) throw new Error('No active project write lock for this backup operation.')
+  await assertNoSymlinkSegments(root, join(LOCAL_STATE_DIR, 'backups', id))
+  await assertNoSymlinkSegments(root, relative(root, stagingRoot))
+  await mkdir(stagingRoot, { recursive: true })
   const operation: BackupOperation = {
     root: resolve(root),
     rootKey: projectRootKey(root),
     caseSensitivePaths: owner.caseSensitivePaths,
-    backupRoot,
+    backupRoot: stagingRoot,
     manifest: {
       schemaVersion: 1,
       format: BACKUP_FORMAT,
@@ -506,7 +509,15 @@ async function createBackupOperation(root: string, command: string): Promise<Bac
     queue: Promise.resolve(),
     active: true,
   }
-  await writeBackupManifest(operation)
+  try {
+    await writeBackupManifest(operation)
+    await mkdir(dirname(backupRoot), { recursive: true })
+    await rename(stagingRoot, backupRoot)
+    operation.backupRoot = backupRoot
+  } catch (error) {
+    await rm(stagingRoot, { force: true, recursive: true }).catch(() => undefined)
+    throw error
+  }
   return operation
 }
 

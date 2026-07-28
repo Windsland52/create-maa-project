@@ -73,6 +73,16 @@ describe('operation backups', () => {
     expect(await readFile(backupFile(root, result.backupId as string, 'existing.txt'), 'utf8')).toBe('before')
   })
 
+  it('keeps unpublished backup staging directories outside the discoverable backup namespace', async () => {
+    const root = await temporaryRoot()
+    const stagingRoot = join(root, '.create-maa-project', 'backup-staging', 'unpublished')
+    await mkdir(stagingRoot, { recursive: true })
+    await writeFile(join(stagingRoot, '.create-maa-project-backup.json.tmp'), '{partial', 'utf8')
+
+    expect(await listProjectBackups(root)).toEqual([])
+    await expect(inspectProjectBackup(root, 'unpublished')).rejects.toThrow('Backup does not exist')
+  })
+
   it('removes operation-created files and creates a reversible pre-restore backup', async () => {
     const root = await temporaryRoot()
     await writeFile(join(root, 'existing.txt'), 'before', 'utf8')

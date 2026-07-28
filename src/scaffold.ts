@@ -32,7 +32,17 @@ import type {
   PendingItem,
   ScaffoldResult,
 } from './types.js'
-import { assertValidSlug, exists, normalizeSlug, prettyJson, readText, stableJson, stripV, writeText } from './utils.js'
+import {
+  assertValidSlug,
+  exists,
+  normalizeSlug,
+  prettyJson,
+  readText,
+  stableJson,
+  stripV,
+  throwIfAborted,
+  writeText,
+} from './utils.js'
 import { assertValidSemVer } from './semver.js'
 import {
   listDirectoryEntries,
@@ -77,12 +87,15 @@ export async function createProject(
     onDownloadProgress?: DownloadProgressReporter
     cwd?: string
     operationCommand?: string
+    signal?: AbortSignal
   } = {},
 ): Promise<ScaffoldResult> {
+  throwIfAborted(environment.signal)
   assertSupportedCreateAddons(options.add)
   const targetRoot = resolve(environment.cwd ?? process.cwd(), options.name ?? '.')
-  const detectGitTree = environment.detectGitTree ?? isInsideGitTree
+  const detectGitTree = environment.detectGitTree ?? ((path) => isInsideGitTree(path, environment.signal))
   const targetInsideGitTree = await detectGitTree(targetRoot)
+  throwIfAborted(environment.signal)
   const defaultName = options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
   const slug = options.slug ? normalizeSlug(options.slug) : normalizeSlug(defaultName)
   if (!slug) {
@@ -144,11 +157,14 @@ export async function createProject(
     targetRoot,
     operationCommand,
     async () => {
+      throwIfAborted(environment.signal)
       const managedResult = await withProjectWriteLock(targetRoot, operationCommand, async (operation) => {
+        throwIfAborted(environment.signal)
         const result = await writeGeneratedFiles(targetRoot, files, {
           force: options.force,
           backup: true,
         })
+        throwIfAborted(environment.signal)
         const written = new Set(result.written)
         if (shouldDownloadOcrModels) {
           const checkpoint = await createPathCheckpoint(targetRoot, 'resource/base/model/ocr')
@@ -161,6 +177,7 @@ export async function createProject(
             }
           } catch (error) {
             await restoreCheckpoint(checkpoint, error, 'OCR model download')
+            throwIfAborted(environment.signal)
             environment.onProgress?.(
               `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
             )
@@ -188,7 +205,9 @@ export async function createProject(
           environment.commandRunner ?? runCommand,
           environment.installNodeDeps === true,
           environment.onProgress,
+          environment.signal,
         )
+        throwIfAborted(environment.signal)
         return { ...afterDependencies, backupId: operation.backupId }
       })
       const git = await maybeInitializeGit(
@@ -197,6 +216,7 @@ export async function createProject(
         managedResult.pending,
         targetInsideGitTree,
         environment.gitRunner ?? runGit,
+        environment.signal,
       )
       return git ? { ...managedResult, git } : managedResult
     },
@@ -208,20 +228,26 @@ function createOcrUpdateOptions(environment: {
   ocrManifestResolver?: AssetManifestResolver
   assetDownloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
+  signal?: AbortSignal
 }): {
   manifestResolver: AssetManifestResolver
   downloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
+  signal?: AbortSignal
 } {
   const options: {
     manifestResolver: AssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   } = {
-    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment,
+    manifestResolver:
+      environment.ocrManifestResolver ??
+      (() => resolveOcrManifestFromEnvironment(environment.signal ? { signal: environment.signal } : {})),
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
+  if (environment.signal) options.signal = environment.signal
   return options
 }
 
@@ -846,12 +872,14 @@ export async function assertCanCreateTarget(
   }
 }
 
-async function isInsideGitTree(path: string): Promise<boolean> {
+async function isInsideGitTree(path: string, signal?: AbortSignal): Promise<boolean> {
+  throwIfAborted(signal)
   let current = resolve(path)
   for (;;) {
     try {
       if ((await stat(current)).isDirectory()) break
     } catch (error) {
+      throwIfAborted(signal)
       if (!isNodeError(error) || error.code !== 'ENOENT') return false
     }
     const parent = resolve(current, '..')
@@ -861,9 +889,11 @@ async function isInsideGitTree(path: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync('git', ['-C', current, 'rev-parse', '--is-inside-work-tree'], {
       windowsHide: true,
+      ...(signal ? { signal } : {}),
     })
     return stdout.trim() === 'true'
-  } catch {
+  } catch (error) {
+    throwIfAborted(signal)
     return false
   }
 }
@@ -874,7 +904,9 @@ async function maybeInitializeGit(
   pending: PendingItem[],
   targetInsideGitTree: boolean,
   gitRunner: GitRunner,
+  signal?: AbortSignal,
 ): Promise<GitInitResult | undefined> {
+  throwIfAborted(signal)
   if (options.initializeGit !== true) return undefined
   if (targetInsideGitTree) {
     return {
@@ -901,6 +933,7 @@ async function maybeInitializeGit(
         cleanupFailure = cleanupError
       }
     }
+    throwIfAborted(signal)
     return {
       initialized,
       committed: false,
@@ -915,6 +948,7 @@ async function maybeInitializeGit(
   try {
     await ensureLocalGitExcludes(root)
   } catch (error) {
+    throwIfAborted(signal)
     return {
       initialized: true,
       committed: false,
@@ -941,6 +975,7 @@ async function maybeInitializeGit(
       ':(exclude)node_modules/**',
     ])
   } catch (error) {
+    throwIfAborted(signal)
     return {
       initialized: true,
       committed: false,
@@ -954,6 +989,7 @@ async function maybeInitializeGit(
       'chore: scaffold MaaFW project',
     ])
   } catch (error) {
+    throwIfAborted(signal)
     return {
       initialized: true,
       committed: false,
@@ -1027,7 +1063,9 @@ async function maybeInstallNodeDependencies(
   commandRunner: CommandRunner,
   enabled: boolean,
   onProgress?: ProgressReporter,
+  signal?: AbortSignal,
 ): Promise<ScaffoldResult> {
+  throwIfAborted(signal)
   if (!enabled || options.skipDownload || !scaffold.pending.some((item) => item.kind === 'node-deps')) {
     return scaffold
   }
@@ -1069,6 +1107,7 @@ async function maybeInstallNodeDependencies(
         'Node dependency installation failed and its partial files could not be restored.',
       )
     }
+    throwIfAborted(signal)
     onProgress?.(`Node dependency install failed (${errorMessage(error)}); continuing with a pending action.`)
     pending = replacePending(pending, {
       kind: 'node-deps',

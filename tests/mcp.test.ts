@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, delimiter, dirname, join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
@@ -935,6 +936,78 @@ describe('MCP server', () => {
   )
 
   it(
+    'cancels child processes and releases the project lock',
+    async () => {
+      const projectRoot = await createValidProject('maa-mcp-cancel')
+      const commandRoot = await tempRoot()
+      const workerPath = join(commandRoot, 'worker.mjs')
+      const commandPath = join(commandRoot, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+      const startedPath = join(projectRoot, 'cancel-child-started')
+      const completedPath = join(projectRoot, 'cancel-child-completed')
+      await writeFile(
+        workerPath,
+        [
+          "import { writeFile } from 'node:fs/promises'",
+          "import { join } from 'node:path'",
+          "import { setTimeout as delay } from 'node:timers/promises'",
+          "await writeFile(join(process.cwd(), 'cancel-child-started'), String(process.pid))",
+          'await delay(10000)',
+          "await writeFile(join(process.cwd(), 'cancel-child-completed'), 'completed')",
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+      await writeFile(
+        commandPath,
+        process.platform === 'win32'
+          ? `@echo off\r\n"${process.execPath}" "%~dp0worker.mjs"\r\n`
+          : `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "$(dirname "$0")/worker.mjs"\n`,
+        'utf8',
+      )
+      if (process.platform !== 'win32') await chmod(commandPath, 0o755)
+
+      const previousPath = process.env.PATH
+      process.env.PATH = `${commandRoot}${delimiter}${previousPath ?? ''}`
+      try {
+        const session = await startSession(projectRoot)
+        await initialize(session)
+        const pending = session.startRequest('tools/call', {
+          name: 'update',
+          arguments: { targets: ['node-deps'] },
+        })
+
+        await waitUntil(() => pathExists(startedPath))
+        const childPid = Number(await readFile(startedPath, 'utf8'))
+        expect(Number.isSafeInteger(childPid)).toBe(true)
+        await session.cancelRequest(pending.id, 'test cancellation')
+        await expect(pending.response).rejects.toThrow('test cancellation')
+        await waitUntil(async () => {
+          const lockEntries = await readdir(join(projectRoot, '.create-maa-project', 'run-locks')).catch(() => [])
+          return (
+            !lockEntries.some((entry) => entry.endsWith('.json')) &&
+            !(await pathExists(join(projectRoot, '.create-maa-project', 'run.lock')))
+          )
+        })
+
+        await waitUntil(() => !isProcessAlive(childPid))
+        expect(await pathExists(completedPath)).toBe(false)
+        const followup = await session.request('tools/call', {
+          name: 'update',
+          arguments: { targets: ['schema'] },
+        })
+        const { result, report } = parseToolReport(followup)
+        expect(result.isError).toBeFalsy()
+        expect(report.ok).toBe(true)
+        expect(session.hasUnexpectedResponse(pending.id)).toBe(false)
+      } finally {
+        if (previousPath === undefined) delete process.env.PATH
+        else process.env.PATH = previousPath
+      }
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'returns an error report and keeps serving when the server cwd was deleted',
     async () => {
       const root = await tempRoot()
@@ -1039,11 +1112,38 @@ async function tempRoot(): Promise<string> {
   return root
 }
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitUntil(check: () => boolean | Promise<boolean>, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!(await check())) {
+    if (Date.now() >= deadline) throw new Error(`Timed out after ${timeoutMs}ms waiting for MCP test condition.`)
+    await delay(25)
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
 class McpSession {
   private clientTransport: InMemoryTransport
   private nextId = 1
   private closed = false
   private exit: number | null = null
+  private unexpectedResponseIds = new Set<number>()
   private pending = new Map<
     number,
     {
@@ -1080,6 +1180,10 @@ class McpSession {
   }
 
   request(method: string, params?: unknown): Promise<JsonRpcResponse> {
+    return this.startRequest(method, params).response
+  }
+
+  startRequest(method: string, params?: unknown): { id: number; response: Promise<JsonRpcResponse> } {
     const id = this.nextId
     this.nextId += 1
     const payload = params === undefined ? { jsonrpc: '2.0', id, method } : { jsonrpc: '2.0', id, method, params }
@@ -1095,7 +1199,20 @@ class McpSession {
       })
     })
     void this.clientTransport.send(payload as JSONRPCMessage)
-    return promise
+    return { id, response: promise }
+  }
+
+  async cancelRequest(id: number, reason: string): Promise<void> {
+    await this.clientTransport.send({
+      jsonrpc: '2.0',
+      method: 'notifications/cancelled',
+      params: { requestId: id, reason },
+    } as JSONRPCMessage)
+    const waiter = this.pending.get(id)
+    if (!waiter) return
+    this.pending.delete(id)
+    clearTimeout(waiter.timer)
+    waiter.reject(new Error(reason))
   }
 
   notify(method: string, params?: unknown): void {
@@ -1107,6 +1224,10 @@ class McpSession {
     return this.exit
   }
 
+  hasUnexpectedResponse(id: number): boolean {
+    return this.unexpectedResponseIds.has(id)
+  }
+
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
@@ -1116,7 +1237,10 @@ class McpSession {
   private handleMessage(response: JsonRpcResponse): void {
     if (response.id === undefined) return
     const waiter = this.pending.get(response.id)
-    if (!waiter) return
+    if (!waiter) {
+      this.unexpectedResponseIds.add(response.id)
+      return
+    }
     this.pending.delete(response.id)
     clearTimeout(waiter.timer)
     waiter.resolve(response)

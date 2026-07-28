@@ -38,6 +38,14 @@ export async function exists(path: string): Promise<boolean> {
   }
 }
 
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  if (signal.reason instanceof Error) throw signal.reason
+  const error = new Error(typeof signal.reason === 'string' ? signal.reason : 'The operation was aborted.')
+  error.name = 'AbortError'
+  throw error
+}
+
 export async function writeText(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, content, 'utf8')

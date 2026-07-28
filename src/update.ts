@@ -32,7 +32,7 @@ import {
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
-import { copyFileAtomic, exists, readText, sha256, stableJson, writeFileAtomic } from './utils.js'
+import { copyFileAtomic, exists, readText, sha256, stableJson, throwIfAborted, writeFileAtomic } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
@@ -104,6 +104,7 @@ type UpdateEnvironment = {
   onDownloadProgress?: DownloadProgressReporter
   root?: string
   operationCommand?: string
+  signal?: AbortSignal
   [updateOperation]?: ProjectWriteOperation
 }
 
@@ -111,6 +112,7 @@ export async function recordUpdateRequests(
   options: CliOptions,
   environment: UpdateEnvironment = {},
 ): Promise<ScaffoldResult> {
+  throwIfAborted(environment.signal)
   const root = environment.root ?? process.cwd()
   const targets = [
     ...new Set(options.update.map(validateUpdateTarget)),
@@ -130,11 +132,13 @@ export async function recordUpdateRequests(
     root,
     environment.operationCommand ?? process.argv.join(' '),
     async (operation) => {
+      throwIfAborted(environment.signal)
       const written = new Set<string>()
       const skipped: string[] = []
       let pendingToAdd: PendingItem[] = []
 
       for (const target of targets) {
+        throwIfAborted(environment.signal)
         if (target === 'schema') {
           const result = await writeGeneratedFiles(root, schemaFilesForConfig(config), {
             force: true,
@@ -309,6 +313,7 @@ export async function recordUpdateRequests(
         pendingToAdd.push(toPendingUpdate(target))
       }
 
+      throwIfAborted(environment.signal)
       pendingToAdd = mergePending([], pendingToAdd)
       await writeProjectState(root, config)
       written.add('maa-project.json')
@@ -434,8 +439,10 @@ async function updatePythonRuntime(
     commandRunner: UpdateCommandRunner
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<{ written: string[] } | undefined> {
+  throwIfAborted(options.signal)
   if (!(await exists(join(root, 'pyproject.toml')))) {
     throw new Error('--update python-runtime requires an Agent project with pyproject.toml.')
   }
@@ -457,6 +464,7 @@ async function updatePythonRuntime(
   }
 
   const manifest = await options.manifestResolver({ ...options.request, platform })
+  throwIfAborted(options.signal)
   if (!manifest) return undefined
   const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
   const assets = await downloadProjectManifestAssets(
@@ -466,12 +474,15 @@ async function updatePythonRuntime(
           downloader: options.downloader,
           allowedPathPrefixes: options.allowedPathPrefixes,
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
         }
       : {
           allowedPathPrefixes: options.allowedPathPrefixes,
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
         },
   )
+  throwIfAborted(options.signal)
   const reserved = assets.find((asset) => asset.path.startsWith(PROJECT_ASSET_INSTALLATIONS_DIR))
   if (reserved) {
     throw new Error(`Project asset path is reserved for installation state: ${reserved.path}`)
@@ -508,13 +519,15 @@ async function updateWindowsEmbeddedPythonRuntime(
     commandRunner: UpdateCommandRunner
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<{ written: string[] }> {
   const runtimeRoot = `.create-maa-project/runtime/python/${platform}`
   const arch = platform.endsWith('-arm64') ? 'arm64' : 'amd64'
   const filename = `python-${PYTHON_EMBED_VERSION}-embed-${arch}.zip`
   const url = `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/${filename}`
-  const archive = await downloadRuntimeArchive(url, options.downloader, options.onDownloadProgress)
+  const archive = await downloadRuntimeArchive(url, options.downloader, options.onDownloadProgress, options.signal)
+  throwIfAborted(options.signal)
   const assets = patchWindowsEmbeddedPythonAssets(
     platform,
     extractProjectArchiveAssets(archive, {
@@ -622,12 +635,12 @@ async function downloadRuntimeArchive(
   url: string,
   downloader?: AssetDownloader,
   onDownloadProgress?: DownloadProgressReporter,
+  signal?: AbortSignal,
 ): Promise<Buffer> {
-  const options = onDownloadProgress
-    ? {
-        onProgress: onDownloadProgress,
-      }
-    : undefined
+  const options = {
+    ...(onDownloadProgress ? { onProgress: onDownloadProgress } : {}),
+    ...(signal ? { signal } : {}),
+  }
   return downloader ? downloader(url, options) : downloadUrl(url, options)
 }
 
@@ -724,9 +737,12 @@ export async function updateOcrModels(
     manifestResolver: AssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<{ written: string[]; files: Array<{ path: string; content: string | Buffer }> } | undefined> {
+  throwIfAborted(options.signal)
   const manifest = await options.manifestResolver()
+  throwIfAborted(options.signal)
   const basePath = 'resource/base/model/ocr'
   const allowedPaths = [
     'det.onnx',
@@ -742,13 +758,16 @@ export async function updateOcrModels(
               downloader: options.downloader,
               allowedPaths,
               ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+              ...(options.signal ? { signal: options.signal } : {}),
             }
           : {
               allowedPaths,
               ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+              ...(options.signal ? { signal: options.signal } : {}),
             },
       )
     : await downloadDefaultOcrZip(createDefaultOcrZipDownloadOptions(options))
+  throwIfAborted(options.signal)
   for (const asset of assets) await trackProjectPathForBackup(root, `${basePath}/${asset.path}`)
   await trackProjectPathForBackup(root, `${basePath}/manifest.json`)
   const { written, manifestContent } = await writeDownloadedAssets(root, basePath, assets)
@@ -775,9 +794,12 @@ export async function updateProjectAssets(
     manifestResolver: ProductAssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<{ written: string[] } | undefined> {
+  throwIfAborted(options.signal)
   const manifest = await options.manifestResolver(options.request)
+  throwIfAborted(options.signal)
   if (!manifest) return undefined
   const assets = await downloadProjectManifestAssets(
     manifest,
@@ -786,12 +808,15 @@ export async function updateProjectAssets(
           downloader: options.downloader,
           allowedPathPrefixes: options.allowedPathPrefixes,
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
         }
       : {
           allowedPathPrefixes: options.allowedPathPrefixes,
           ...(options.onDownloadProgress ? { onProgress: options.onDownloadProgress } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
         },
   )
+  throwIfAborted(options.signal)
   const reserved = assets.find((asset) => asset.path.startsWith(PROJECT_ASSET_INSTALLATIONS_DIR))
   if (reserved) {
     throw new Error(`Project asset path is reserved for installation state: ${reserved.path}`)
@@ -887,6 +912,7 @@ function createProjectAssetUpdateOptions(
     productManifestResolver?: ProductAssetManifestResolver
     assetDownloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): {
   request: ProductAssetManifestRequest
@@ -894,6 +920,7 @@ function createProjectAssetUpdateOptions(
   manifestResolver: ProductAssetManifestResolver
   downloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
+  signal?: AbortSignal
 } {
   const options: {
     request: ProductAssetManifestRequest
@@ -901,13 +928,18 @@ function createProjectAssetUpdateOptions(
     manifestResolver: ProductAssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   } = {
     request,
     allowedPathPrefixes: RUNTIME_ASSET_PATH_PREFIXES,
-    manifestResolver: environment.productManifestResolver ?? resolveProductAssetManifest,
+    manifestResolver:
+      environment.productManifestResolver ??
+      ((manifestRequest) =>
+        resolveProductAssetManifest(manifestRequest, environment.signal ? { signal: environment.signal } : {})),
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
+  if (environment.signal) options.signal = environment.signal
   return options
 }
 
@@ -915,30 +947,39 @@ function createOcrUpdateOptions(environment: {
   ocrManifestResolver?: AssetManifestResolver
   assetDownloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
+  signal?: AbortSignal
 }): {
   manifestResolver: AssetManifestResolver
   downloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
+  signal?: AbortSignal
 } {
   const options: {
     manifestResolver: AssetManifestResolver
     downloader?: AssetDownloader
     onDownloadProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   } = {
-    manifestResolver: environment.ocrManifestResolver ?? resolveOcrManifestFromEnvironment,
+    manifestResolver:
+      environment.ocrManifestResolver ??
+      (() => resolveOcrManifestFromEnvironment(environment.signal ? { signal: environment.signal } : {})),
   }
   if (environment.assetDownloader) options.downloader = environment.assetDownloader
   if (environment.onDownloadProgress) options.onDownloadProgress = environment.onDownloadProgress
+  if (environment.signal) options.signal = environment.signal
   return options
 }
 
 function createDefaultOcrZipDownloadOptions(options: {
   downloader?: AssetDownloader
   onDownloadProgress?: DownloadProgressReporter
-}): { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter } {
-  const downloadOptions: { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter } = {}
+  signal?: AbortSignal
+}): { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter; signal?: AbortSignal } {
+  const downloadOptions: { downloader?: AssetDownloader; onProgress?: DownloadProgressReporter; signal?: AbortSignal } =
+    {}
   if (options.downloader) downloadOptions.downloader = options.downloader
   if (options.onDownloadProgress) downloadOptions.onProgress = options.onDownloadProgress
+  if (options.signal) downloadOptions.signal = options.signal
   return downloadOptions
 }
 

@@ -125,6 +125,31 @@ describe('incremental add-on result aggregation', () => {
     await expect(applyIncrementalAddons(options([]))).resolves.toBeUndefined()
     expect(addonMocks.addDevTools).not.toHaveBeenCalled()
   })
+
+  it('stops before the next add-on when the request is cancelled', async () => {
+    const controller = new AbortController()
+    addonMocks.addDevTools.mockImplementation(async () => {
+      controller.abort('add cancelled')
+      return scaffoldResult(projectConfig({ devTools: { enabled: true } }), {
+        written: ['package.json'],
+        skipped: [],
+        pending: [],
+      })
+    })
+
+    await expect(
+      applyIncrementalAddons(
+        options([
+          'github',
+        ]),
+        () => undefined,
+        'C:/project',
+        'MCP add',
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'add cancelled' })
+    expect(addonMocks.addGithub).not.toHaveBeenCalled()
+  })
 })
 
 function scaffoldResult(

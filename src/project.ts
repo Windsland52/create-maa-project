@@ -5,7 +5,7 @@ import { appendFile, cp, link, lstat, mkdir, readdir, realpath, rename, rm, writ
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
-import { exists, nowIso, readText, stableJson, writeFileAtomic, writeText } from './utils.js'
+import { exists, nowIso, readText, stableJson, throwIfAborted, writeFileAtomic, writeText } from './utils.js'
 import { migrateProjectConfigValue, validateProjectConfig } from './project-config.js'
 
 export const CONFIG_FILE = 'maa-project.json'
@@ -210,13 +210,17 @@ export async function migrateStoredProjectConfig(
   root: string,
   clearStale = false,
   operationCommand = 'create-maa-project --sync config',
+  signal?: AbortSignal,
 ): Promise<ScaffoldResult> {
+  throwIfAborted(signal)
   const command = operationCommand
   return withProjectLock(
     root,
     command,
     async () => {
+      throwIfAborted(signal)
       const config = await readStoredProjectConfig(root)
+      throwIfAborted(signal)
       if (config.schemaVersion === 2) {
         return {
           root,
@@ -230,7 +234,9 @@ export async function migrateStoredProjectConfig(
       }
       const migrated = migrateProjectConfigValue(config)
       return withProjectOperation(root, command, async (operation) => {
+        throwIfAborted(signal)
         await writeProjectState(root, migrated)
+        throwIfAborted(signal)
         return {
           root,
           config: migrated,
@@ -269,10 +275,13 @@ export async function writeProjectState(root: string, config: MaaProjectConfig):
   await writeGeneratedFile(configPath, configContent)
 }
 
-export async function cleanCache(root: string): Promise<string> {
+export async function cleanCache(root: string, signal?: AbortSignal): Promise<string> {
+  throwIfAborted(signal)
   const cachePath = join(root, LOCAL_STATE_DIR, 'cache')
   await assertNoSymlinkSegments(root, `${LOCAL_STATE_DIR}/cache`)
+  throwIfAborted(signal)
   await rm(cachePath, { force: true, recursive: true })
+  throwIfAborted(signal)
   return cachePath
 }
 
@@ -280,15 +289,19 @@ export async function restoreBackup(
   root: string,
   backupId: string,
   operationCommand = `restore backup ${backupId}`,
+  signal?: AbortSignal,
 ): Promise<RestoreResult> {
+  throwIfAborted(signal)
   assertValidBackupId(backupId)
   if (!currentWriteLockOwner(root)) {
-    return withProjectLock(root, operationCommand, () => restoreBackup(root, backupId, operationCommand))
+    return withProjectLock(root, operationCommand, () => restoreBackup(root, backupId, operationCommand, signal))
   }
   if (!currentBackupOperation(root)) {
     await inspectProjectBackup(root, backupId)
-    return withProjectOperation(root, operationCommand, () => restoreBackup(root, backupId, operationCommand))
+    throwIfAborted(signal)
+    return withProjectOperation(root, operationCommand, () => restoreBackup(root, backupId, operationCommand, signal))
   }
+  throwIfAborted(signal)
   const operation = requireBackupOperation(root)
   if (operation.manifest.id === backupId) throw new Error('Cannot restore the backup for the active operation.')
   const { backupRoot } = await existingBackupRoot(root, backupId)
@@ -296,13 +309,16 @@ export async function restoreBackup(
   if (await exists(manifestPath)) {
     const manifest = await readBackupManifest(root, manifestPath, backupId)
     await validateBackupPayload(root, backupRoot, manifest)
-    const changes = await restoreManifestBackup(root, backupRoot, manifest)
+    throwIfAborted(signal)
+    const changes = await restoreManifestBackup(root, backupRoot, manifest, signal)
+    throwIfAborted(signal)
     return {
       ...changes,
       backupId: operation.manifest.id,
     }
   }
-  const changes = await restoreLegacyBackup(root, backupRoot)
+  const changes = await restoreLegacyBackup(root, backupRoot, signal)
+  throwIfAborted(signal)
   return {
     ...changes,
     backupId: operation.manifest.id,
@@ -444,19 +460,24 @@ async function restoreDirectory(
   backupRoot: string,
   current: string,
   restored: string[],
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfAborted(signal)
   const entries = await readdir(current, { withFileTypes: true })
   for (const entry of entries) {
+    throwIfAborted(signal)
     const source = join(current, entry.name)
     if (entry.isDirectory()) {
-      await restoreDirectory(projectRoot, backupRoot, source, restored)
+      await restoreDirectory(projectRoot, backupRoot, source, restored, signal)
       continue
     }
     const relativePath = source.slice(backupRoot.length + 1).replaceAll('\\', '/')
     const target = join(projectRoot, relativePath)
     await mkdir(dirname(target), { recursive: true })
     await rm(target, { force: true, recursive: true })
+    throwIfAborted(signal)
     await cp(source, target, { force: true, verbatimSymlinks: true })
+    throwIfAborted(signal)
     restored.push(relativePath)
   }
 }
@@ -708,48 +729,80 @@ async function restoreManifestBackup(
   root: string,
   backupRoot: string,
   manifest: BackupManifest,
+  signal?: AbortSignal,
 ): Promise<Pick<RestoreResult, 'restored' | 'removed'>> {
-  for (const entry of manifest.entries) await backupPath(root, entry.path)
-  await applyManifestBackup(root, backupRoot, manifest)
+  for (const entry of manifest.entries) {
+    throwIfAborted(signal)
+    await backupPath(root, entry.path)
+  }
+  throwIfAborted(signal)
+  await applyManifestBackup(root, backupRoot, manifest, signal)
   return {
     restored: manifest.entries.filter((entry) => entry.state === 'modified').map((entry) => entry.path),
     removed: manifest.entries.filter((entry) => entry.state === 'created').map((entry) => entry.path),
   }
 }
 
-async function applyManifestBackup(root: string, backupRoot: string, manifest: BackupManifest): Promise<void> {
-  for (const entry of manifest.entries) await applyBackupEntry(root, backupRoot, entry)
+async function applyManifestBackup(
+  root: string,
+  backupRoot: string,
+  manifest: BackupManifest,
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const entry of manifest.entries) {
+    throwIfAborted(signal)
+    await applyBackupEntry(root, backupRoot, entry, signal)
+  }
 }
 
-async function applyBackupEntry(root: string, backupRoot: string, entry: BackupEntry): Promise<void> {
+async function applyBackupEntry(
+  root: string,
+  backupRoot: string,
+  entry: BackupEntry,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal)
   await assertNoSymlinkParents(root, entry.path)
   const target = join(root, entry.path)
   await rm(target, { force: true, recursive: true })
+  throwIfAborted(signal)
   if (entry.state === 'created') return
   const source = join(backupRoot, BACKUP_FILES_DIR, entry.path)
   await mkdir(dirname(target), { recursive: true })
   await cp(source, target, { recursive: true, force: true, verbatimSymlinks: true })
+  throwIfAborted(signal)
 }
 
 async function restoreLegacyBackup(
   root: string,
   backupRoot: string,
+  signal?: AbortSignal,
 ): Promise<Pick<RestoreResult, 'restored' | 'removed'>> {
   const paths: string[] = []
-  await collectBackupFiles(backupRoot, backupRoot, paths)
-  for (const path of paths) await backupPath(root, path)
+  await collectBackupFiles(backupRoot, backupRoot, paths, signal)
+  for (const path of paths) {
+    throwIfAborted(signal)
+    await backupPath(root, path)
+  }
   const restored: string[] = []
-  await restoreDirectory(root, backupRoot, backupRoot, restored)
+  await restoreDirectory(root, backupRoot, backupRoot, restored, signal)
   return { restored, removed: [] }
 }
 
-async function collectBackupFiles(backupRoot: string, current: string, paths: string[]): Promise<void> {
+async function collectBackupFiles(
+  backupRoot: string,
+  current: string,
+  paths: string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal)
   const entries = await readdir(current, { withFileTypes: true })
   for (const entry of entries) {
+    throwIfAborted(signal)
     const source = join(current, entry.name)
     if (entry.isSymbolicLink()) throw new Error(`Legacy backup contains a symbolic link: ${entry.name}`)
     if (entry.isDirectory()) {
-      await collectBackupFiles(backupRoot, source, paths)
+      await collectBackupFiles(backupRoot, source, paths, signal)
     } else {
       paths.push(source.slice(backupRoot.length + 1).replaceAll('\\', '/'))
     }

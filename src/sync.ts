@@ -19,7 +19,7 @@ import {
 import type { CliOptions, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools } from './features.js'
-import { addV, exists, prettyJson, readText, stableJson, stripV, writeFileAtomic } from './utils.js'
+import { addV, exists, prettyJson, readText, stableJson, stripV, throwIfAborted, writeFileAtomic } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 
 const syncOperation = Symbol('syncOperation')
@@ -28,16 +28,25 @@ type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
   root?: string
   operationCommand?: string
+  signal?: AbortSignal
   [syncOperation]?: ProjectWriteOperation
 }
 
 export async function syncProject(options: CliOptions, environment: SyncEnvironment = {}): Promise<ScaffoldResult> {
+  throwIfAborted(environment.signal)
   const root = environment.root ?? process.cwd()
   const sync = options.sync
   if (!sync) throw new Error('Missing --sync target')
   if (sync === 'config') {
     if (options.syncValue !== undefined) throw new Error('--sync config does not accept a value.')
-    return migrateStoredProjectConfig(root, options.clearStaleLock, environment.operationCommand)
+    const result = await migrateStoredProjectConfig(
+      root,
+      options.clearStaleLock,
+      environment.operationCommand,
+      environment.signal,
+    )
+    throwIfAborted(environment.signal)
+    return result
   }
   if (!environment[syncOperation]) {
     return withProjectWriteLock(
@@ -47,6 +56,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
       { clearStale: options.clearStaleLock },
     )
   }
+  throwIfAborted(environment.signal)
   const config = await readProjectConfig(root)
 
   const interfaceJson = JSON.parse(await readText(join(root, 'interface.json'))) as Record<string, unknown>
@@ -115,6 +125,7 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   applyInterfaceMetadata(interfaceJson, config, await exists(join(root, 'logo.ico')))
   if (packageJson) applyPackageMetadata(packageJson, config)
   const pyproject = await syncedPyproject(root, config)
+  throwIfAborted(environment.signal)
 
   files.push(
     maatoolsConfigFile(
@@ -160,7 +171,9 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
           backup: true,
           overwriteUnmanaged: true,
         })
+  throwIfAborted(environment.signal)
   if (sync !== 'license') await writeProjectState(root, config)
+  throwIfAborted(environment.signal)
   return {
     root,
     config,

@@ -113,6 +113,29 @@ describe('operation backups', () => {
     expect(await readFile(join(root, 'created.txt'), 'utf8')).toBe('created')
   })
 
+  it('does not restore or create a pre-restore backup when already cancelled', async () => {
+    const root = await temporaryRoot()
+    await writeFile(join(root, 'existing.txt'), 'before', 'utf8')
+    const changed = await withProjectWriteLock(root, 'change files', async (operation) => {
+      await writeGeneratedFiles(root, [{ path: 'existing.txt', content: 'after', managed: true }], {
+        force: true,
+        backup: true,
+      })
+      return operation.backupId
+    })
+    const backupsBefore = await backupIds(root)
+    const controller = new AbortController()
+    controller.abort('restore cancelled')
+
+    await expect(restoreBackup(root, changed, 'cancelled restore', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'restore cancelled',
+    })
+
+    expect(await readFile(join(root, 'existing.txt'), 'utf8')).toBe('after')
+    expect(await backupIds(root)).toEqual(backupsBefore)
+  })
+
   it('restores only the created nested path and preserves later user files in its parent', async () => {
     const root = await temporaryRoot()
     const backupId = await withProjectWriteLock(root, 'create nested generated file', async (operation) => {

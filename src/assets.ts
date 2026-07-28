@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { crc32, gunzipSync, inflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { sha256, stableJson, writeFileAtomic } from './utils.js'
+import { sha256, stableJson, throwIfAborted, writeFileAtomic } from './utils.js'
 
 function posixJoin(...segments: string[]): string {
   return segments.filter(Boolean).join('/').replace(/\\/g, '/')
@@ -39,6 +39,7 @@ export type ProductAssetManifestResolver = (
 export type ProductAssetManifestResolveOptions = {
   explicitEnvNames?: string[]
   fetchJson?: GithubReleaseJsonFetcher
+  signal?: AbortSignal
 }
 
 export type AssetEntry = {
@@ -77,6 +78,7 @@ export type DownloadProgressReporter = (progress: DownloadProgress) => void
 export type AssetDownloaderOptions = {
   onProgress?: DownloadProgressReporter
   maxBytes?: number
+  signal?: AbortSignal
 }
 export type AssetDownloader = (url: string, options?: AssetDownloaderOptions) => Promise<Buffer>
 export type AssetManifestResolver = () => Promise<AssetManifest | undefined>
@@ -84,6 +86,7 @@ export type GithubReleaseJsonFetcher = (
   url: string,
   options: {
     headers: Record<string, string>
+    signal?: AbortSignal
   },
 ) => Promise<unknown>
 
@@ -146,7 +149,7 @@ export async function resolveProductAssetManifestFromEnvironment(
     ...productManifestEnvironmentNames(request.product),
   ])
   if (explicitUrl) {
-    return loadProductAssetManifest(explicitUrl, true)
+    return loadProductAssetManifest(explicitUrl, true, options.signal)
   }
 
   return undefined
@@ -175,8 +178,8 @@ export async function resolveProductAssetManifestFromGithubRelease(
   const channel = normalizeReleaseChannel(request.channel)
   const version = request.version?.trim()
   const release = version
-    ? await fetchGithubReleaseByTag(config, version, options.fetchJson)
-    : await fetchGithubReleaseByChannel(config, channel, options.fetchJson)
+    ? await fetchGithubReleaseByTag(config, version, options.fetchJson, options.signal)
+    : await fetchGithubReleaseByChannel(config, channel, options.fetchJson, options.signal)
   return parseGithubReleaseManifest(config, release, channel, selectedPlatform)
 }
 
@@ -186,8 +189,10 @@ export async function downloadManifestAssets(
     downloader?: AssetDownloader
     allowedPaths: string[]
     onProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<DownloadedAsset[]> {
+  throwIfAborted(options.signal)
   const downloader = options.downloader ?? defaultDownload
   const allowedPaths = new Set(options.allowedPaths)
   const assets = manifest.assets.map(validateAssetEntry)
@@ -207,8 +212,10 @@ export async function downloadManifestAssets(
   const downloaded: DownloadedAsset[] = []
   let completedBytes = 0
   for (const asset of assets) {
+    throwIfAborted(options.signal)
     const content = await downloader(asset.url, {
       ...(asset.size !== undefined ? { maxBytes: asset.size } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
       ...(options.onProgress
         ? {
             onProgress: (progress: DownloadProgress) => {
@@ -222,6 +229,7 @@ export async function downloadManifestAssets(
           }
         : {}),
     })
+    throwIfAborted(options.signal)
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
       throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
@@ -253,8 +261,10 @@ export async function downloadProjectManifestAssets(
     downloader?: AssetDownloader
     allowedPathPrefixes: string[]
     onProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   },
 ): Promise<DownloadedAsset[]> {
+  throwIfAborted(options.signal)
   const downloader = options.downloader ?? defaultDownload
   const assets = manifest.assets.map(validateProductAssetEntry)
   const unexpected = assets.find(
@@ -274,8 +284,10 @@ export async function downloadProjectManifestAssets(
   const downloadedByPath = new Map<string, DownloadedAsset>()
   let completedBytes = 0
   for (const asset of assets) {
+    throwIfAborted(options.signal)
     const content = await downloader(asset.url, {
       ...(asset.size !== undefined ? { maxBytes: asset.size } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
       ...(options.onProgress
         ? {
             onProgress: (progress: DownloadProgress) => {
@@ -289,6 +301,7 @@ export async function downloadProjectManifestAssets(
           }
         : {}),
     })
+    throwIfAborted(options.signal)
     const actualSha256 = sha256(content)
     if (actualSha256 !== asset.sha256) {
       throw new Error(`Checksum mismatch for ${asset.path}: expected ${asset.sha256}, got ${actualSha256}`)
@@ -394,26 +407,19 @@ export async function downloadDefaultOcrZip(
     downloader?: AssetDownloader
     url?: string
     onProgress?: DownloadProgressReporter
+    signal?: AbortSignal
   } = {},
 ): Promise<DownloadedAsset[]> {
+  throwIfAborted(options.signal)
   const url = options.url ?? DEFAULT_OCR_ZIP_URL
+  const downloadOptions: AssetDownloaderOptions = {
+    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  }
   const zip = options.downloader
-    ? await options.downloader(
-        url,
-        options.onProgress
-          ? {
-              onProgress: options.onProgress,
-            }
-          : undefined,
-      )
-    : await downloadDefaultOcrZipContent(
-        url,
-        options.onProgress
-          ? {
-              onProgress: options.onProgress,
-            }
-          : undefined,
-      )
+    ? await options.downloader(url, downloadOptions)
+    : await downloadDefaultOcrZipContent(url, downloadOptions)
+  throwIfAborted(options.signal)
   return extractOcrZipAssets(zip, url)
 }
 
@@ -600,11 +606,13 @@ async function fetchGithubReleaseByTag(
   config: ProductReleaseConfig,
   tag: string,
   fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   return fetchJson(
     `https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tag)}`,
     {
       headers: githubRequestHeaders(),
+      ...(signal ? { signal } : {}),
     },
   )
 }
@@ -613,18 +621,20 @@ async function fetchGithubReleaseByChannel(
   config: ProductReleaseConfig,
   channel: string,
   fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   if (channel === 'stable') {
     return fetchJson(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
       headers: githubRequestHeaders(),
+      ...(signal ? { signal } : {}),
     })
   }
   if (channel !== 'beta' && channel !== 'alpha') {
-    return fetchGithubReleaseByTag(config, channel, fetchJson)
+    return fetchGithubReleaseByTag(config, channel, fetchJson, signal)
   }
   const releases = await fetchJson(
     `https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=100`,
-    { headers: githubRequestHeaders() },
+    { headers: githubRequestHeaders(), ...(signal ? { signal } : {}) },
   )
   if (!Array.isArray(releases)) throw new Error(`Invalid GitHub releases payload for ${config.product}.`)
   const release = releases.find((value) => isReleaseAllowedForChannel(value, channel))
@@ -656,25 +666,31 @@ async function defaultGithubReleaseJsonFetch(
   url: string,
   options: {
     headers: Record<string, string>
+    signal?: AbortSignal
   },
 ): Promise<unknown> {
   const attempts = configuredDownloadAttempts()
   let lastError: unknown
   let usedAttempts = 0
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    throwIfAborted(options.signal)
     usedAttempts = attempt
     try {
-      const response = await fetch(url, { headers: options.headers })
+      const response = await fetch(url, {
+        headers: options.headers,
+        ...(options.signal ? { signal: options.signal } : {}),
+      })
       if (!response.ok) {
         throw new DownloadHttpError(response.status)
       }
       return response.json() as Promise<unknown>
     } catch (error) {
       lastError = error
+      throwIfAborted(options.signal)
       if (attempt >= attempts || !isRetryableDownloadError(error)) {
         break
       }
-      await sleep(downloadRetryDelayMs(attempt))
+      await sleep(downloadRetryDelayMs(attempt), undefined, options.signal ? { signal: options.signal } : undefined)
     }
   }
   const suffix = usedAttempts > 1 ? ` after ${usedAttempts} attempts` : ''
@@ -895,15 +911,17 @@ async function defaultDownload(url: string, options: AssetDownloaderOptions = {}
   let lastError: unknown
   let usedAttempts = 0
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    throwIfAborted(options.signal)
     usedAttempts = attempt
     try {
       return await downloadOnce(url, options)
     } catch (error) {
       lastError = error
+      throwIfAborted(options.signal)
       if (attempt >= attempts || !isRetryableDownloadError(error)) {
         break
       }
-      await sleep(downloadRetryDelayMs(attempt))
+      await sleep(downloadRetryDelayMs(attempt), undefined, options.signal ? { signal: options.signal } : undefined)
     }
   }
   const suffix = usedAttempts > 1 ? ` after ${usedAttempts} attempts` : ''
@@ -911,8 +929,9 @@ async function defaultDownload(url: string, options: AssetDownloaderOptions = {}
 }
 
 async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
+  throwIfAborted(options.signal)
   const maxBytes = configuredMaxDownloadBytes(options.maxBytes)
-  const response = await fetch(url)
+  const response = await fetch(url, options.signal ? { signal: options.signal } : undefined)
   if (!response.ok) {
     throw new DownloadHttpError(response.status)
   }
@@ -922,6 +941,7 @@ async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): 
   }
   if (!response.body) {
     const content = Buffer.from(await response.arrayBuffer())
+    throwIfAborted(options.signal)
     if (content.byteLength > maxBytes) {
       throw new DownloadSizeError(maxBytes, content.byteLength)
     }
@@ -937,6 +957,7 @@ async function downloadOnce(url: string, options: AssetDownloaderOptions = {}): 
   const chunks: Uint8Array[] = []
   let downloadedBytes = 0
   while (true) {
+    throwIfAborted(options.signal)
     const { done, value } = await reader.read()
     if (done) break
     if (!value) continue
@@ -1004,9 +1025,11 @@ function errorMessage(error: unknown): string {
 }
 
 async function downloadDefaultOcrZipContent(url: string, options: AssetDownloaderOptions = {}): Promise<Buffer> {
+  throwIfAborted(options.signal)
   const localPath = process.env.CREATE_MAA_PROJECT_OCR_ZIP_PATH?.trim()
   if (localPath) {
     const content = await readFile(localPath)
+    throwIfAborted(options.signal)
     options.onProgress?.({
       url,
       downloadedBytes: content.byteLength,
@@ -1023,9 +1046,13 @@ function parseContentLength(value: string | null): number | undefined {
   return Number.isSafeInteger(size) && size >= 0 ? size : undefined
 }
 
-async function loadProductAssetManifest(location: string, strict: boolean): Promise<ProductAssetManifest | undefined> {
+async function loadProductAssetManifest(
+  location: string,
+  strict: boolean,
+  signal?: AbortSignal,
+): Promise<ProductAssetManifest | undefined> {
   try {
-    const manifest = JSON.parse((await readLocator(location)).toString('utf8')) as unknown
+    const manifest = JSON.parse((await readLocator(location, signal)).toString('utf8')) as unknown
     return parseProductAssetManifest(manifest, strict)
   } catch (error) {
     if (strict) throw error
@@ -1033,14 +1060,19 @@ async function loadProductAssetManifest(location: string, strict: boolean): Prom
   }
 }
 
-async function readLocator(location: string): Promise<Buffer> {
+async function readLocator(location: string, signal?: AbortSignal): Promise<Buffer> {
+  throwIfAborted(signal)
   if (/^https?:\/\//.test(location)) {
-    return defaultDownload(location)
+    return defaultDownload(location, signal ? { signal } : {})
   }
   if (location.startsWith('file://')) {
-    return readFile(fileURLToPath(location))
+    const content = await readFile(fileURLToPath(location))
+    throwIfAborted(signal)
+    return content
   }
-  return readFile(location)
+  const content = await readFile(location)
+  throwIfAborted(signal)
+  return content
 }
 
 function parseProductAssetManifest(value: unknown, strict: boolean): ProductAssetManifest | undefined {

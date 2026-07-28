@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
@@ -32,6 +32,7 @@ import { syncProject } from './sync.js'
 import type { CliOptions } from './types.js'
 import { recordUpdateRequests } from './update.js'
 import { UPDATE_TARGETS } from './update-targets.js'
+import { throwIfAborted } from './utils.js'
 
 const TEMPLATE_NAMES = [
   'pipeline',
@@ -230,8 +231,8 @@ export function createMcpServer(root = safeProcessCwd('.')): Server {
     tools: MCP_TOOLS,
   }))
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    callTool(context, request.params.name, request.params.arguments),
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
+    callTool(context, request.params.name, request.params.arguments, extra.signal),
   )
 
   return server
@@ -390,33 +391,43 @@ const MCP_TOOLS: Tool[] = MCP_TOOL_DEFINITIONS.map((tool) => ({
   annotations: TOOL_ANNOTATIONS[tool.name as ToolName],
 }))
 
-async function callTool(context: McpServerContext, name: string, input: unknown): Promise<CallToolResult> {
+async function callTool(
+  context: McpServerContext,
+  name: string,
+  input: unknown,
+  signal?: AbortSignal,
+): Promise<CallToolResult> {
+  throwIfAborted(signal)
   const toolName = name as ToolName
   switch (toolName) {
     case 'create_project':
-      return callCreateProject(context, input)
+      return callCreateProject(context, input, signal)
     case 'doctor':
       return callDoctor(context, input)
     case 'sync':
-      return callSync(context, input)
+      return callSync(context, input, signal)
     case 'update':
-      return callUpdate(context, input)
+      return callUpdate(context, input, signal)
     case 'add':
-      return callAdd(context, input)
+      return callAdd(context, input, signal)
     case 'list_backups':
       return callListBackups(context, input)
     case 'show_backup':
       return callShowBackup(context, input)
     case 'restore':
-      return callRestore(context, input)
+      return callRestore(context, input, signal)
     case 'clean_cache':
-      return callCleanCache(context, input)
+      return callCleanCache(context, input, signal)
     default:
       return errorToolResult(context, 'create', new Error(`Unknown MCP tool: ${name}`))
   }
 }
 
-async function callCreateProject(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callCreateProject(
+  context: McpServerContext,
+  input: unknown,
+  signal?: AbortSignal,
+): Promise<CallToolResult> {
   let options: CliOptions
   let targetRoot: string
   let operationCommand: string
@@ -429,19 +440,27 @@ async function callCreateProject(context: McpServerContext, input: unknown): Pro
   } catch (error) {
     return errorToolResult(context, 'create', error)
   }
-  return withReport(context, 'create', async (reportContext) => {
-    const createOptions = await promptForCreateOptions(options)
-    createOptions.name = targetRoot
-    const result = await createProject(createOptions, {
-      cwd: context.root,
-      installNodeDeps: true,
-      downloadOcrModels: true,
-      commandRunner: runMcpChildCommand,
-      ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
-      operationCommand,
-    })
-    return createScaffoldJsonReport(reportContext, result)
-  })
+  return withReport(
+    context,
+    'create',
+    async (reportContext) => {
+      throwIfAborted(signal)
+      const createOptions = await promptForCreateOptions(options)
+      createOptions.name = targetRoot
+      const result = await createProject(createOptions, {
+        cwd: context.root,
+        installNodeDeps: true,
+        downloadOcrModels: true,
+        commandRunner: (root, command, args) => runMcpChildCommand(root, command, args, signal),
+        gitRunner: (root, args) => runMcpChildCommand(root, 'git', args, signal),
+        ocrManifestResolver: () => resolveOcrManifestFromEnvironment(signal ? { signal } : {}),
+        operationCommand,
+        ...(signal ? { signal } : {}),
+      })
+      return createScaffoldJsonReport(reportContext, result)
+    },
+    signal ? { signal } : {},
+  )
 }
 
 async function callDoctor(context: McpServerContext, input: unknown): Promise<CallToolResult> {
@@ -467,7 +486,7 @@ async function callDoctor(context: McpServerContext, input: unknown): Promise<Ca
   )
 }
 
-async function callSync(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callSync(context: McpServerContext, input: unknown, signal?: AbortSignal): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
   let operationCommand: string
@@ -479,12 +498,19 @@ async function callSync(context: McpServerContext, input: unknown): Promise<Call
   } catch (error) {
     return errorToolResult(context, 'sync', error)
   }
-  return withReport({ root }, 'sync', async (reportContext) =>
-    createScaffoldJsonReport(reportContext, await syncProject(options, { root, operationCommand })),
+  return withReport(
+    { root },
+    'sync',
+    async (reportContext) =>
+      createScaffoldJsonReport(
+        reportContext,
+        await syncProject(options, { root, operationCommand, ...(signal ? { signal } : {}) }),
+      ),
+    signal ? { signal } : {},
   )
 }
 
-async function callUpdate(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callUpdate(context: McpServerContext, input: unknown, signal?: AbortSignal): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
   let operationCommand: string
@@ -496,19 +522,26 @@ async function callUpdate(context: McpServerContext, input: unknown): Promise<Ca
   } catch (error) {
     return errorToolResult(context, 'update', error)
   }
-  return withReport({ root }, 'update', async (reportContext) => {
-    const result = await recordUpdateRequests(options, {
-      root,
-      operationCommand,
-      commandRunner: runMcpChildCommand,
-      productManifestResolver: (request) => resolveProductAssetManifest(request),
-      ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
-    })
-    return createScaffoldJsonReport(reportContext, result)
-  })
+  return withReport(
+    { root },
+    'update',
+    async (reportContext) => {
+      throwIfAborted(signal)
+      const result = await recordUpdateRequests(options, {
+        root,
+        operationCommand,
+        commandRunner: (projectRoot, command, args) => runMcpChildCommand(projectRoot, command, args, signal),
+        productManifestResolver: (request) => resolveProductAssetManifest(request, signal ? { signal } : {}),
+        ocrManifestResolver: () => resolveOcrManifestFromEnvironment(signal ? { signal } : {}),
+        ...(signal ? { signal } : {}),
+      })
+      return createScaffoldJsonReport(reportContext, result)
+    },
+    signal ? { signal } : {},
+  )
 }
 
-async function callAdd(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callAdd(context: McpServerContext, input: unknown, signal?: AbortSignal): Promise<CallToolResult> {
   let options: CliOptions
   let root: string
   let operationCommand: string
@@ -520,23 +553,29 @@ async function callAdd(context: McpServerContext, input: unknown): Promise<CallT
   } catch (error) {
     return errorToolResult(context, 'add', error)
   }
-  return withReport({ root }, 'add', async (reportContext) => {
-    const result = await applyIncrementalAddons(
-      options,
-      (line) => {
-        process.stderr.write(`${line}\n`)
-      },
-      root,
-      operationCommand,
-    )
-    if (!result) {
-      throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
-    }
-    return createScaffoldJsonReport(reportContext, result)
-  })
+  return withReport(
+    { root },
+    'add',
+    async (reportContext) => {
+      const result = await applyIncrementalAddons(
+        options,
+        (line) => {
+          process.stderr.write(`${line}\n`)
+        },
+        root,
+        operationCommand,
+        signal,
+      )
+      if (!result) {
+        throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
+      }
+      return createScaffoldJsonReport(reportContext, result)
+    },
+    signal ? { signal } : {},
+  )
 }
 
-async function callRestore(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callRestore(context: McpServerContext, input: unknown, signal?: AbortSignal): Promise<CallToolResult> {
   let backupId: string
   let dryRun: boolean
   let root: string
@@ -550,28 +589,39 @@ async function callRestore(context: McpServerContext, input: unknown): Promise<C
   } catch (error) {
     return errorToolResult(context, 'backup', error)
   }
-  return withReport({ root }, 'backup', async (reportContext) => {
-    if (dryRun) {
-      const backup = await withProjectLock(root, 'MCP restore preview', () => inspectProjectBackup(root, backupId))
+  return withReport(
+    { root },
+    'backup',
+    async (reportContext) => {
+      throwIfAborted(signal)
+      if (dryRun) {
+        const backup = await withProjectLock(root, 'MCP restore preview', async () => {
+          throwIfAborted(signal)
+          const inspection = await inspectProjectBackup(root, backupId)
+          throwIfAborted(signal)
+          return inspection
+        })
+        return createBackupJsonReport({
+          context: reportContext,
+          root,
+          backup: { operation: 'restore-preview', backup },
+        })
+      }
+      const restoreResult = await restoreBackup(root, backupId, operationCommand, signal)
       return createBackupJsonReport({
         context: reportContext,
         root,
-        backup: { operation: 'restore-preview', backup },
+        backup: {
+          operation: 'restore',
+          backupId,
+          restored: restoreResult.restored,
+          removed: restoreResult.removed,
+          preRestoreBackupId: restoreResult.backupId,
+        },
       })
-    }
-    const restoreResult = await restoreBackup(root, backupId, operationCommand)
-    return createBackupJsonReport({
-      context: reportContext,
-      root,
-      backup: {
-        operation: 'restore',
-        backupId,
-        restored: restoreResult.restored,
-        removed: restoreResult.removed,
-        preRestoreBackupId: restoreResult.backupId,
-      },
-    })
-  })
+    },
+    signal ? { signal } : {},
+  )
 }
 
 async function callListBackups(context: McpServerContext, input: unknown): Promise<CallToolResult> {
@@ -612,7 +662,11 @@ async function callShowBackup(context: McpServerContext, input: unknown): Promis
   })
 }
 
-async function callCleanCache(context: McpServerContext, input: unknown): Promise<CallToolResult> {
+async function callCleanCache(
+  context: McpServerContext,
+  input: unknown,
+  signal?: AbortSignal,
+): Promise<CallToolResult> {
   let root: string
   try {
     const args = argsRecord(input, PROJECT_PATH_ARGUMENTS, 'clean_cache')
@@ -620,20 +674,25 @@ async function callCleanCache(context: McpServerContext, input: unknown): Promis
   } catch (error) {
     return errorToolResult(context, 'clean-cache', error)
   }
-  return withReport({ root }, 'clean-cache', async (reportContext) => {
-    return createCleanCacheJsonReport({
-      context: reportContext,
-      root,
-      cachePath: await cleanCache(root),
-    })
-  })
+  return withReport(
+    { root },
+    'clean-cache',
+    async (reportContext) => {
+      return createCleanCacheJsonReport({
+        context: reportContext,
+        root,
+        cachePath: await cleanCache(root, signal),
+      })
+    },
+    signal ? { signal } : {},
+  )
 }
 
 async function withReport(
   serverContext: McpServerContext,
   command: CliReportCommand,
   action: (context: ReportContext) => Promise<CliJsonReport>,
-  options: { reportFailureIsError?: boolean } = {},
+  options: { reportFailureIsError?: boolean; signal?: AbortSignal } = {},
 ): Promise<CallToolResult> {
   const startTimeMs = Date.now()
   const context = createMcpReportContext(command, startTimeMs)
@@ -641,6 +700,7 @@ async function withReport(
     const report = await action(context)
     return reportToolResult(report, options.reportFailureIsError === false ? false : !report.ok)
   } catch (error) {
+    if (options.signal?.aborted) throw error
     return reportToolResult(
       createErrorJsonReport({
         context,
@@ -971,9 +1031,11 @@ function optionalStringArray<T extends readonly string[]>(
   return strings as T extends readonly string[] ? T[number][] : string[]
 }
 
-async function runMcpChildCommand(root: string, command: string, args: string[]): Promise<void> {
+async function runMcpChildCommand(root: string, command: string, args: string[], signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal)
   await new Promise<void>((resolve, reject) => {
     let settled = false
+    let aborted = false
     const resolveOnce = (): void => {
       if (settled) return
       settled = true
@@ -993,6 +1055,15 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
         'pipe',
       ],
     })
+    const onAbort = (): void => {
+      aborted = true
+      terminateChildProcess(child)
+    }
+    const cleanup = (): void => {
+      signal?.removeEventListener('abort', onAbort)
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
     child.stdout?.on('data', (chunk: Buffer) => {
       process.stderr.write(chunk)
     })
@@ -1000,17 +1071,58 @@ async function runMcpChildCommand(root: string, command: string, args: string[])
       process.stderr.write(chunk)
     })
     child.on('error', (error) => {
+      cleanup()
+      if (aborted || signal?.aborted) {
+        try {
+          throwIfAborted(signal)
+        } catch (abortError) {
+          rejectOnce(abortError instanceof Error ? abortError : new Error(String(abortError)))
+          return
+        }
+      }
       rejectOnce(new Error(`Failed to run ${formatCommand(command, args)}. ${error.message}`))
     })
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, childSignal) => {
+      cleanup()
+      if (aborted || signal?.aborted) {
+        try {
+          throwIfAborted(signal)
+        } catch (abortError) {
+          rejectOnce(abortError instanceof Error ? abortError : new Error(String(abortError)))
+          return
+        }
+      }
       if (code === 0) {
         resolveOnce()
         return
       }
-      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
+      const suffix = childSignal ? `signal ${childSignal}` : `exit code ${code ?? 'unknown'}`
       rejectOnce(new Error(`Command failed: ${formatCommand(command, args)} (${suffix})`))
     })
   })
+}
+
+function terminateChildProcess(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    killer.once('error', () => {
+      child.kill()
+    })
+    killer.once('close', (code) => {
+      if (code !== 0 && child.exitCode === null && child.signalCode === null) child.kill()
+    })
+    return
+  }
+  child.kill('SIGTERM')
+  const forceKill = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  }, 1000)
+  forceKill.unref()
+  child.once('close', () => clearTimeout(forceKill))
 }
 
 function safeProcessCwd(fallback: string): string {

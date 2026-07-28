@@ -19,24 +19,30 @@ import {
 } from './scaffold.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
 import { withProjectWriteLock } from './project.js'
+import { throwIfAborted } from './utils.js'
 
 export async function applyIncrementalAddons(
   options: CliOptions,
   writeLine: (line: string) => void = console.log,
   root = process.cwd(),
   operationCommand = process.argv.join(' '),
+  signal?: AbortSignal,
 ): Promise<ScaffoldResult | undefined> {
+  throwIfAborted(signal)
   const addons = resolveAddonDependencies(options.add)
   if (addons.length === 0) return undefined
   return withProjectWriteLock(
     root,
     operationCommand,
     async (operation) => {
+      throwIfAborted(signal)
       let combinedResult: ScaffoldResult | undefined
       for (const addon of addons) {
+        throwIfAborted(signal)
         if (!isIncrementalAddon(addon)) {
           if (isDefaultIncludedAddon(addon)) {
             writeLine(defaultIncludedAddonMessage(addon))
+            throwIfAborted(signal)
             continue
           }
           throw new Error(incrementalAddonUnavailableMessage(addon))
@@ -63,6 +69,7 @@ export async function applyIncrementalAddons(
         } else if (addon === 'schema-sync') {
           result = await addSchemaSync(options, root)
         }
+        throwIfAborted(signal)
         if (result) combinedResult = mergeScaffoldResults(combinedResult, result)
       }
       return combinedResult ? { ...combinedResult, backupId: operation.backupId } : undefined

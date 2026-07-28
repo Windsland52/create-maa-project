@@ -340,6 +340,24 @@ describe('scaffold', () => {
     )
   })
 
+  it('rolls back project creation instead of swallowing OCR download cancellation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const controller = new AbortController()
+    process.chdir(root)
+
+    const creation = createProject(defaultOptions({ name: 'maa-create-ocr-cancel' }), {
+      downloadOcrModels: true,
+      signal: controller.signal,
+      assetDownloader: async () => {
+        controller.abort('OCR download cancelled')
+        throw new Error('download transport stopped')
+      },
+    })
+
+    await expect(creation).rejects.toMatchObject({ name: 'AbortError', message: 'OCR download cancelled' })
+    expect(await pathExists(join(root, 'maa-create-ocr-cancel', 'maa-project.json'))).toBe(false)
+  })
+
   it('retries transient default asset download failures', async () => {
     const content = Buffer.from('downloaded asset')
     const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -372,6 +390,26 @@ describe('scaffold', () => {
         content,
       }),
     ])
+  })
+
+  it('aborts default asset downloads without retrying', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock.mockImplementation(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal
+          if (!signal) throw new Error('Expected the download signal to reach fetch.')
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+    )
+
+    const download = downloadUrl('https://example.test/cancelled.bin', { signal: controller.signal })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    controller.abort('download cancelled')
+
+    await expect(download).rejects.toMatchObject({ name: 'AbortError', message: 'download cancelled' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('rejects oversized downloads before or during response streaming', async () => {
@@ -1700,6 +1738,34 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         },
       }),
     ).rejects.toThrow('simulated license transaction failure')
+
+    for (const path of paths) {
+      expect(await readFile(join(projectRoot, path))).toEqual(before.get(path))
+    }
+  })
+
+  it('rolls back synchronized files when the request is cancelled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const controller = new AbortController()
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-sync-cancel' }))
+    const projectRoot = join(root, 'maa-sync-cancel')
+    process.chdir(projectRoot)
+    const paths = ['maa-project.json', 'package.json', 'LICENSE']
+    const before = new Map(
+      await Promise.all(paths.map(async (path) => [path, await readFile(join(projectRoot, path))] as const)),
+    )
+
+    await expect(
+      syncProject(defaultOptions({ sync: 'license', license: 'MIT' }), {
+        signal: controller.signal,
+        writeFiles: async (...args) => {
+          const result = await writeGeneratedFiles(...args)
+          controller.abort('sync cancelled')
+          return result
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'sync cancelled' })
 
     for (const path of paths) {
       expect(await readFile(join(projectRoot, path))).toEqual(before.get(path))
@@ -3472,6 +3538,22 @@ export default defineConfig({
     expect(restoreResult.backupId).toBeTruthy()
     expect(await readFile(join(projectRoot, 'README.md'), 'utf8')).toBe('# Restored\n')
   })
+
+  it('preserves cache when cleanup is already cancelled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    const cachePath = join(root, '.create-maa-project/cache')
+    await mkdir(cachePath, { recursive: true })
+    await writeFile(join(cachePath, 'temp.txt'), 'cache', 'utf8')
+    const controller = new AbortController()
+    controller.abort('cache cleanup cancelled')
+
+    await expect(cleanCache(root, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cache cleanup cancelled',
+    })
+    expect(await readFile(join(cachePath, 'temp.txt'), 'utf8')).toBe('cache')
+  })
+
   it('creates repository tooling project under resource/base', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

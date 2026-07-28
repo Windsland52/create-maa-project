@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
+import { Ajv, type AnySchema } from 'ajv'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import packageJson from '../package.json' with { type: 'json' }
 import { createMcpServer } from '../src/mcp.js'
@@ -73,20 +74,32 @@ type ToolCallResult = {
   isError?: boolean
 }
 
+type ListedSchema = {
+  type?: string
+  properties?: Record<string, ListedSchema>
+  required?: string[]
+  items?: ListedSchema
+  enum?: unknown[]
+  const?: unknown
+  oneOf?: ListedSchema[]
+  allOf?: ListedSchema[]
+  anyOf?: ListedSchema[]
+  not?: ListedSchema
+  if?: ListedSchema
+  then?: ListedSchema
+  contains?: ListedSchema
+  additionalProperties?: boolean
+  minItems?: number
+  uniqueItems?: boolean
+  [keyword: string]: unknown
+}
+
 type ToolListResult = {
   tools: Array<{
     name: string
     description?: string
-    inputSchema: {
-      type: 'object'
-      properties?: Record<string, unknown>
-      required?: string[]
-    }
-    outputSchema?: {
-      type: 'object'
-      properties?: Record<string, unknown>
-      required?: string[]
-    }
+    inputSchema: ListedSchema & { type: 'object' }
+    outputSchema?: ListedSchema & { type: 'object' }
     annotations?: {
       title?: string
       readOnlyHint?: boolean
@@ -103,6 +116,7 @@ const distCli = join(repoRoot, 'dist/index.js')
 const tempRoots: string[] = []
 const sessions: McpSession[] = []
 const MCP_TEST_TIMEOUT_MS = 40000
+const schemaAjv = new Ajv({ allErrors: true, strict: false })
 
 afterEach(async () => {
   await Promise.all(sessions.splice(0).map((session) => session.close()))
@@ -130,6 +144,256 @@ describe('MCP server', () => {
           tools: {},
         },
       })
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'publishes schemas that discriminate input and output variants',
+    async () => {
+      const session = await startSession(await tempRoot())
+      await initialize(session)
+      const response = await session.request('tools/list')
+      const tools = (response.result as ToolListResult).tools
+      const createTool = toolByName(tools, 'create_project')
+      const syncTool = toolByName(tools, 'sync')
+      const updateTool = toolByName(tools, 'update')
+      const addTool = toolByName(tools, 'add')
+
+      expect(schemaProperty(createTool.inputSchema, 'controllers')).toMatchObject({
+        minItems: 1,
+        uniqueItems: true,
+      })
+      expect(createTool.inputSchema.allOf).toHaveLength(2)
+      expect(syncTool.inputSchema.oneOf).toHaveLength(4)
+      expect(schemaProperty(updateTool.inputSchema, 'targets')).toMatchObject({ minItems: 1 })
+      expect(schemaProperty(addTool.inputSchema, 'addons')).toMatchObject({ minItems: 1, uniqueItems: true })
+      expect(addTool.inputSchema.allOf).toHaveLength(2)
+
+      expectSchemaValidity(createTool.inputSchema, {
+        name: 'project',
+        template: 'pipeline',
+        controllers: ['Adb'],
+      })
+      expectSchemaValidity(
+        createTool.inputSchema,
+        { name: 'project', template: 'pipeline', controllers: ['Adb', 'Adb'] },
+        false,
+      )
+      expectSchemaValidity(
+        createTool.inputSchema,
+        { name: 'project', template: 'pipeline', controllers: ['Adb'], add: ['resource-pack'] },
+        false,
+      )
+      expectSchemaValidity(createTool.inputSchema, {
+        name: 'project',
+        template: 'pipeline',
+        controllers: ['Adb'],
+        add: ['resource-pack'],
+        resourcePackSlug: 'extra',
+      })
+      expectSchemaValidity(syncTool.inputSchema, { target: 'metadata' })
+      expectSchemaValidity(syncTool.inputSchema, { target: 'metadata', value: 'unexpected' }, false)
+      expectSchemaValidity(syncTool.inputSchema, { target: 'license', value: 'invalid' }, false)
+      expectSchemaValidity(syncTool.inputSchema, { target: 'license', value: 'MIT' })
+      expectSchemaValidity(updateTool.inputSchema, { targets: [] }, false)
+      expectSchemaValidity(addTool.inputSchema, {}, false)
+      expectSchemaValidity(addTool.inputSchema, { addon: 'community' })
+      expectSchemaValidity(addTool.inputSchema, { addons: ['community', 'dependabot'] })
+      expectSchemaValidity(addTool.inputSchema, { addon: 'community', addons: ['dependabot'] }, false)
+      expectSchemaValidity(addTool.inputSchema, { addons: [] }, false)
+      expectSchemaValidity(addTool.inputSchema, { addons: ['community', 'community'] }, false)
+      expectSchemaValidity(addTool.inputSchema, { addon: 'resource-pack' }, false)
+      expectSchemaValidity(addTool.inputSchema, { addon: 'resource-pack', resourcePackSlug: 'extra' })
+      expectSchemaValidity(addTool.inputSchema, { addons: ['community', 'resource-pack'] }, false)
+      expectSchemaValidity(addTool.inputSchema, {
+        addons: ['community', 'resource-pack'],
+        resourcePackSlug: 'extra',
+      })
+      expectSchemaValidity(addTool.inputSchema, { addon: 'community', label: 'ignored' }, false)
+
+      const reportCommands: Record<string, string> = {
+        create_project: 'create',
+        doctor: 'doctor',
+        sync: 'sync',
+        update: 'update',
+        add: 'add',
+        list_backups: 'backup',
+        show_backup: 'backup',
+        restore: 'backup',
+        clean_cache: 'clean-cache',
+      }
+      for (const [name, command] of Object.entries(reportCommands)) {
+        const schema = toolByName(tools, name).outputSchema
+        expect(schema?.additionalProperties, name).toBe(false)
+        expect(schemaProperty(schema, 'command').const, name).toBe(command)
+        expect(schema?.oneOf?.length, name).toBeGreaterThanOrEqual(2)
+      }
+
+      const createOutput = createTool.outputSchema
+      const createSuccess = jsonReportFixture('create')
+      expectSchemaValidity(createOutput, createSuccess)
+      expectSchemaValidity(createOutput, { ...createSuccess, backupId: 'backup-1' }, false)
+      expectSchemaValidity(createOutput, {
+        ...createSuccess,
+        backupId: 'backup-1',
+        backupScope: 'managed-files',
+      })
+      expectSchemaValidity(createOutput, { ...createSuccess, command: 'update' }, false)
+      expectSchemaValidity(createOutput, {
+        ...createSuccess,
+        ok: false,
+        exitCode: 1,
+        error: { message: 'failed', code: 'CMP_CREATE_FAILED' },
+      })
+      expectSchemaValidity(createOutput, { ...createSuccess, ok: false, exitCode: 1 }, false)
+
+      const doctorOutput = toolByName(tools, 'doctor').outputSchema
+      expectSchemaValidity(doctorOutput, {
+        ...jsonReportFixture('doctor'),
+        ok: false,
+        exitCode: 1,
+        doctor: { lines: ['[ERR] invalid'], checks: [] },
+      })
+      expectSchemaValidity(doctorOutput, {
+        ...jsonReportFixture('doctor'),
+        ok: false,
+        exitCode: 1,
+        error: { message: 'failed', code: 'CMP_DOCTOR_FAILED' },
+      })
+      expectSchemaValidity(doctorOutput, { ...jsonReportFixture('doctor'), ok: false, exitCode: 1 }, false)
+
+      const listOutput = toolByName(tools, 'list_backups').outputSchema
+      const listReport = {
+        ...jsonReportFixture('backup'),
+        backupScope: 'managed-files',
+        backup: { operation: 'list', backups: [] },
+      }
+      expectSchemaValidity(listOutput, listReport)
+      expect(schemaProperty(schemaProperty(listOutput, 'backup'), 'operation').const).toBe('list')
+
+      const showOutput = toolByName(tools, 'show_backup').outputSchema
+      const inspection = {
+        id: 'backup-1',
+        format: 'managed-files',
+        createdAt: '2026-07-28T00:00:00.000Z',
+        command: 'test',
+        status: 'complete',
+        entries: [],
+      }
+      expectSchemaValidity(showOutput, {
+        ...jsonReportFixture('backup'),
+        backupScope: 'managed-files',
+        backup: { operation: 'show', backup: inspection },
+      })
+      expectSchemaValidity(showOutput, listReport, false)
+
+      const restoreOutput = toolByName(tools, 'restore').outputSchema
+      expectSchemaValidity(restoreOutput, {
+        ...jsonReportFixture('backup'),
+        backupScope: 'managed-files',
+        backup: { operation: 'restore-preview', backup: inspection },
+      })
+      expectSchemaValidity(restoreOutput, {
+        ...jsonReportFixture('backup'),
+        backupId: 'pre-restore-backup',
+        backupScope: 'managed-files',
+        backup: {
+          operation: 'restore',
+          backupId: 'selected-backup',
+          restored: ['maa-project.json'],
+          removed: [],
+          preRestoreBackupId: 'pre-restore-backup',
+        },
+      })
+      expectSchemaValidity(
+        restoreOutput,
+        {
+          ...jsonReportFixture('backup'),
+          backupId: 'impossible-for-preview',
+          backupScope: 'managed-files',
+          backup: { operation: 'restore-preview', backup: inspection },
+        },
+        false,
+      )
+      expectSchemaValidity(restoreOutput, listReport, false)
+
+      const contextOutput = toolByName(tools, 'get_project_context').outputSchema
+      const contextBase = {
+        schemaVersion: 1,
+        tool: 'get_project_context',
+        serverRoot: 'C:/workspace',
+        projectPath: '.',
+        hasProjectConfig: false,
+      }
+      expectSchemaValidity(contextOutput, {
+        ...contextBase,
+        ok: true,
+        projectRoot: 'C:/workspace',
+        projectConfigPath: 'C:/workspace/maa-project.json',
+      })
+      expectSchemaValidity(contextOutput, {
+        ...contextBase,
+        ok: false,
+        projectRoot: null,
+        projectConfigPath: null,
+        error: { message: 'invalid path' },
+      })
+      expectSchemaValidity(
+        contextOutput,
+        { ...contextBase, ok: false, projectRoot: null, projectConfigPath: null },
+        false,
+      )
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'validates actual tool results against their advertised output schemas',
+    async () => {
+      const root = await tempRoot()
+      const session = await startSession(root)
+      await initialize(session)
+      const toolsResponse = await session.request('tools/list')
+      const tools = (toolsResponse.result as ToolListResult).tools
+      const callAndValidate = async (name: string, args: Record<string, unknown>): Promise<ToolCallResult> => {
+        const response = await session.request('tools/call', { name, arguments: args })
+        expect(response.error, name).toBeUndefined()
+        const result = response.result as ToolCallResult
+        const payload = JSON.parse(result.content[0]!.text) as unknown
+        expect(result.structuredContent, name).toEqual(payload)
+        expectSchemaValidity(toolByName(tools, name).outputSchema, payload)
+        return result
+      }
+
+      await callAndValidate('get_project_context', {})
+      const created = await callAndValidate('create_project', {
+        name: 'schema-project',
+        template: 'pipeline',
+        controllers: ['Adb'],
+        skipDownload: true,
+        git: false,
+      })
+      expect(created.isError).toBeFalsy()
+
+      const projectArguments = { projectPath: 'schema-project' }
+      await callAndValidate('get_project_context', projectArguments)
+      await callAndValidate('doctor', projectArguments)
+      await callAndValidate('sync', { ...projectArguments, target: 'metadata' })
+      await callAndValidate('update', { ...projectArguments, targets: ['runtime:mxu'] })
+      await callAndValidate('add', { ...projectArguments, addon: 'community' })
+      const listed = await callAndValidate('list_backups', projectArguments)
+      const listPayload = listed.structuredContent as JsonReport
+      const backupId = listPayload.backup?.backups?.[0]?.id
+      expect(backupId).toEqual(expect.any(String))
+      await callAndValidate('show_backup', { ...projectArguments, backupId })
+      await callAndValidate('restore', { ...projectArguments, backupId, dryRun: true })
+      await callAndValidate('clean_cache', projectArguments)
+
+      const invalidUpdate = await callAndValidate('update', { ...projectArguments, targets: [] })
+      expect(invalidUpdate.isError).toBe(true)
+      const invalidContext = await callAndValidate('get_project_context', { projectPath: '../outside' })
+      expect(invalidContext.isError).toBe(true)
     },
     MCP_TEST_TIMEOUT_MS,
   )
@@ -193,6 +457,11 @@ describe('MCP server', () => {
           'schema-sync',
         ]),
       })
+      expect(toolByName(tools, 'add').inputSchema.properties?.addons).toMatchObject({
+        type: 'array',
+        minItems: 1,
+        uniqueItems: true,
+      })
       expect(toolByName(tools, 'create_project').description).toContain('MCP mode is non-interactive')
       expect(toolByName(tools, 'create_project').inputSchema.properties?.resourcePackSlug).toMatchObject({
         type: 'string',
@@ -204,7 +473,7 @@ describe('MCP server', () => {
       expect(toolByName(tools, 'add').description).toContain('resourcePackSlug')
       expect(toolByName(tools, 'add').inputSchema.properties?.resourcePackSlug).toMatchObject({
         type: 'string',
-        description: expect.stringContaining('Required when addon is "resource-pack"'),
+        description: expect.stringContaining('addon or addons includes "resource-pack"'),
       })
       expect(toolByName(tools, 'show_backup').inputSchema.required).toEqual(['backupId'])
       expect(toolByName(tools, 'restore').inputSchema.properties?.dryRun).toMatchObject({ type: 'boolean' })
@@ -566,6 +835,75 @@ describe('MCP server', () => {
   )
 
   it(
+    'reports the resolved target root when project creation fails',
+    async () => {
+      const serverRoot = await tempRoot()
+      const targetRoot = join(serverRoot, 'existing-target')
+      await mkdir(targetRoot, { recursive: true })
+      await writeFile(join(targetRoot, 'note.txt'), 'keep me\n', 'utf8')
+      const session = await startSession(serverRoot)
+      await initialize(session)
+
+      const { result, report } = parseToolReport(
+        await session.request('tools/call', {
+          name: 'create_project',
+          arguments: {
+            name: 'existing-target',
+            template: 'pipeline',
+            controllers: ['Adb'],
+            skipDownload: true,
+            git: false,
+          },
+        }),
+      )
+
+      expect(result.isError).toBe(true)
+      expect(report.root).toBe(targetRoot)
+      expect(report.error?.message).toContain('Target directory is not empty')
+      expect(await readFile(join(targetRoot, 'note.txt'), 'utf8')).toBe('keep me\n')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'applies multiple add-ons through one managed-files backup',
+    async () => {
+      const root = await createValidProject('maa-mcp-batch-addons')
+      const backupsBefore = await listProjectBackups(root)
+      const session = await startSession(root)
+      await initialize(session)
+
+      const { result, report } = parseToolReport(
+        await session.request('tools/call', {
+          name: 'add',
+          arguments: { addons: ['community', 'dependabot'] },
+        }),
+      )
+      const backupsAfter = await listProjectBackups(root)
+      const newBackupIds = backupsAfter
+        .map((backup) => backup.id)
+        .filter((id) => !backupsBefore.some((backup) => backup.id === id))
+      const config = JSON.parse(await readFile(join(root, 'maa-project.json'), 'utf8')) as {
+        addons: { community?: { enabled: boolean }; dependabot?: { enabled: boolean } }
+      }
+
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({
+        command: 'add',
+        ok: true,
+        root,
+        backupScope: 'managed-files',
+      })
+      expect(newBackupIds).toEqual([report.backupId])
+      expect(config.addons.community?.enabled).toBe(true)
+      expect(config.addons.dependabot?.enabled).toBe(true)
+      expect(await readFile(join(root, '.github', 'dependabot.yml'), 'utf8')).toContain('version: 2')
+      expect(await readFile(join(root, 'CONTRIBUTING.md'), 'utf8')).toContain('Contributing')
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'migrates legacy project config only through an explicit sync target',
     async () => {
       const root = await createValidProject('maa-mcp-migrate')
@@ -861,7 +1199,7 @@ describe('MCP server', () => {
   )
 
   it(
-    'rejects incremental resource-pack add-ons without a resourcePackSlug',
+    'rejects invalid incremental resource-pack fields',
     async () => {
       const session = await startSession(await tempRoot())
       await initialize(session)
@@ -881,6 +1219,20 @@ describe('MCP server', () => {
         exitCode: 1,
       })
       expect(report.error?.message).toContain('resourcePackSlug is required')
+
+      const unrelatedFields = parseToolReport(
+        await session.request('tools/call', {
+          name: 'add',
+          arguments: {
+            addon: 'community',
+            label: 'Ignored label',
+          },
+        }),
+      )
+      expect(unrelatedFields.result.isError).toBe(true)
+      expect(unrelatedFields.report.error?.message).toContain(
+        'resourcePackSlug and label are only valid when addon or addons includes "resource-pack"',
+      )
       expect(session.exitCode()).toBeNull()
     },
     MCP_TEST_TIMEOUT_MS,
@@ -1241,6 +1593,38 @@ function parseToolReport(response: JsonRpcResponse): {
   return {
     result,
     report,
+  }
+}
+
+function schemaProperty(schema: ListedSchema | undefined, name: string): ListedSchema {
+  const property = schema?.properties?.[name]
+  if (!property) throw new Error(`Schema is missing property: ${name}`)
+  return property
+}
+
+function expectSchemaValidity(schema: ListedSchema | undefined, value: unknown, expected = true): void {
+  if (!schema) throw new Error('Expected tool schema to be defined.')
+  const validate = schemaAjv.compile(schema as AnySchema)
+  expect(validate(value), JSON.stringify(validate.errors)).toBe(expected)
+}
+
+function jsonReportFixture(command: string): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    tool: 'create-maa-project',
+    command,
+    ok: true,
+    timestamp: '2026-07-28T00:00:00.000Z',
+    durationMs: 0,
+    exitCode: 0,
+    executionId: 'test-execution',
+    root: 'C:/workspace',
+    logPath: null,
+    written: [],
+    removed: [],
+    skipped: [],
+    pending: [],
+    suggestedCommands: [],
   }
 }
 

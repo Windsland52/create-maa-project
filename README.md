@@ -150,6 +150,7 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 ```
 
 如果 agent 要添加 resource pack，必须传 `resourcePackSlug`，例如 `extra` 或 `cn`；否则 MCP tool 会拒绝调用。
+`add` tool 可用 `addon` 添加单项，也可用 `addons` 数组在同一个项目锁和 managed-files 备份事务中添加多项；两者必须且只能传一个。
 建议始终用 `--root` 显式指定允许 MCP 操作的工作区；相对的 `--root` 按 MCP server 启动时的当前目录解析，省略时默认使用当前目录。
 Agent 可先调用只读的 `get_project_context` 确认 server root，以及 `projectPath` 最终解析到的项目目录。
 

@@ -93,6 +93,7 @@ const UPDATE_ARGUMENTS = [
 ] as const
 const ADD_ARGUMENTS = [
   'addon',
+  'addons',
   'resourcePackSlug',
   'label',
   'projectPath',
@@ -123,8 +124,155 @@ type ToolName =
 
 type JsonObject = Record<string, unknown>
 type McpServerContext = { root: string }
+type SchemaObject = Record<string, unknown>
+type OutputSchema = NonNullable<Tool['outputSchema']>
+type SchemaComposition = { allOf?: SchemaObject[]; oneOf?: SchemaObject[] }
 
-const PROJECT_CONTEXT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+const STRING_ARRAY_OUTPUT_SCHEMA = {
+  type: 'array',
+  items: { type: 'string' },
+}
+const PENDING_ITEM_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    kind: { type: 'string' },
+    reason: { type: 'string' },
+    command: { type: 'string' },
+  },
+  ['kind', 'reason', 'command'],
+)
+const SUGGESTED_COMMAND_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    command: { type: 'string' },
+    description: { type: 'string' },
+    autoRun: { type: 'boolean' },
+  },
+  ['command', 'description', 'autoRun'],
+)
+const REPORT_ERROR_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    message: { type: 'string' },
+    code: { type: 'string' },
+    causeCode: { type: 'string' },
+  },
+  ['message', 'code'],
+)
+const GIT_RESULT_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    initialized: { type: 'boolean' },
+    committed: { type: 'boolean' },
+    reason: { type: 'string' },
+  },
+  ['initialized', 'committed'],
+)
+const DOCTOR_CHECK_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    id: { type: 'string' },
+    status: { type: 'string', enum: ['pass', 'fail', 'skipped'] },
+    summary: { type: 'string' },
+    details: STRING_ARRAY_OUTPUT_SCHEMA,
+  },
+  ['id', 'status', 'summary', 'details'],
+)
+const DOCTOR_RESULT_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    lines: STRING_ARRAY_OUTPUT_SCHEMA,
+    checks: { type: 'array', items: DOCTOR_CHECK_OUTPUT_SCHEMA },
+  },
+  ['lines', 'checks'],
+)
+const BACKUP_INSPECTION_ENTRY_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    path: { type: 'string' },
+    action: { type: 'string', enum: ['restore', 'remove'] },
+  },
+  ['path', 'action'],
+)
+const BACKUP_INSPECTION_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    id: { type: 'string' },
+    format: { type: 'string', enum: ['managed-files', 'legacy'] },
+    createdAt: { type: 'string' },
+    command: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    status: {
+      type: 'string',
+      enum: ['in-progress', 'complete', 'rolled-back', 'rollback-failed', 'legacy'],
+    },
+    entries: { type: 'array', items: BACKUP_INSPECTION_ENTRY_OUTPUT_SCHEMA },
+  },
+  ['id', 'format', 'createdAt', 'command', 'status', 'entries'],
+)
+const BACKUP_SUMMARY_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    id: { type: 'string' },
+    format: { type: 'string', enum: ['managed-files', 'legacy', 'invalid'] },
+    createdAt: { type: 'string' },
+    command: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    status: {
+      type: 'string',
+      enum: ['in-progress', 'complete', 'rolled-back', 'rollback-failed', 'legacy', 'invalid'],
+    },
+    entryCount: { type: 'integer', minimum: 0 },
+    error: { type: 'string' },
+  },
+  ['id', 'format', 'createdAt', 'command', 'status', 'entryCount'],
+)
+const LIST_BACKUPS_RESULT_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    operation: { type: 'string', const: 'list' },
+    backups: { type: 'array', items: BACKUP_SUMMARY_OUTPUT_SCHEMA },
+  },
+  ['operation', 'backups'],
+)
+const SHOW_BACKUP_RESULT_OUTPUT_SCHEMA = backupInspectionResultSchema('show')
+const RESTORE_PREVIEW_RESULT_OUTPUT_SCHEMA = backupInspectionResultSchema('restore-preview')
+const RESTORE_RESULT_OUTPUT_SCHEMA = closedObjectSchema(
+  {
+    operation: { type: 'string', const: 'restore' },
+    backupId: { type: 'string' },
+    restored: STRING_ARRAY_OUTPUT_SCHEMA,
+    removed: STRING_ARRAY_OUTPUT_SCHEMA,
+    preRestoreBackupId: { type: 'string' },
+  },
+  ['operation', 'backupId', 'restored', 'removed', 'preRestoreBackupId'],
+)
+
+const BASE_REPORT_PROPERTIES: Record<string, object> = {
+  schemaVersion: { type: 'integer', const: 1 },
+  tool: { type: 'string', const: 'create-maa-project' },
+  command: { type: 'string' },
+  ok: { type: 'boolean' },
+  timestamp: { type: 'string' },
+  durationMs: { type: 'integer', minimum: 0 },
+  exitCode: { type: 'integer', enum: [0, 1] },
+  executionId: { type: 'string' },
+  root: { type: 'string' },
+  logPath: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+  written: STRING_ARRAY_OUTPUT_SCHEMA,
+  removed: STRING_ARRAY_OUTPUT_SCHEMA,
+  skipped: STRING_ARRAY_OUTPUT_SCHEMA,
+  pending: { type: 'array', items: PENDING_ITEM_OUTPUT_SCHEMA },
+  suggestedCommands: { type: 'array', items: SUGGESTED_COMMAND_OUTPUT_SCHEMA },
+  error: REPORT_ERROR_OUTPUT_SCHEMA,
+}
+const BASE_REPORT_REQUIRED = [
+  'schemaVersion',
+  'tool',
+  'command',
+  'ok',
+  'timestamp',
+  'durationMs',
+  'exitCode',
+  'executionId',
+  'root',
+  'logPath',
+  'written',
+  'removed',
+  'skipped',
+  'pending',
+  'suggestedCommands',
+]
+
+const PROJECT_CONTEXT_OUTPUT_SCHEMA: OutputSchema = {
   type: 'object',
   properties: {
     schemaVersion: { type: 'integer', const: 1 },
@@ -155,99 +303,77 @@ const PROJECT_CONTEXT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
     'hasProjectConfig',
   ],
   additionalProperties: false,
+  oneOf: [
+    {
+      properties: {
+        ok: { const: true },
+        projectRoot: { type: 'string' },
+        projectConfigPath: { type: 'string' },
+      },
+      not: { required: ['error'] },
+    },
+    {
+      properties: {
+        ok: { const: false },
+        projectRoot: { type: 'null' },
+        projectConfigPath: { type: 'null' },
+        hasProjectConfig: { const: false },
+      },
+      required: ['error'],
+    },
+  ],
 }
 
-const REPORT_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
-  type: 'object',
-  properties: {
-    schemaVersion: { type: 'integer', const: 1 },
-    tool: { type: 'string', const: 'create-maa-project' },
-    command: { type: 'string', enum: ['create', 'sync', 'update', 'add', 'doctor', 'backup', 'clean-cache'] },
-    ok: { type: 'boolean' },
-    timestamp: { type: 'string' },
-    durationMs: { type: 'integer', minimum: 0 },
-    exitCode: { type: 'integer', enum: [0, 1] },
-    executionId: { type: 'string' },
-    root: { type: 'string' },
-    logPath: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    written: { type: 'array', items: { type: 'string' } },
-    removed: { type: 'array', items: { type: 'string' } },
-    skipped: { type: 'array', items: { type: 'string' } },
-    pending: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          kind: { type: 'string' },
-          reason: { type: 'string' },
-          command: { type: 'string' },
-        },
-        required: ['kind', 'reason', 'command'],
+const SCAFFOLD_REPORT_PROPERTIES: Record<string, object> = {
+  backupId: { type: 'string' },
+  backupScope: { type: 'string', const: 'managed-files' },
+}
+const TOOL_OUTPUT_SCHEMAS: Record<ToolName, OutputSchema> = {
+  get_project_context: PROJECT_CONTEXT_OUTPUT_SCHEMA,
+  create_project: reportOutputSchema('create', { ...SCAFFOLD_REPORT_PROPERTIES, git: GIT_RESULT_OUTPUT_SCHEMA }, [
+    scaffoldResultVariant(),
+  ]),
+  doctor: reportOutputSchema('doctor', { doctor: DOCTOR_RESULT_OUTPUT_SCHEMA }, [
+    reportResultVariant(true, ['doctor']),
+    reportResultVariant(false, ['doctor'], {}, ['error']),
+  ]),
+  sync: reportOutputSchema('sync', SCAFFOLD_REPORT_PROPERTIES, [scaffoldResultVariant()]),
+  update: reportOutputSchema('update', SCAFFOLD_REPORT_PROPERTIES, [scaffoldResultVariant()]),
+  add: reportOutputSchema('add', SCAFFOLD_REPORT_PROPERTIES, [scaffoldResultVariant()]),
+  list_backups: reportOutputSchema(
+    'backup',
+    {
+      backupScope: { type: 'string', const: 'managed-files' },
+      backup: LIST_BACKUPS_RESULT_OUTPUT_SCHEMA,
+    },
+    [reportResultVariant(true, ['backupScope', 'backup'])],
+  ),
+  show_backup: reportOutputSchema(
+    'backup',
+    {
+      backupScope: { type: 'string', const: 'managed-files' },
+      backup: SHOW_BACKUP_RESULT_OUTPUT_SCHEMA,
+    },
+    [reportResultVariant(true, ['backupScope', 'backup'])],
+  ),
+  restore: reportOutputSchema(
+    'backup',
+    {
+      backupId: { type: 'string' },
+      backupScope: { type: 'string', const: 'managed-files' },
+      backup: {
+        oneOf: [RESTORE_PREVIEW_RESULT_OUTPUT_SCHEMA, RESTORE_RESULT_OUTPUT_SCHEMA],
       },
     },
-    suggestedCommands: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          command: { type: 'string' },
-          description: { type: 'string' },
-          autoRun: { type: 'boolean' },
-        },
-        required: ['command', 'description', 'autoRun'],
-      },
-    },
-    backupId: { type: 'string' },
-    backupScope: { type: 'string', const: 'managed-files' },
-    git: { type: 'object' },
-    doctor: {
-      type: 'object',
-      properties: {
-        lines: { type: 'array', items: { type: 'string' } },
-        checks: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              status: { type: 'string', enum: ['pass', 'fail', 'skipped'] },
-              summary: { type: 'string' },
-              details: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['id', 'status', 'summary', 'details'],
-          },
-        },
-      },
-      required: ['lines', 'checks'],
-    },
-    backup: { type: 'object' },
-    error: {
-      type: 'object',
-      properties: {
-        message: { type: 'string' },
-        code: { type: 'string' },
-        causeCode: { type: 'string' },
-      },
-      required: ['message', 'code'],
-    },
-  },
-  required: [
-    'schemaVersion',
-    'tool',
-    'command',
-    'ok',
-    'timestamp',
-    'durationMs',
-    'exitCode',
-    'executionId',
-    'root',
-    'logPath',
-    'written',
-    'removed',
-    'skipped',
-    'pending',
-    'suggestedCommands',
-  ],
+    [
+      reportResultVariant(true, ['backupScope', 'backup'], { backup: RESTORE_PREVIEW_RESULT_OUTPUT_SCHEMA }, [
+        'error',
+        'backupId',
+      ]),
+      reportResultVariant(true, ['backupId', 'backupScope', 'backup'], { backup: RESTORE_RESULT_OUTPUT_SCHEMA }),
+    ],
+  ),
+  clean_cache: reportOutputSchema('clean-cache', {}, [reportResultVariant(true)]),
 }
 
 const TOOL_ANNOTATIONS: Record<ToolName, NonNullable<Tool['annotations']>> = {
@@ -298,7 +424,6 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
     inputSchema: objectSchema({
       projectPath: projectPathSchema(),
     }),
-    outputSchema: PROJECT_CONTEXT_OUTPUT_SCHEMA,
   },
   {
     name: 'create_project',
@@ -306,7 +431,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
       'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, controller targets, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
     inputSchema: objectSchema(
       {
-        name: stringSchema(
+        name: nonBlankStringSchema(
           'Project folder path relative to the MCP server root. Use forward slashes for nested folders. Ask the user for this before calling.',
         ),
         template: enumSchema(
@@ -318,6 +443,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
         controllers: arraySchema(
           enumSchema(CONTROLLER_KINDS, 'MaaFW controller target.'),
           'One or more controller targets. Ask the user which platforms the project supports.',
+          { minItems: 1, uniqueItems: true },
         ),
         license: enumSchema(LICENSE_KINDS, 'Project license.'),
         network: enumSchema(NETWORK_MODES, 'Network asset source mode.'),
@@ -325,10 +451,10 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
           enumSchema(ADDONS, 'Add-on name.'),
           'Create-time add-ons. Common repository setup is ["dev-tools","github"]. If this includes "resource-pack", resourcePackSlug is required.',
         ),
-        resourcePackSlug: stringSchema(
+        resourcePackSlug: nonBlankStringSchema(
           'ASCII kebab-case resource pack folder name, such as extra or cn. Required when add includes "resource-pack".',
         ),
-        resourcePackLabel: stringSchema(
+        resourcePackLabel: nonBlankStringSchema(
           'Optional display label for the resource pack. If omitted, it is derived from resourcePackSlug.',
         ),
         skipDownload: booleanSchema('Skip runtime/OCR/dependency downloads.'),
@@ -339,6 +465,21 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
         'template',
         'controllers',
       ],
+      {
+        allOf: [
+          {
+            if: {
+              required: ['add'],
+              properties: { add: { contains: { const: 'resource-pack' } } },
+            },
+            then: { required: ['resourcePackSlug'] },
+          },
+          {
+            if: { required: ['resourcePackLabel'] },
+            then: { required: ['resourcePackSlug'] },
+          },
+        ],
+      },
     ),
   },
   {
@@ -360,6 +501,35 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
       [
         'target',
       ],
+      {
+        oneOf: [
+          {
+            properties: { target: { enum: ['config', 'metadata'] } },
+            not: { required: ['value'] },
+          },
+          {
+            properties: {
+              target: { enum: ['display-name', 'version', 'github-url'] },
+              value: nonBlankStringSchema('New metadata value.'),
+            },
+            required: ['value'],
+          },
+          {
+            properties: {
+              target: { const: 'license' },
+              value: enumSchema(LICENSE_KINDS, 'New project license.'),
+            },
+            required: ['value'],
+          },
+          {
+            properties: {
+              target: { const: 'network' },
+              value: enumSchema(NETWORK_MODES, 'New network mode.'),
+            },
+            required: ['value'],
+          },
+        ],
+      },
     ),
   },
   {
@@ -367,7 +537,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
     description: 'Update dependencies, runtime assets, or schema',
     inputSchema: objectSchema(
       {
-        targets: arraySchema(enumSchema(UPDATE_TARGETS, 'Update target.'), 'Update targets.'),
+        targets: arraySchema(enumSchema(UPDATE_TARGETS, 'Update target.'), 'Update targets.', { minItems: 1 }),
         projectPath: projectPathSchema(),
       },
       [
@@ -378,19 +548,43 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
   {
     name: 'add',
     description:
-      'Apply an incremental add-on to the project in the server cwd. MCP mode is non-interactive. When addon is "resource-pack", ask the user for a resource pack folder name and pass resourcePackSlug.',
+      'Apply one or more incremental add-ons to the selected project in one locked, backed-up operation. Pass exactly one of addon or addons. When the selection includes "resource-pack", ask the user for a resource pack folder name and pass resourcePackSlug.',
     inputSchema: objectSchema(
       {
-        addon: enumSchema(ADDONS, 'Add-on to apply.'),
-        resourcePackSlug: stringSchema(
-          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon is "resource-pack".',
+        addon: enumSchema(ADDONS, 'Single add-on to apply. Use addons when applying more than one.'),
+        addons: arraySchema(enumSchema(ADDONS, 'Add-on to apply.'), 'One or more add-ons to apply atomically.', {
+          minItems: 1,
+          uniqueItems: true,
+        }),
+        resourcePackSlug: nonBlankStringSchema(
+          'ASCII kebab-case resource pack folder name, such as extra or cn. Required when addon or addons includes "resource-pack".',
         ),
-        label: stringSchema('Optional resource pack display label. If omitted, it is derived from resourcePackSlug.'),
+        label: nonBlankStringSchema(
+          'Optional resource pack display label. If omitted, it is derived from resourcePackSlug.',
+        ),
         projectPath: projectPathSchema(),
       },
-      [
-        'addon',
-      ],
+      [],
+      {
+        allOf: [
+          {
+            oneOf: [
+              { required: ['addon'], not: { required: ['addons'] } },
+              { required: ['addons'], not: { required: ['addon'] } },
+            ],
+          },
+          {
+            if: {
+              anyOf: [
+                { required: ['addon'], properties: { addon: { const: 'resource-pack' } } },
+                { required: ['addons'], properties: { addons: { contains: { const: 'resource-pack' } } } },
+              ],
+            },
+            then: { required: ['resourcePackSlug'] },
+            else: { not: { anyOf: [{ required: ['resourcePackSlug'] }, { required: ['label'] }] } },
+          },
+        ],
+      },
     ),
   },
   {
@@ -405,7 +599,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
     description: 'Inspect the paths and restore actions in a managed-files backup without changing the project.',
     inputSchema: objectSchema(
       {
-        backupId: stringSchema('Managed-files backup id under .create-maa-project/backups.'),
+        backupId: nonBlankStringSchema('Managed-files backup id under .create-maa-project/backups.'),
         projectPath: projectPathSchema(),
       },
       [
@@ -419,7 +613,9 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
       'Restore managed project files from a backup. Set dryRun=true to preview the same restore without changing files. Git repository state under .git is never included.',
     inputSchema: objectSchema(
       {
-        backupId: stringSchema('Managed-files backup id under .create-maa-project/backups; excludes .git state.'),
+        backupId: nonBlankStringSchema(
+          'Managed-files backup id under .create-maa-project/backups; excludes .git state.',
+        ),
         dryRun: booleanSchema('Preview the restore without changing project files.'),
         projectPath: projectPathSchema(),
       },
@@ -439,7 +635,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
 
 const MCP_TOOLS: Tool[] = MCP_TOOL_DEFINITIONS.map((tool) => ({
   ...tool,
-  outputSchema: tool.outputSchema ?? REPORT_OUTPUT_SCHEMA,
+  outputSchema: TOOL_OUTPUT_SCHEMAS[tool.name as ToolName],
   annotations: TOOL_ANNOTATIONS[tool.name as ToolName],
 }))
 
@@ -538,7 +734,7 @@ async function callCreateProject(
     return errorToolResult(context, 'create', error)
   }
   return withReport(
-    context,
+    { root: targetRoot },
     'create',
     async (reportContext) => {
       throwIfAborted(signal)
@@ -942,18 +1138,29 @@ function updateOptions(args: JsonObject): CliOptions {
 }
 
 function addOptions(args: JsonObject): CliOptions {
-  const addon = requiredEnum(args, 'addon', ADDONS)
+  const addon = optionalEnum(args, 'addon', ADDONS)
+  const addons = optionalStringArray(args, 'addons', ADDONS)
+  if ((addon === undefined) === (addons === undefined)) {
+    throw new Error('Exactly one of addon or addons is required.')
+  }
+  const selectedAddons = addon === undefined ? (addons ?? []) : [addon]
+  if (selectedAddons.length === 0) throw new Error('addons must contain at least one item.')
+  if (new Set(selectedAddons).size !== selectedAddons.length) {
+    throw new Error('addons must not contain duplicate values.')
+  }
   const overrides: Partial<CliOptions> = {
-    add: [
-      addon,
-    ],
+    add: selectedAddons,
   }
   const resourcePackSlug = optionalString(args, 'resourcePackSlug')
   const label = optionalString(args, 'label')
-  if (addon === 'resource-pack' && !nonBlank(resourcePackSlug)) {
+  const includesResourcePack = selectedAddons.includes('resource-pack')
+  if (includesResourcePack && !nonBlank(resourcePackSlug)) {
     throw new Error(
-      'resourcePackSlug is required when addon is "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.',
+      'resourcePackSlug is required when addon or addons includes "resource-pack". Ask the user for an ASCII resource pack folder name such as extra or cn.',
     )
+  }
+  if (!includesResourcePack && (resourcePackSlug !== undefined || label !== undefined)) {
+    throw new Error('resourcePackSlug and label are only valid when addon or addons includes "resource-pack".')
   }
   if (resourcePackSlug !== undefined) overrides.resourcePackSlug = resourcePackSlug
   if (label !== undefined) overrides.label = label
@@ -1271,11 +1478,16 @@ function mcpOperationCommand(tool: ToolName, args: JsonObject): string {
   return `MCP ${tool} ${JSON.stringify(args)}`
 }
 
-function objectSchema(properties: Record<string, object> = {}, required: string[] = []): Tool['inputSchema'] {
+function objectSchema(
+  properties: Record<string, object> = {},
+  required: string[] = [],
+  composition: SchemaComposition = {},
+): Tool['inputSchema'] {
   const schema: Tool['inputSchema'] = {
     type: 'object',
     properties,
     additionalProperties: false,
+    ...composition,
   }
   if (required.length > 0) schema.required = required
   return schema
@@ -1288,8 +1500,18 @@ function stringSchema(description: string): object {
   }
 }
 
+function nonBlankStringSchema(description: string): object {
+  return {
+    ...stringSchema(description),
+    pattern: '\\S',
+  }
+}
+
 function projectPathSchema(): object {
-  return stringSchema('Optional project directory relative to the MCP server root. Defaults to ".".')
+  return {
+    ...stringSchema('Optional project directory relative to the MCP server root. Defaults to ".".'),
+    minLength: 1,
+  }
 }
 
 function booleanSchema(description: string): object {
@@ -1309,11 +1531,112 @@ function enumSchema(values: readonly string[], description: string): object {
   }
 }
 
-function arraySchema(items: object, description: string): object {
+function arraySchema(
+  items: object,
+  description: string,
+  options: { minItems?: number; uniqueItems?: boolean } = {},
+): object {
   return {
     type: 'array',
     items,
     description,
+    ...options,
+  }
+}
+
+function closedObjectSchema(properties: Record<string, object>, required: string[] = []): SchemaObject {
+  return {
+    type: 'object',
+    properties,
+    required,
+    additionalProperties: false,
+  }
+}
+
+function backupInspectionResultSchema(operation: 'show' | 'restore-preview'): SchemaObject {
+  return closedObjectSchema(
+    {
+      operation: { type: 'string', const: operation },
+      backup: BACKUP_INSPECTION_OUTPUT_SCHEMA,
+    },
+    ['operation', 'backup'],
+  )
+}
+
+function reportOutputSchema(
+  command: CliReportCommand,
+  detailProperties: Record<string, object>,
+  resultVariants: SchemaObject[],
+): OutputSchema {
+  const detailKeys = Object.keys(detailProperties)
+  const errorVariant: SchemaObject = {
+    properties: {
+      ok: { const: false },
+      exitCode: { const: 1 },
+    },
+    required: ['error'],
+    ...(detailKeys.length > 0
+      ? {
+          not: {
+            anyOf: detailKeys.map((key) => ({ required: [key] })),
+          },
+        }
+      : {}),
+  }
+  return {
+    type: 'object',
+    properties: {
+      ...BASE_REPORT_PROPERTIES,
+      command: { type: 'string', const: command },
+      ...detailProperties,
+    },
+    required: BASE_REPORT_REQUIRED,
+    additionalProperties: false,
+    oneOf: [
+      ...resultVariants,
+      errorVariant,
+    ],
+  }
+}
+
+function reportResultVariant(
+  ok: boolean,
+  required: string[] = [],
+  properties: Record<string, object> = {},
+  forbidden: string[] = ['error'],
+): SchemaObject {
+  return {
+    properties: {
+      ok: { const: ok },
+      exitCode: { const: ok ? 0 : 1 },
+      ...properties,
+    },
+    required,
+    ...(forbidden.length > 0
+      ? {
+          not: {
+            anyOf: forbidden.map((key) => ({ required: [key] })),
+          },
+        }
+      : {}),
+  }
+}
+
+function scaffoldResultVariant(): SchemaObject {
+  return {
+    allOf: [
+      reportResultVariant(true),
+      {
+        oneOf: [
+          { required: ['backupId', 'backupScope'] },
+          {
+            not: {
+              anyOf: [{ required: ['backupId'] }, { required: ['backupScope'] }],
+            },
+          },
+        ],
+      },
+    ],
   }
 }
 

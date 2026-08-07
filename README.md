@@ -319,7 +319,6 @@ create-maa-project --clean-cache
 - Runtime 更新会记录工具安装的文件，后续更新只清理其中已从新版本移除的文件；旧文件和安装记录均可通过本次备份恢复。
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
 - `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>` 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值。
-- `CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES=<n>` 调整单个归档的解压体积上限，默认 512 MiB。
 - `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>` 调整单个归档的条目数上限，默认 100000。
 - `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产。
 - `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。

@@ -442,7 +442,7 @@ describe('scaffold', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('limits archive expansion size and entry count', () => {
+  it('does not impose an archive expansion byte limit', () => {
     const asset = (format: 'zip' | 'tar.gz', archive: Buffer) => ({
       path: `plugins/win-x64/runtime.${format === 'zip' ? 'zip' : 'tar.gz'}`,
       url: 'https://example.test/runtime',
@@ -457,23 +457,43 @@ describe('scaffold', () => {
 
     try {
       vi.stubEnv('CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES', '4')
-      const zip = createZipArchive([{ path: 'MFAAvalonia.exe', content: Buffer.from('large') }])
-      expect(() => extractProjectArchiveAssets(zip, asset('zip', zip))).toThrow(
-        'Archive extraction exceeds the 4-byte limit.',
-      )
+      const entries = [{ path: 'MFAAvalonia.exe', content: Buffer.from('large'), mode: 0o755 }]
+      const zip = createZipArchive(entries)
+      expect(() => extractProjectArchiveAssets(zip, asset('zip', zip))).not.toThrow()
 
-      const tarGzip = createTarGzArchive([{ path: 'MFAAvalonia', content: Buffer.from('large'), mode: 0o755 }])
-      expect(() => extractProjectArchiveAssets(tarGzip, asset('tar.gz', tarGzip))).toThrow(
-        'Archive extraction exceeds the 4-byte limit.',
-      )
+      const tarGzip = createTarGzArchive(entries)
+      expect(() => extractProjectArchiveAssets(tarGzip, asset('tar.gz', tarGzip))).not.toThrow()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
 
-      vi.stubEnv('CREATE_MAA_PROJECT_MAX_EXTRACTED_BYTES', '100')
+  it('limits archive entry count', () => {
+    const asset = (format: 'zip' | 'tar.gz', archive: Buffer) => ({
+      path: `plugins/win-x64/runtime.${format === 'zip' ? 'zip' : 'tar.gz'}`,
+      url: 'https://example.test/runtime',
+      sha256: sha256(archive),
+      size: archive.byteLength,
+      extract: {
+        product: 'MFAAvalonia' as const,
+        platform: 'win-x64',
+        format,
+      },
+    })
+
+    try {
       vi.stubEnv('CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES', '1')
-      const manyEntries = createZipArchive([
-        { path: 'first', content: Buffer.from('1') },
-        { path: 'second', content: Buffer.from('2') },
-      ])
-      expect(() => extractProjectArchiveAssets(manyEntries, asset('zip', manyEntries))).toThrow(
+      const entries = [
+        { path: 'first', content: Buffer.from('1'), mode: 0o755 },
+        { path: 'second', content: Buffer.from('2'), mode: 0o755 },
+      ]
+      const zip = createZipArchive(entries)
+      expect(() => extractProjectArchiveAssets(zip, asset('zip', zip))).toThrow(
+        'Archive extraction exceeds the 1-entry limit.',
+      )
+
+      const tarGzip = createTarGzArchive(entries)
+      expect(() => extractProjectArchiveAssets(tarGzip, asset('tar.gz', tarGzip))).toThrow(
         'Archive extraction exceeds the 1-entry limit.',
       )
     } finally {

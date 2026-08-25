@@ -10,7 +10,8 @@ uv run python agent/bootstrap.py
 ```
 
 如果根目录存在 `package.json`，还可运行 `pnpm install`、`pnpm check` 和 `pnpm check:py`
-使用生成的格式化与校验工具。
+使用生成的格式化与校验工具。在 VS Code 中打开项目时，`.vscode/tasks.json` 会自动执行
+`uv sync` 和 `pnpm install --frozen-lockfile`。
 
 Agent 入口在 `agent/main.py`，启动前的 Python 版本和依赖检查在 `agent/bootstrap.py`。
 Agent runtime 在 `agent/agent_runtime.py`，会导入 `agent/custom/action`、`agent/custom/reco`

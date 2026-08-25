@@ -433,6 +433,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
       content: stableJson(vscodeSettings),
       managed: false,
     },
+    ...devToolFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/tasks.json'),
     maatoolsConfigFile(
       enabledResourcePacks(config).map((pack) => `./${pack.path}`),
       true,

@@ -13,6 +13,8 @@ pnpm install
 pnpm check
 ```
 
+在 VS Code 中打开项目时，`.vscode/tasks.json` 会自动执行 `pnpm install --frozen-lockfile`。
+
 未启用时，可按需运行 `create-maa-project --add dev-tools` 添加格式化、校验和编辑器配置。
 
 ## 发布

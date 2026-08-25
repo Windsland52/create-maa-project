@@ -10,7 +10,8 @@ uv run python agent/bootstrap.py
 ```
 
 If `package.json` exists at the project root, you can also run `pnpm install`, `pnpm check`, and
-`pnpm check:py` to use the generated formatting and validation tooling.
+`pnpm check:py` to use the generated formatting and validation tooling. When you open the project
+in VS Code, `.vscode/tasks.json` automatically runs `uv sync` and `pnpm install --frozen-lockfile`.
 
 The Agent entrypoint is `agent/main.py`. Python version and dependency checks live in
 `agent/bootstrap.py`. Agent runtime lives in `agent/agent_runtime.py` and imports modules

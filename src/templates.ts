@@ -170,7 +170,7 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
           once('.vscode/launch.json', vscodeLaunch()),
         ]
       : []),
-    managed('.vscode/tasks.json', vscodeTasks(input.includeGithub)),
+    managed('.vscode/tasks.json', vscodeTasks(input.includeAgent)),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
     ...schemaFiles(input.includeAgent),
     once('package.json', generatedPackageJson(input)),
@@ -526,8 +526,8 @@ function vscodeSettings(includeAgent: boolean): string {
   )
 }
 
-function vscodeTasks(includeGithub: boolean): string {
-  return template(includeGithub ? 'addons/dev-tools/.vscode/tasks.github.json' : 'addons/dev-tools/.vscode/tasks.json')
+function vscodeTasks(includeAgent: boolean): string {
+  return template(includeAgent ? 'addons/dev-tools/.vscode/tasks.agent.json' : 'addons/dev-tools/.vscode/tasks.json')
 }
 
 function vscodeLaunch(): string {

@@ -342,6 +342,9 @@ Useful execution flags:
 Generated repository tooling targets Node 24 and pnpm 11.5.1. Dev-tool projects include
 project-local scripts for formatting, schema validation, MaaFW checks, project state
 linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python checks.
+When a generated project is opened in VS Code, `.vscode/tasks.json` syncs dependencies
+automatically: pipeline projects run `pnpm install --frozen-lockfile`, agent projects
+additionally run `uv sync`.
 
 Asset and dependency operations are explicit and recoverable:
 

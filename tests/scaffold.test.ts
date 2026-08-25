@@ -741,6 +741,24 @@ describe('scaffold', () => {
         }),
       ]),
     })
+    expect(await readJson(join(root, 'maa-agent-test', '.vscode/tasks.json'))).toMatchObject({
+      tasks: expect.arrayContaining([
+        expect.objectContaining({
+          command: 'uv sync',
+          label: 'uv sync',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+        expect.objectContaining({
+          command: 'pnpm install --frozen-lockfile',
+          label: 'pnpm install',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+      ]),
+    })
     expect(await readJson(join(root, 'maa-agent-test', 'interface.json'))).toMatchObject({
       name: 'maa-agent-test',
       agent: [
@@ -917,6 +935,83 @@ describe('scaffold', () => {
         }),
       ),
     ).rejects.toThrow('Resource pack label cannot be blank')
+  })
+
+  it('generates folder-open dependency sync tasks per project kind', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    await createProject(
+      defaultOptions({
+        name: 'maa-pipeline-devtools',
+        add: [
+          'dev-tools',
+        ],
+      }),
+    )
+    const pipelineTasks = (await readJson(join(root, 'maa-pipeline-devtools', '.vscode/tasks.json'))) as {
+      tasks: unknown[]
+    }
+    expect(pipelineTasks.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: 'pnpm install --frozen-lockfile',
+          label: 'pnpm install',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+      ]),
+    )
+    for (const label of ['check', 'format', 'release dry-run', 'uv sync']) {
+      expect(pipelineTasks.tasks).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label,
+          }),
+        ]),
+      )
+    }
+
+    await createProject(
+      defaultOptions({
+        name: 'maa-agent-devtools',
+        template: 'agent',
+        add: [
+          'dev-tools',
+        ],
+      }),
+    )
+    const agentTasks = (await readJson(join(root, 'maa-agent-devtools', '.vscode/tasks.json'))) as {
+      tasks: unknown[]
+    }
+    expect(agentTasks.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: 'uv sync',
+          label: 'uv sync',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+        expect.objectContaining({
+          command: 'pnpm install --frozen-lockfile',
+          label: 'pnpm install',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+      ]),
+    )
+    for (const label of ['check', 'format', 'release dry-run']) {
+      expect(agentTasks.tasks).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label,
+          }),
+        ]),
+      )
+    }
   })
 
   it('adds uv updates when adding dependabot to an existing agent project', async () => {
@@ -3601,6 +3696,29 @@ export default defineConfig({
     const emptyImage = await readFile(join(root, 'Maa Test', 'resource/base/image/empty.png'))
     const interfaceSchema = await readJson(join(root, 'Maa Test', 'tools/schema/interface.schema.json'))
     const vscodeSettings = await readJson(join(root, 'Maa Test', '.vscode/settings.json'))
+    const vscodeTasks = (await readJson(join(root, 'Maa Test', '.vscode/tasks.json'))) as {
+      tasks: unknown[]
+    }
+    expect(vscodeTasks.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: 'pnpm install --frozen-lockfile',
+          label: 'pnpm install',
+          runOptions: {
+            runOn: 'folderOpen',
+          },
+        }),
+      ]),
+    )
+    for (const label of ['check', 'format', 'release dry-run', 'uv sync']) {
+      expect(vscodeTasks.tasks).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label,
+          }),
+        ]),
+      )
+    }
     expect(readme).toContain('由 create-maa-project 生成')
     expect(readme).toContain('README.en.md')
     expect(readmeEn).toContain('MaaFW project generated')

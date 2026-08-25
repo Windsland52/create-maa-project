@@ -12,6 +12,19 @@
                 "runOn": "folderOpen"
             },
             "type": "shell"
+        },
+        {
+            "command": "uv sync",
+            "label": "uv sync",
+            "presentation": {
+                "panel": "dedicated",
+                "reveal": "silent"
+            },
+            "problemMatcher": [],
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "type": "shell"
         }
     ],
     "version": "2.0.0"

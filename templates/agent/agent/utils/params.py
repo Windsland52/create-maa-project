@@ -13,7 +13,7 @@ def parse_params(raw: str | None, *required_keys: str) -> dict[str, Any]:
         required_keys: Keys that must be present in the parsed object.
 
     Returns:
-        Parsed dict (empty dict when raw is None or empty).
+        Parsed dict (empty dict when raw is None, empty, or the literal string "null").
 
     Raises:
         ValueError: Invalid JSON, non-object type, or missing required keys.
@@ -26,6 +26,11 @@ def parse_params(raw: str | None, *required_keys: str) -> dict[str, Any]:
         params = json.loads(raw)
     except json.JSONDecodeError as e:
         raise ValueError(f"invalid JSON params: {e}") from e
+    if params is None:
+        # MaaFW passes a literal "null" string when a node omits custom_*_param; treat it as absent.
+        if required_keys:
+            raise ValueError(f"missing required params: {list(required_keys)}")
+        return {}
     if not isinstance(params, dict):
         raise ValueError(f"params must be an object, got: {type(params).__name__}")
     if required_keys:

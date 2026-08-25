@@ -1,5 +1,6 @@
 import {readdir, readFile, writeFile} from "node:fs/promises";
 import {join, relative} from "node:path";
+import {format, resolveConfig} from "prettier";
 
 const templateRoot = "templates";
 const outputPath = "src/template-assets.generated.ts";
@@ -16,12 +17,17 @@ for (const file of await listFiles(templateRoot)) {
     }
 }
 
-await writeFile(
-    outputPath,
+let source =
     `export const embeddedTextTemplates: Record<string, string> = ${JSON.stringify(textTemplates, null, 4)}\n` +
-        `export const embeddedBinaryTemplates: Record<string, string> = ${JSON.stringify(binaryTemplates, null, 4)}\n`,
-    "utf8",
-);
+    `export const embeddedBinaryTemplates: Record<string, string> = ${JSON.stringify(binaryTemplates, null, 4)}\n`;
+
+// Format with the repo Prettier config so a freshly generated snapshot always
+// satisfies `format:check`; otherwise the raw JSON.stringify output drifts from
+// what Prettier expects and every regeneration re-dirtyies the whole file.
+const config = await resolveConfig(outputPath, {editorconfig: true});
+source = await format(source, {...config, filepath: outputPath});
+
+await writeFile(outputPath, source, "utf8");
 
 async function listFiles(root) {
     const entries = await readdir(root, {withFileTypes: true});

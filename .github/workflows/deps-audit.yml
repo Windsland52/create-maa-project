@@ -1,0 +1,37 @@
+name: Deps Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "3 4 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  audit-fix:
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Bump audited overrides and reinstall
+        run: node scripts/update-audit-overrides.mjs
+      - name: Commit override updates
+        run: |
+          if git diff --quiet -- pnpm-workspace.yaml pnpm-lock.yaml; then
+            echo "No override changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          pnpm exec prettier --write pnpm-workspace.yaml pnpm-lock.yaml
+          git add pnpm-workspace.yaml pnpm-lock.yaml
+          git commit -m "fix(deps): update audited transitive dependencies [skip changelog]"
+          git push

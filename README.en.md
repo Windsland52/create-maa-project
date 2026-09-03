@@ -21,6 +21,8 @@ the CLI, so backups, run locks, per-command pending actions, and JSON reports st
 - [Install The CLI](#install-the-cli)
 - [Create A Project Interactively](#create-a-project-interactively)
 - [Use With An MCP Client](#use-with-an-mcp-client)
+- [Use With Agent Skills](#use-with-agent-skills)
+- [Automatic Updates](#automatic-updates)
 - [Project Model](#project-model)
 - [State and Safety](#state-and-safety)
 - [Commands](#commands)
@@ -171,6 +173,32 @@ After creating a child project, the agent can pass a relative `projectPath` to `
 `sync`, `update`, `add`, `list_backups`, `show_backup`, `restore`, and `clean_cache`. The path
 must resolve to a real directory under the MCP server root; absolute paths, `..`, and escaping
 symlinks are rejected.
+
+## Use With Agent Skills
+
+This repository bundles an agent skill in [`skills/create-maa-project`](./skills/create-maa-project) adhering to the Agent Skills standard. It provides AI coding agents (such as Claude Code, Cursor, Windsurf, GitHub Copilot, Antigravity, Cline, etc.) with structured workflows, parameter constraints, diagnostic steps, and JSON report analysis.
+
+Install the skill using the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# Install the create-maa-project skill globally across detected local agents
+npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
+```
+
+Omit `--agent` for interactive detection of your installed AI tools. Once installed, your agent will automatically leverage the skill when scaffolding new MaaFramework projects, configuring add-ons, running doctor diagnostics, or performing backups and upgrades.
+
+See the [Skills Documentation](./skills/README.md) for further details and local development workflows.
+
+## Automatic Updates
+
+To ensure the CLI runtime and Agent Skill instructions remain up-to-date, `create-maa-project` includes a lightweight, unobtrusive automatic update mechanism:
+
+- **24-Hour Throttled Check**: The CLI queries the npm registry for the latest stable version at most once every 24 hours. A short network timeout (1500ms) guarantees that offline environments, proxies, or slow connections immediately and silently fall back to the installed local version without delaying commands.
+- **Runtime Handoff**: When a newer stable version is detected, execution is transparently handed off to the latest runtime via `npm exec`, ensuring you always run the latest stable release.
+- **Managed Skill Synchronization**: When a newer CLI release is detected, the CLI triggers `skills update create-maa-project --global --yes` once per release version in the background to update the global skill installation.
+- **Environment Controls**:
+    - `CREATE_MAA_PROJECT_AUTO_UPDATE=0`: Completely disables update checks, runtime handoff, and skill synchronization (automatically disabled in CI environments by default).
+    - `CREATE_MAA_PROJECT_AUTO_UPDATE=1`: Explicitly forces auto-update on even in CI environments.
 
 ## Project Model
 

@@ -17,6 +17,8 @@ CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套�
 - [安装 CLI](#安装-cli)
 - [交互式创建项目](#交互式创建项目)
 - [配合 MCP Client 使用](#配合-mcp-client-使用)
+- [配合 Agent Skill 使用](#配合-agent-skill-使用)
+- [自动更新](#自动更新)
 - [项目模型](#项目模型)
 - [状态与安全](#状态与安全)
 - [命令](#命令)
@@ -158,6 +160,32 @@ Agent 可先调用只读的 `get_project_context` 确认 server root，以及 `p
 和 `clean_cache` 中传相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、
 `..` 或根外符号链接。恢复前可先用 `list_backups` 查找备份、用 `show_backup` 检查内容，再以
 `restore { backupId, dryRun: true }` 预演；预演不会修改项目文件。
+
+## 配合 Agent Skill 使用
+
+本项目内置了遵循 Agent Skills 规范的技能包 [`skills/create-maa-project`](./skills/create-maa-project)，可为 AI Coding Agent（如 Claude Code、Cursor、Windsurf、GitHub Copilot、Antigravity、Cline 等）提供完整的工作流指引、最佳实践、命令参数规范与故障排查知识。
+
+使用 [skills CLI](https://github.com/vercel-labs/skills) 即可一键为本地 Agent 安装该技能：
+
+```bash
+# 全局安装 create-maa-project skill 到所支持的本地 Agent
+npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
+```
+
+省去 `--agent` 参数时，CLI 会交互式探测本地已安装的 AI 工具并供你勾选。安装后，Coding Agent 在面对创建 MaaFramework 项目、添加 add-ons、运行 `--doctor` 诊断或升级依赖等任务时，会自动阅读并遵守该技能指引。
+
+详细信息与本地开发安装说明请参见 [Skills 文档](./skills/README.md)。
+
+## 自动更新
+
+为了保证 CLI 运行时与 AI Agent 掌握的规范始终保持最新，`create-maa-project` 内置了轻量级、零干扰的自动更新与热交付机制：
+
+- **24 小时更新检查**：CLI 最多每 24 小时向 npm 官方 registry 查询一次最新稳定版本。网络请求设置了极短超时（1500ms），遇离线、代理异常或网络延迟时静默回退至本地版本，绝不阻断用户正常命令；
+- **运行时热交付（Runtime Handoff）**：若检测到远端发布了更高版本的稳定 CLI，会自动将当前命令行参数安全交接给最新版本的临时运行时执行，无需手动反复升级；
+- **Agent Skill 自动同步**：在新版本首次运行后，CLI 会在后台自动触发 `skills update create-maa-project --global --yes`，同步更新全局安装的 Agent Skill（每个发布版本仅触发一次）；
+- **离线与 CI 环境变量控制**：
+    - `CREATE_MAA_PROJECT_AUTO_UPDATE=0`：完全禁用自动更新检查、运行时转交与 Skill 同步（在 CI 环境下默认自动禁用）；
+    - `CREATE_MAA_PROJECT_AUTO_UPDATE=1`：在 CI 环境下强制启用自动更新。
 
 ## 项目模型
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Maa Project"
+  short_description: "Scaffold and maintain MaaFW projects safely"
+  default_prompt: "Use $create-maa-project to scaffold or maintain the MaaFW project, run write commands non-interactively with --report, and inspect the JSON report before taking further actions."

@@ -21,6 +21,7 @@
         "templates",
         "!templates/**/__pycache__",
         "!templates/**/*.pyc",
+        "skills",
         "README.md",
         "LICENSE"
     ],

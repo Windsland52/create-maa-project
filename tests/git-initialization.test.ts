@@ -154,6 +154,154 @@ describe('Git initialization after project creation', () => {
       ],
     ])
   })
+
+  it('initializes Git by default when the target is outside a Git tree', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const commands: string[][] = []
+    const gitRunner: GitRunner = async (cwd, args) => {
+      commands.push(args)
+      if (args[0] === 'init') {
+        await mkdir(join(cwd, '.git/info'), { recursive: true })
+        await writeFile(join(cwd, '.git/info/exclude'), '# custom exclude\n', 'utf8')
+      }
+    }
+
+    const result = await createProject(createOptions('maa-git-default'), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toEqual({
+      initialized: true,
+      committed: true,
+    })
+    expect(commands.map((command) => command[0])).toEqual(['init', 'add', 'commit'])
+  })
+
+  it('reports skipped initialization when an unset default lands inside a Git tree', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const commands: string[][] = []
+    const gitRunner: GitRunner = async (_cwd, args) => {
+      commands.push(args)
+    }
+
+    const result = await createProject(createOptions('maa-git-in-tree'), {
+      gitRunner,
+      detectGitTree: async () => true,
+    })
+
+    expect(result.git).toEqual({
+      initialized: false,
+      committed: false,
+      reason: 'target is inside an existing Git repository',
+    })
+    expect(commands).toEqual([])
+  })
+
+  it('initializes Git when explicitly enabled with initializeGit: true', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const commands: string[][] = []
+    const gitRunner: GitRunner = async (cwd, args) => {
+      commands.push(args)
+      if (args[0] === 'init') {
+        await mkdir(join(cwd, '.git/info'), { recursive: true })
+        await writeFile(join(cwd, '.git/info/exclude'), '# custom exclude\n', 'utf8')
+      }
+    }
+
+    const result = await createProject(createOptions('maa-git-explicit', { initializeGit: true }), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toEqual({
+      initialized: true,
+      committed: true,
+    })
+    expect(commands.map((command) => command[0])).toEqual(['init', 'add', 'commit'])
+  })
+
+  it('reports skipped initialization when explicitly enabled inside a Git tree', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const commands: string[][] = []
+    const gitRunner: GitRunner = async (_cwd, args) => {
+      commands.push(args)
+    }
+
+    const result = await createProject(createOptions('maa-git-explicit-in-tree', { initializeGit: true }), {
+      gitRunner,
+      detectGitTree: async () => true,
+    })
+
+    expect(result.git).toEqual({
+      initialized: false,
+      committed: false,
+      reason: 'target is inside an existing Git repository',
+    })
+    expect(commands).toEqual([])
+  })
+
+  it('skips Git silently when initialization is explicitly disabled', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const commands: string[][] = []
+    const gitRunner: GitRunner = async (_cwd, args) => {
+      commands.push(args)
+    }
+
+    const result = await createProject(createOptions('maa-git-disabled', { initializeGit: false }), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toBeUndefined()
+    expect(commands).toEqual([])
+  })
+
+  it('reports a missing git executable without failing the create', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const gitRunner: GitRunner = async () => {
+      throw Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })
+    }
+
+    const result = await createProject(createOptions('maa-git-missing'), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toMatchObject({
+      initialized: false,
+      committed: false,
+    })
+    expect(result.git?.reason).toContain('git is not installed or not available on PATH')
+    expect(result.git?.reason).toContain('install Git, then run git init')
+    await expect(readFile(join(result.root, 'maa-project.json'), 'utf8')).resolves.toContain('maa-git-missing')
+  })
+
+  it('reports a missing git executable when wrapped in a message without code property', async () => {
+    const root = await tempRoot()
+    process.chdir(root)
+    const gitRunner: GitRunner = async () => {
+      throw new Error('Failed to run git init. spawn git ENOENT')
+    }
+
+    const result = await createProject(createOptions('maa-git-missing-message'), {
+      gitRunner,
+      detectGitTree: async () => false,
+    })
+
+    expect(result.git).toMatchObject({
+      initialized: false,
+      committed: false,
+    })
+    expect(result.git?.reason).toContain('git is not installed or not available on PATH')
+    await expect(readFile(join(result.root, 'maa-project.json'), 'utf8')).resolves.toContain('maa-git-missing-message')
+  })
 })
 
 async function tempRoot(): Promise<string> {
@@ -162,7 +310,7 @@ async function tempRoot(): Promise<string> {
   return root
 }
 
-function createOptions(name: string): CliOptions {
+function createOptions(name: string, overrides: Partial<CliOptions> = {}): CliOptions {
   return {
     name,
     template: 'pipeline',
@@ -179,12 +327,12 @@ function createOptions(name: string): CliOptions {
     verbose: false,
     noColor: false,
     assist: false,
-    initializeGit: true,
     dryRun: false,
     listBackups: false,
     cleanCache: false,
     report: false,
     mcp: false,
     explicitTemplate: true,
+    ...overrides,
   }
 }

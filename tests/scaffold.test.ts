@@ -4681,6 +4681,9 @@ function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     report: false,
     mcp: false,
     explicitTemplate: false,
+    // Pin the legacy opt-in behavior so generic scaffold tests do not run real
+    // git commands; the non-interactive default is covered in git-initialization.test.ts.
+    initializeGit: false,
     ...overrides,
   }
 }

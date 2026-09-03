@@ -908,14 +908,16 @@ async function maybeInitializeGit(
   signal?: AbortSignal,
 ): Promise<GitInitResult | undefined> {
   throwIfAborted(signal)
-  if (options.initializeGit !== true) return undefined
   if (targetInsideGitTree) {
-    return {
-      initialized: false,
-      committed: false,
-      reason: 'target is inside an existing Git repository',
-    }
+    return options.initializeGit === false
+      ? undefined
+      : {
+          initialized: false,
+          committed: false,
+          reason: 'target is inside an existing Git repository',
+        }
   }
+  if (options.initializeGit === false) return undefined
 
   const gitDirectory = join(root, '.git')
   const gitDirectoryExisted = await exists(gitDirectory)
@@ -935,6 +937,14 @@ async function maybeInitializeGit(
       }
     }
     throwIfAborted(signal)
+    if (!initialized && isMissingGitExecutable(error)) {
+      return {
+        initialized: false,
+        committed: false,
+        reason:
+          'git is not installed or not available on PATH. The project was created without a Git repository; install Git, then run git init and create the initial commit manually.',
+      }
+    }
     return {
       initialized,
       committed: false,
@@ -1001,6 +1011,15 @@ async function maybeInitializeGit(
     initialized: true,
     committed: true,
   }
+}
+
+function isMissingGitExecutable(error: unknown): boolean {
+  if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return true
+  if (error instanceof Error) {
+    if ((error.cause as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return true
+    if (error.message.includes('ENOENT')) return true
+  }
+  return false
 }
 
 async function ensureLocalGitExcludes(root: string): Promise<void> {

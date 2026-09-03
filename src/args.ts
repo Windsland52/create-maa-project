@@ -399,7 +399,8 @@ Creation options:
                                     Set the project license.
   --network <auto|official>         Select the asset network mode.
   --add <addon>                     Include an add-on during creation.
-  --git | --no-git                  Enable or disable Git initialization.
+  --git | --no-git                  Enable or disable Git initialization. Default: initialize
+                                    unless the target is inside an existing Git repository.
   --force                           Permit creation in an existing target.
   --allow-non-git-dir               Permit a forced non-Git target directory.
   --allow-pending-commit            Permit an initial commit with pending work.

@@ -127,7 +127,8 @@ describe('parseArgs', () => {
     ).toThrow('--lang must be one of: auto, en, zh-CN')
   })
 
-  it('parses explicit git initialization choices', () => {
+  it('parses explicit git initialization choices and leaves unset default undefined', () => {
+    expect(parseArgs(['my-project']).initializeGit).toBeUndefined()
     expect(
       parseArgs([
         'my-project',
@@ -140,6 +141,13 @@ describe('parseArgs', () => {
         '--no-git',
       ]).initializeGit,
     ).toBe(false)
+  })
+
+  it('documents default git initialization behavior in help text', () => {
+    const help = formatCliHelp('0.1.0')
+    expect(help).toContain('--git | --no-git')
+    expect(help).toContain('Default: initialize')
+    expect(help).toContain('unless the target is inside an existing Git repository')
   })
 
   it('parses explicit stale lock cleanup', () => {

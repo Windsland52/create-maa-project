@@ -239,6 +239,14 @@ describe('MCP server', () => {
         backupId: 'backup-1',
         backupScope: 'managed-files',
       })
+      expectSchemaValidity(createOutput, {
+        ...createSuccess,
+        git: { initialized: true, committed: true },
+      })
+      expectSchemaValidity(createOutput, {
+        ...createSuccess,
+        git: { initialized: false, committed: false, reason: 'git is not installed' },
+      })
       expectSchemaValidity(createOutput, { ...createSuccess, command: 'update' }, false)
       expectSchemaValidity(createOutput, {
         ...createSuccess,

@@ -428,7 +428,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
   {
     name: 'create_project',
     description:
-      'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, controller targets, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug.',
+      'Scaffold a new MaaFW project. MCP mode is non-interactive: before calling, collect the project folder/name, whether the user wants a pipeline or Python Agent project, controller targets, desired add-ons, and any resource-pack folder name. Use template="agent" for Python Agent projects. Use add=["dev-tools","github"] for a normal repository with checks and GitHub workflows. If add contains "resource-pack", provide resourcePackSlug. A Git repository is initialized by default; pass git=false to disable it. When Git is missing or the target is inside an existing Git repository, creation still succeeds and the git output explains what was skipped.',
     inputSchema: objectSchema(
       {
         name: nonBlankStringSchema(
@@ -458,7 +458,9 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
           'Optional display label for the resource pack. If omitted, it is derived from resourcePackSlug.',
         ),
         skipDownload: booleanSchema('Skip runtime/OCR/dependency downloads.'),
-        git: booleanSchema('Initialize a Git repository.'),
+        git: booleanSchema(
+          'Initialize a Git repository. Defaults to true unless the target is inside an existing Git repository.',
+        ),
       },
       [
         'name',
@@ -1414,7 +1416,11 @@ async function runMcpChildCommand(root: string, command: string, args: string[],
           return
         }
       }
-      rejectOnce(new Error(`Failed to run ${formatCommand(command, args)}. ${error.message}`))
+      const failure = new Error(`Failed to run ${formatCommand(command, args)}. ${error.message}`, { cause: error })
+      if ('code' in error) {
+        ;(failure as NodeJS.ErrnoException).code = (error as NodeJS.ErrnoException).code
+      }
+      rejectOnce(failure)
     })
     child.on('close', (code, childSignal) => {
       cleanup()

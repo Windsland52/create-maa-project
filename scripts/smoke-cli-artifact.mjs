@@ -43,12 +43,16 @@ if (actualVersion !== expectedVersion) {
 console.log(`Verified CLI artifact version ${actualVersion}.`);
 
 function windowsCommandInvocation(executable, args) {
+    const baseEnv = {
+        ...process.env,
+        CREATE_MAA_PROJECT_AUTO_UPDATE: "0",
+    };
     if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(executable)) {
-        return {command: executable, args, env: process.env, windowsVerbatimArguments: false};
+        return {command: executable, args, env: baseEnv, windowsVerbatimArguments: false};
     }
 
     const env = {
-        ...process.env,
+        ...baseEnv,
         CREATE_MAA_PROJECT_SMOKE_COMMAND: executable,
     };
     const placeholders = args.map((value, index) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertValidSemVer, isValidSemVer } from '../src/semver.js'
+import { assertValidSemVer, isSemVerGreaterThan, isStableSemVer, isValidSemVer, parseSemVer } from '../src/semver.js'
 import { createProject } from '../src/scaffold.js'
 import { parseArgs } from '../src/args.js'
 
@@ -112,5 +112,34 @@ describe('SemVer 2.0.0 validation', () => {
     await expect(createProject(options, { detectGitTree: async () => false })).rejects.toThrow(
       'Invalid version "1.0.0-alpha..1"',
     )
+  })
+
+  it('parses semver versions correctly', () => {
+    expect(parseSemVer('invalid')).toBeUndefined()
+    expect(parseSemVer('1.2.3')).toEqual({ major: 1, minor: 2, patch: 3 })
+    expect(parseSemVer('1.2.3-beta.1+build.10')).toEqual({
+      major: 1,
+      minor: 2,
+      patch: 3,
+      prerelease: 'beta.1',
+      build: 'build.10',
+    })
+  })
+
+  it('identifies stable semver versions', () => {
+    expect(isStableSemVer('1.2.3')).toBe(true)
+    expect(isStableSemVer('0.1.0')).toBe(true)
+    expect(isStableSemVer('1.2.3-alpha')).toBe(false)
+    expect(isStableSemVer('invalid')).toBe(false)
+    expect(isStableSemVer(null)).toBe(false)
+  })
+
+  it('compares semver versions correctly', () => {
+    expect(isSemVerGreaterThan('0.2.0', '0.1.0')).toBe(true)
+    expect(isSemVerGreaterThan('1.0.0', '0.9.9')).toBe(true)
+    expect(isSemVerGreaterThan('0.1.1', '0.1.0')).toBe(true)
+    expect(isSemVerGreaterThan('0.1.0', '0.1.0')).toBe(false)
+    expect(isSemVerGreaterThan('0.1.0', '0.2.0')).toBe(false)
+    expect(isSemVerGreaterThan('invalid', '0.1.0')).toBe(false)
   })
 })

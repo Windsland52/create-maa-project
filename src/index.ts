@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import packageJson from '../package.json' with { type: 'json' }
 import { applyCliEnvironment, formatCliHelp, parseArgs, validateCommandModes } from './args.js'
+import { runWithAutomaticUpdates } from './auto-update.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger, type Logger } from './log.js'
@@ -591,4 +594,28 @@ function printScaffoldResult(title: string, result: ScaffoldResult): void {
   }
 }
 
-void main()
+async function runLocalCli(argv: string[]): Promise<number> {
+  const originalArgv = process.argv
+  try {
+    process.argv = [originalArgv[0] ?? process.execPath, originalArgv[1] ?? '', ...argv]
+    await main()
+    return typeof process.exitCode === 'number' ? process.exitCode : 0
+  } finally {
+    process.argv = originalArgv
+  }
+}
+
+export async function runCli(argv = process.argv.slice(2)): Promise<number> {
+  return runWithAutomaticUpdates(argv, runLocalCli)
+}
+
+const invokedPath = process.argv[1]
+if (invokedPath !== undefined) {
+  try {
+    if (import.meta.url === pathToFileURL(realpathSync(invokedPath)).href) {
+      process.exitCode = await runCli()
+    }
+  } catch {
+    process.exitCode = await runCli()
+  }
+}

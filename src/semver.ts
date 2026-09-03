@@ -58,3 +58,50 @@ function isNumericIdentifier(identifier: string): boolean {
 function hasLeadingZero(identifier: string): boolean {
   return identifier.length > 1 && identifier.startsWith('0')
 }
+
+export type ParsedSemVer = {
+  major: number
+  minor: number
+  patch: number
+  prerelease?: string
+  build?: string
+}
+
+export function parseSemVer(version: string): ParsedSemVer | undefined {
+  if (!isValidSemVer(version)) return undefined
+  const buildSeparator = version.indexOf('+')
+  const versionAndPrerelease = buildSeparator >= 0 ? version.slice(0, buildSeparator) : version
+  const build = buildSeparator >= 0 ? version.slice(buildSeparator + 1) : undefined
+
+  const prereleaseSeparator = versionAndPrerelease.indexOf('-')
+  const core = prereleaseSeparator >= 0 ? versionAndPrerelease.slice(0, prereleaseSeparator) : versionAndPrerelease
+  const prerelease = prereleaseSeparator >= 0 ? versionAndPrerelease.slice(prereleaseSeparator + 1) : undefined
+
+  const [majorStr, minorStr, patchStr] = core.split('.')
+  return {
+    major: Number(majorStr),
+    minor: Number(minorStr),
+    patch: Number(patchStr),
+    ...(prerelease !== undefined ? { prerelease } : {}),
+    ...(build !== undefined ? { build } : {}),
+  }
+}
+
+export function isStableSemVer(version: unknown): version is string {
+  if (typeof version !== 'string') return false
+  const parsed = parseSemVer(version)
+  return parsed !== undefined && parsed.prerelease === undefined
+}
+
+export function isSemVerGreaterThan(candidate: string, baseline: string): boolean {
+  const candidateParsed = parseSemVer(candidate)
+  const baselineParsed = parseSemVer(baseline)
+  if (!candidateParsed || !baselineParsed) return false
+  if (candidateParsed.major !== baselineParsed.major) {
+    return candidateParsed.major > baselineParsed.major
+  }
+  if (candidateParsed.minor !== baselineParsed.minor) {
+    return candidateParsed.minor > baselineParsed.minor
+  }
+  return candidateParsed.patch > baselineParsed.patch
+}

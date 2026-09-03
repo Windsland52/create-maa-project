@@ -78,6 +78,8 @@ where each is valid; the parser rejects mismatched options instead of ignoring t
 
 | Variable                                            | Effect                                                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `CREATE_MAA_PROJECT_AUTO_UPDATE=0`                  | Disable automatic CLI runtime handoff and Skill sync (default: enabled unless in CI)              |
+| `CREATE_MAA_PROJECT_CONFIG_DIR=<path>`              | Custom path for CLI updates and persistent cache state                                            |
 | `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Download retry count                                                                              |
 | `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap (default 1 GiB; declared manifest sizes win when stricter)                  |
 | `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry cap (default 100000)                                                            |

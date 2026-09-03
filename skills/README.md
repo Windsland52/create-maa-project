@@ -34,6 +34,14 @@ npx skills add . --skill create-maa-project
 Local-path development installs are not remotely updateable; rerun the command after changing the
 Skill.
 
+## Automatic Updates
+
+The published `create-maa-project` launcher checks npm `latest` at most once every 24 hours and
+hands commands to a newer stable runtime when available. Once per `create-maa-project` version it also
+asks the skills CLI to update the managed global installation. Set
+`CREATE_MAA_PROJECT_AUTO_UPDATE=0` to disable both operations. Network or updater failures fall back to
+the installed runtime and Skill.
+
 ## Available Skills
 
 ### `create-maa-project`

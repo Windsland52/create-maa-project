@@ -13,7 +13,8 @@ the CLI act and then read its JSON report — never hand-edit generated files to
 ## Start small
 
 Before the first command, run `create-maa-project --cli-version`. Use the installed CLI rather
-than a checkout's `dist/index.js` when an installed CLI exists.
+than a checkout's `dist/index.js` when an installed CLI exists. Respect
+`CREATE_MAA_PROJECT_AUTO_UPDATE=0` and do not re-enable updates for an offline or reproducible run.
 
 Choose the smallest operation that answers the user's intent:
 

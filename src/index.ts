@@ -609,13 +609,31 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   return runWithAutomaticUpdates(argv, runLocalCli)
 }
 
-const invokedPath = process.argv[1]
-if (invokedPath !== undefined) {
-  try {
-    if (import.meta.url === pathToFileURL(realpathSync(invokedPath)).href) {
-      process.exitCode = await runCli()
+async function launchCli(): Promise<void> {
+  const invokedPath = process.argv[1]
+  if (invokedPath === undefined) {
+    return
+  }
+
+  let shouldRun = false
+  if (typeof import.meta !== 'undefined' && typeof import.meta.url === 'string' && import.meta.url !== '') {
+    try {
+      shouldRun = import.meta.url === pathToFileURL(realpathSync(invokedPath)).href
+    } catch {
+      shouldRun = true
     }
-  } catch {
-    process.exitCode = await runCli()
+  } else {
+    shouldRun = true
+  }
+
+  if (shouldRun) {
+    try {
+      process.exitCode = await runCli()
+    } catch (error) {
+      console.error(error)
+      process.exitCode = 1
+    }
   }
 }
+
+void launchCli()

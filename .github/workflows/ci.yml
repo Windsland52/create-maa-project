@@ -56,10 +56,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Create a minimal project
+        env:
+          CREATE_MAA_PROJECT_OCR_SOURCE: download
         run: >-
           node dist/index.js .ci-smoke-project
           --no-interactive
-          --skip-download
           --no-git
           --template pipeline
           --slug ci-smoke

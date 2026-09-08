@@ -13,6 +13,11 @@ import { spawn } from 'node:child_process'
 import { chmod, cp, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import {
+  DEFAULT_OCR_FILES,
+  DEFAULT_OCR_MODEL_DIR,
+  DEFAULT_OCR_SUBMODULE_ASSETS_DIR,
+  DEFAULT_OCR_SUBMODULE_PATH,
+  DEFAULT_OCR_SUBMODULE_URL,
   downloadDefaultOcrZip,
   downloadUrl,
   extractProjectArchiveAssets,
@@ -31,8 +36,17 @@ import {
   type ProductAssetManifestResolver,
 } from './assets.js'
 import { baseProjectFiles } from './templates.js'
-import type { CliOptions, MaaProjectConfig, ManagedFileInput, PendingItem, ScaffoldResult } from './types.js'
-import { copyFileAtomic, exists, readText, sha256, stableJson, throwIfAborted, writeFileAtomic } from './utils.js'
+import type { CliOptions, MaaProjectConfig, ManagedFileInput, OcrConfig, PendingItem, ScaffoldResult } from './types.js'
+import {
+  copyFileAtomic,
+  exists,
+  readText,
+  sha256,
+  stableJson,
+  throwIfAborted,
+  writeFileAtomic,
+  writeText,
+} from './utils.js'
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
@@ -271,6 +285,11 @@ export async function recordUpdateRequests(
             if (!subPath) {
               throw new Error('ocr.submodulePath is required when ocr.source is "submodule"')
             }
+            await ensureOcrSubmoduleReady(root, config.ocr, {
+              commandRunner,
+              ...(environment.onProgress ? { onProgress: environment.onProgress } : {}),
+              ...(environment.signal ? { signal: environment.signal } : {}),
+            })
             const projectRoot = await realpath(root)
             const subRoot = await resolveContainedExistingPath(projectRoot, subPath, 'ocr.submodulePath')
             const ocrDest = resolve(projectRoot, 'resource/base/model/ocr')
@@ -298,6 +317,10 @@ export async function recordUpdateRequests(
               written.add('resource/base/model/ocr')
             }
             environment.onProgress?.('OCR models copied from submodule.')
+            if (await syncOcrGitignoreForSource(root, 'submodule')) {
+              written.add('.gitignore')
+              environment.onProgress?.('Updated .gitignore for submodule-sourced OCR models.')
+            }
             continue
           }
           environment.onProgress?.('Downloading OCR models...')
@@ -307,6 +330,10 @@ export async function recordUpdateRequests(
             continue
           }
           for (const path of result.written) written.add(path)
+          if (await syncOcrGitignoreForSource(root, 'download')) {
+            written.add('.gitignore')
+            environment.onProgress?.('Updated .gitignore for downloaded OCR models.')
+          }
           environment.onProgress?.('OCR models downloaded.')
           continue
         }
@@ -983,6 +1010,230 @@ function createDefaultOcrZipDownloadOptions(options: {
   return downloadOptions
 }
 
+export type OcrSourcePreference = 'submodule' | 'download'
+
+export function resolveOcrSourceFromEnvironment(): OcrSourcePreference | undefined {
+  const raw = process.env.CREATE_MAA_PROJECT_OCR_SOURCE?.trim().toLowerCase()
+  if (!raw) return undefined
+  if (raw === 'submodule' || raw === 'download') return raw
+  throw new Error(`CREATE_MAA_PROJECT_OCR_SOURCE must be "submodule" or "download": ${raw}`)
+}
+
+export function defaultOcrSubmoduleConfig(): OcrConfig {
+  return {
+    source: 'submodule',
+    submodulePath: `${DEFAULT_OCR_SUBMODULE_PATH}/${DEFAULT_OCR_SUBMODULE_ASSETS_DIR}`,
+    files: Object.fromEntries(DEFAULT_OCR_FILES.map((name) => [name, `${DEFAULT_OCR_MODEL_DIR}/${name}`])),
+  }
+}
+
+export type OcrSubmoduleGitRunner = (root: string, args: string[]) => Promise<void>
+
+const OCR_SUBMODULE_RECOVERY_HINT = [
+  'The OCR model submodule could not be fetched. Recover with one of:',
+  '1. switch to the download CDN (hosts ppocr_v6 tiny/small/medium only): set "source": "download" under "ocr" in maa-project.json, then run `create-maa-project --update ocr-models`;',
+  '2. route GitHub through a mirror: git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git", then retry;',
+  '3. serve a local OCR zip: set CREATE_MAA_PROJECT_OCR_ZIP_PATH together with the download source above.',
+].join('\n')
+
+class OcrSubmoduleRecoveryError extends Error {}
+
+function withOcrSubmoduleRecoveryHint(error: unknown): OcrSubmoduleRecoveryError {
+  const message = error instanceof Error ? error.message : String(error)
+  return new OcrSubmoduleRecoveryError(`${message}\n${OCR_SUBMODULE_RECOVERY_HINT}`)
+}
+
+const OCR_GITIGNORE_COMMENT = '# OCR models are copied from the MaaCommonAssets submodule and must not be committed.'
+const OCR_GITIGNORE_LINE = 'resource/base/model/ocr/'
+
+export async function syncOcrGitignoreForSource(root: string, source: 'submodule' | 'download'): Promise<boolean> {
+  const gitignorePath = join(root, '.gitignore')
+  if (!(await exists(gitignorePath))) return false
+  const content = await readText(gitignorePath)
+  const lines = content.split(/\r?\n/u)
+  const hasLine = lines.some((line) => line.trim() === OCR_GITIGNORE_LINE)
+  if (source === 'submodule') {
+    if (hasLine) return false
+    await trackProjectPathForBackup(root, '.gitignore')
+    const prefix = content.length === 0 || content.endsWith('\n') ? content : `${content}\n`
+    await writeText(gitignorePath, `${prefix}${OCR_GITIGNORE_COMMENT}\n${OCR_GITIGNORE_LINE}\n`)
+    return true
+  }
+  if (!hasLine) return false
+  await trackProjectPathForBackup(root, '.gitignore')
+  const filtered: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (line === undefined) continue
+    if (line.trim() === OCR_GITIGNORE_LINE) continue
+    const next = lines[index + 1]
+    if (line.trim() === OCR_GITIGNORE_COMMENT && next?.trim() === OCR_GITIGNORE_LINE) continue
+    filtered.push(line)
+  }
+  await writeText(gitignorePath, filtered.join('\n'))
+  return true
+}
+
+export async function provisionOcrFromSubmodule(
+  root: string,
+  options: {
+    gitRunner: OcrSubmoduleGitRunner
+    signal?: AbortSignal
+  },
+): Promise<string[]> {
+  throwIfAborted(options.signal)
+  try {
+    await options.gitRunner(root, [
+      'clone',
+      '--depth',
+      '1',
+      DEFAULT_OCR_SUBMODULE_URL,
+      DEFAULT_OCR_SUBMODULE_PATH,
+    ])
+  } catch (error) {
+    throw withOcrSubmoduleRecoveryHint(error)
+  }
+  const clonePath = join(root, DEFAULT_OCR_SUBMODULE_PATH)
+  try {
+    const sourceRoot = await realpath(clonePath)
+    const written: string[] = []
+    await trackProjectPathForBackup(root, 'resource/base/model/ocr')
+    const destination = resolve(root, 'resource/base/model/ocr')
+    await mkdir(destination, { recursive: true })
+    for (const name of DEFAULT_OCR_FILES) {
+      throwIfAborted(options.signal)
+      const source = join(sourceRoot, DEFAULT_OCR_SUBMODULE_ASSETS_DIR, DEFAULT_OCR_MODEL_DIR, name)
+      if (!(await exists(source))) {
+        throw new Error(`The MaaCommonAssets checkout is missing OCR model file ${DEFAULT_OCR_MODEL_DIR}/${name}.`)
+      }
+      await copyFileAtomic(source, resolve(destination, name))
+      written.push(`resource/base/model/ocr/${name}`)
+    }
+    return written
+  } catch (error) {
+    await rm(clonePath, { force: true, recursive: true }).catch(() => {})
+    throw error
+  }
+}
+
+type GitmodulesEntry = {
+  name: string
+  path: string
+  url: string
+}
+
+async function readOcrSubmodulesEntry(root: string, submodulePath: string): Promise<GitmodulesEntry | undefined> {
+  const gitmodulesPath = join(root, '.gitmodules')
+  if (!(await exists(gitmodulesPath))) return undefined
+  const content = await readText(gitmodulesPath)
+  const entries: GitmodulesEntry[] = []
+  let name: string | undefined
+  let path: string | undefined
+  let url: string | undefined
+  const pushCurrent = (
+    currentName: string | undefined,
+    currentPath: string | undefined,
+    currentUrl: string | undefined,
+  ): void => {
+    if (currentName && currentPath && currentUrl) {
+      entries.push({
+        name: currentName,
+        path: currentPath,
+        url: currentUrl,
+      })
+    }
+  }
+  for (const rawLine of content.split(/\r?\n/u)) {
+    const line = rawLine.trim()
+    const section = /^\[submodule\s+"([^"]+)"\]$/u.exec(line)
+    if (section) {
+      pushCurrent(name, path, url)
+      name = section[1]
+      path = undefined
+      url = undefined
+      continue
+    }
+    if (!name) continue
+    const property = /^(path|url)\s*=\s*(.+)$/u.exec(line)
+    if (property) {
+      if (property[1] === 'path') path = property[2]?.trim()
+      else url = property[2]?.trim()
+    }
+  }
+  pushCurrent(name, path, url)
+  const normalized = submodulePath.replace(/\\/gu, '/')
+  return entries.find((entry) => normalized === entry.path || normalized.startsWith(`${entry.path}/`))
+}
+
+export async function ensureOcrSubmoduleReady(
+  root: string,
+  ocr: OcrConfig,
+  options: {
+    commandRunner: UpdateCommandRunner
+    onProgress?: ProgressReporter
+    signal?: AbortSignal
+  },
+): Promise<void> {
+  throwIfAborted(options.signal)
+  const subPath = ocr.submodulePath
+  if (!subPath) throw new Error('ocr.submodulePath is required when ocr.source is "submodule"')
+  const entry = await readOcrSubmodulesEntry(root, subPath)
+  if (!entry) {
+    // Not a registered Git submodule (e.g. a plain vendored directory); the copy
+    // step below validates the path itself.
+    if (await exists(join(root, subPath))) return
+    throw withOcrSubmoduleRecoveryHint(
+      new Error(
+        `ocr.submodulePath "${subPath}" does not exist and has no matching .gitmodules entry. Register the submodule first: git submodule add ${DEFAULT_OCR_SUBMODULE_URL} ${DEFAULT_OCR_SUBMODULE_PATH}`,
+      ),
+    )
+  }
+  const repoPath = join(root, entry.path)
+  if (await exists(join(repoPath, '.git'))) return
+  options.onProgress?.(`Initializing the ${entry.path} submodule...`)
+  try {
+    if (await exists(join(root, '.git'))) {
+      try {
+        await options.commandRunner(root, 'git', [
+          'submodule',
+          'update',
+          '--init',
+          '--depth',
+          '1',
+          '--',
+          entry.path,
+        ])
+        return
+      } catch {
+        // The gitlink may not be staged yet (initial commit still pending after a
+        // failed provisioning); a plain clone registers the same content.
+      }
+      try {
+        await options.commandRunner(root, 'git', [
+          'clone',
+          '--depth',
+          '1',
+          entry.url,
+          entry.path,
+        ])
+        return
+      } catch (cloneError) {
+        throw withOcrSubmoduleRecoveryHint(cloneError)
+      }
+    }
+    await options.commandRunner(root, 'git', [
+      'clone',
+      '--depth',
+      '1',
+      entry.url,
+      entry.path,
+    ])
+  } catch (error) {
+    if (error instanceof OcrSubmoduleRecoveryError) throw error
+    throw withOcrSubmoduleRecoveryHint(error)
+  }
+}
+
 async function runCommand(root: string, command: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -1034,6 +1285,7 @@ function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     includeSchemaSync: isAddonEnabled(config, 'schemaSync'),
     pythonDevCommand: config.python?.devCommand,
     resources: enabledResourcePacks(config),
+    ocrSubmodule: config.ocr?.source === 'submodule',
   }).filter((file) => file.path.startsWith('tools/schema/'))
 }
 

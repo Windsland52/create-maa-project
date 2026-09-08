@@ -344,14 +344,18 @@ create-maa-project --clean-cache
 
 资产和依赖操作是显式且可恢复的：
 
-- 创建项目时会在相关场景尝试 OCR 下载和 `pnpm install`。
+- 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成 `.gitmodules`，版本由提交中的 gitlink 钉死。
+- 本地 Git 不可用（或显式 `CREATE_MAA_PROJECT_OCR_SOURCE=download`）时改为从下载源获取 OCR 模型：写入 `manifest.json` 记录 sha256，模型文件纳入版本控制。
+- 子模块克隆失败会登记 pending action，稍后执行 `create-maa-project --update ocr-models` 补齐；该命令也会自动初始化已注册但尚未拉取的子模块。失败信息自带恢复出口：默认 v6 配置可把 `ocr.source` 切为 `download` 直接走 CDN（仅托管 ppocr_v6 tiny/small/medium）；需要其他版本时给 GitHub 配镜像，例如 `git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"` 后重试。
+- `--doctor` 会检查 `resource/base/model/ocr/` 下 `det.onnx`/`rec.onnx`/`keys.txt` 是否存在且非空（新建克隆后未供模型的项目会在此报出 finding）。
 - 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令。
 - Runtime 更新会记录工具安装的文件，后续更新只清理其中已从新版本移除的文件；旧文件和安装记录均可通过本次备份恢复。
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
 - `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>` 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值。
 - `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>` 调整单个归档的条目数上限，默认 100000。
-- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产。
-- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest。
+- `CREATE_MAA_PROJECT_OCR_SOURCE=submodule|download` 调整创建时的 OCR 供应方式。
+- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产（download 回退路径）。
+- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest（download 回退路径）。
 - `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` 同步全部桌面 MaaFramework 和 MFAAvalonia runtime 平台。
 - `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` 控制交互式提示语言。`auto` 只会在中文交互终端启用中英提示；机器可读输出仍保持英文。
 

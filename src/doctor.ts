@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { stat } from 'node:fs/promises'
 import { readProjectConfig } from './project.js'
 import type { MaaProjectConfig } from './types.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
@@ -136,6 +137,17 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
     detailStart,
   )
   ok = resourcesOk && ok
+  detailStart = lines.length
+  const ocrModelsOk = await checkOcrModels(root, config, lines)
+  recordDoctorCheck(
+    checks,
+    'ocr-models',
+    ocrModelsOk,
+    ocrModelsOk ? 'OCR model files are provisioned.' : 'OCR model files are missing or empty.',
+    lines,
+    detailStart,
+  )
+  ok = ocrModelsOk && ok
   if (interfaceJson) {
     detailStart = lines.length
     const referencesOk = await checkReferencedPaths(root, interfaceJson, lines)
@@ -438,6 +450,40 @@ async function checkResourcePaths(root: string, config: MaaProjectConfig, lines:
   }
   lines.push('[OK] Resource pack paths are present.')
   return true
+}
+
+const OCR_MODEL_FILE_NAMES = [
+  'det.onnx',
+  'rec.onnx',
+  'keys.txt',
+] as const
+
+async function checkOcrModels(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
+  const modelDir = 'resource/base/model/ocr'
+  const missing: string[] = []
+  for (const name of OCR_MODEL_FILE_NAMES) {
+    const relativePath = `${modelDir}/${name}`
+    let size: number | undefined
+    try {
+      size = (await stat(join(root, relativePath))).size
+    } catch {
+      size = undefined
+    }
+    if (size === undefined || size === 0) missing.push(relativePath)
+  }
+  if (missing.length === 0) {
+    lines.push('[OK] OCR model files are present under resource/base/model/ocr.')
+    return true
+  }
+  for (const path of missing) {
+    lines.push(`[ERR] OCR model file is missing or empty: ${path}`)
+  }
+  lines.push(
+    config.ocr?.source === 'submodule'
+      ? '      To fix: create-maa-project --update ocr-models (initializes the MaaCommonAssets submodule when needed)'
+      : '      To fix: create-maa-project --update ocr-models',
+  )
+  return false
 }
 
 async function checkReferencedPaths(

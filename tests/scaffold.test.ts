@@ -319,6 +319,7 @@ describe('scaffold', () => {
 
     const result = await createProject(defaultOptions({ name: 'maa-create-ocr-fail' }), {
       downloadOcrModels: true,
+      ocrSource: 'download',
       assetDownloader: async () => {
         throw new Error('offline OCR mirror')
       },
@@ -347,6 +348,7 @@ describe('scaffold', () => {
 
     const creation = createProject(defaultOptions({ name: 'maa-create-ocr-cancel' }), {
       downloadOcrModels: true,
+      ocrSource: 'download',
       signal: controller.signal,
       assetDownloader: async () => {
         controller.abort('OCR download cancelled')
@@ -1105,6 +1107,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
       '--update',
       'maafw',
       '--update',
+      'ocr-models',
+      '--update',
       'runtime:mfa',
     ])
   })
@@ -1148,6 +1152,8 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     expect(JSON.parse(await readFile(join(projectRoot, 'sync-runtime-args.json'), 'utf8'))).toEqual([
       '--update',
       'maafw',
+      '--update',
+      'ocr-models',
       '--update',
       'runtime:mfa',
     ])
@@ -2073,6 +2079,9 @@ jobs:
     process.chdir(projectRoot)
     await addDevTools(defaultOptions({ add: ['dev-tools'] }))
     await addGithub(defaultOptions({ add: ['github'] }))
+    for (const name of ['det.onnx', 'rec.onnx', 'keys.txt']) {
+      await writeFile(join(projectRoot, `resource/base/model/ocr/${name}`), 'model', 'utf8')
+    }
     expect((await runDoctor(projectRoot)).ok).toBe(true)
   })
 
@@ -3975,6 +3984,7 @@ export default defineConfig({
     const downloadProgress: DownloadProgress[] = []
     const result = await createProject(defaultOptions({ name: 'maa-create-ocr' }), {
       downloadOcrModels: true,
+      ocrSource: 'download',
       ocrManifestResolver: async () => ({
         schemaVersion: 1,
         assets: [
@@ -4343,7 +4353,9 @@ export default defineConfig({
   it('downloads OCR model assets from a verified manifest and clears OCR pending', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-ocr-update' }))
+    await createProject(defaultOptions({ name: 'maa-ocr-update' }), {
+      ocrSource: 'download',
+    })
     const projectRoot = join(root, 'maa-ocr-update')
     process.chdir(projectRoot)
 
@@ -4447,6 +4459,459 @@ export default defineConfig({
       'OCR models downloaded.',
     ])
   })
+
+  it('provisions OCR models from the MaaCommonAssets submodule during project creation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const fixture = await mkdtemp(join(tmpdir(), 'cmp-maaassets-'))
+    const fixtureModelDir = join(fixture, 'OCR/ppocr_v6/small')
+    await mkdir(fixtureModelDir, { recursive: true })
+    await writeFile(join(fixtureModelDir, 'det.onnx'), 'fixture detector', 'utf8')
+    await writeFile(join(fixtureModelDir, 'rec.onnx'), 'fixture recognizer', 'utf8')
+    await writeFile(join(fixtureModelDir, 'keys.txt'), 'fixture keys\n', 'utf8')
+    await writeFile(join(fixtureModelDir, 'README.md'), '# fixture OCR\n', 'utf8')
+    const runGit = async (cwd: string, args: string[]): Promise<void> => {
+      await execFileAsync('git', args, { cwd })
+    }
+    await runGit(fixture, ['init'])
+    await runGit(fixture, ['add', '--all'])
+    await runGit(fixture, [
+      '-c',
+      'user.name=fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '-m',
+      'fixture models',
+    ])
+
+    const progress: string[] = []
+    const result = await createProject(
+      defaultOptions({
+        name: 'maa-ocr-submodule-provision',
+        allowPendingCommit: true,
+        initializeGit: true,
+      }),
+      {
+        downloadOcrModels: true,
+        ocrSource: 'submodule',
+        gitRunner: async (cwd, args) => {
+          if (args[0] === 'clone') {
+            await runGit(cwd, [
+              'clone',
+              fixture,
+              ...args.slice(4),
+            ])
+            return
+          }
+          await runGit(cwd, args)
+        },
+        onProgress: (message) => progress.push(message),
+      },
+    )
+
+    const projectRoot = join(root, 'maa-ocr-submodule-provision')
+    expect(result.config.ocr).toEqual({
+      source: 'submodule',
+      submodulePath: 'MaaCommonAssets/OCR',
+      files: {
+        'README.md': 'ppocr_v6/small/README.md',
+        'det.onnx': 'ppocr_v6/small/det.onnx',
+        'keys.txt': 'ppocr_v6/small/keys.txt',
+        'rec.onnx': 'ppocr_v6/small/rec.onnx',
+      },
+    })
+    expect(result.written).toEqual(
+      expect.arrayContaining([
+        'resource/base/model/ocr/det.onnx',
+        'resource/base/model/ocr/rec.onnx',
+        'resource/base/model/ocr/keys.txt',
+        'resource/base/model/ocr/README.md',
+        '.gitmodules',
+      ]),
+    )
+    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('fixture detector')
+    expect(await readFile(join(projectRoot, '.gitmodules'), 'utf8')).toContain(
+      'url = https://github.com/MaaXYZ/MaaCommonAssets.git',
+    )
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).toContain('resource/base/model/ocr/')
+    await expect(stat(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+    expect(progress).toEqual([
+      'Fetching OCR models from the MaaCommonAssets submodule...',
+      'OCR models provisioned from submodule.',
+    ])
+
+    const committedFiles = await execFileAsync('git', ['ls-files'], { cwd: projectRoot })
+    expect(committedFiles.stdout).toContain('.gitmodules')
+    expect(committedFiles.stdout).toContain('MaaCommonAssets')
+    expect(committedFiles.stdout).not.toContain('resource/base/model/ocr/det.onnx')
+  })
+
+  it('downloads OCR models when Git is unavailable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const assets = new Map<string, Buffer>([
+      ['https://example.test/det.onnx', Buffer.from([9])],
+      ['https://example.test/rec.onnx', Buffer.from([8])],
+      ['https://example.test/keys.txt', Buffer.from('k')],
+      ['https://example.test/README.md', Buffer.from('# r')],
+    ])
+    const progress: string[] = []
+    const result = await createProject(defaultOptions({ name: 'maa-ocr-fallback' }), {
+      downloadOcrModels: true,
+      detectGitAvailability: async () => false,
+      ocrManifestResolver: async () => ({
+        schemaVersion: 1,
+        assets: [
+          ...[
+            ...assets.entries(),
+          ].map(([url, content]) => ({
+            path: url.split('/').at(-1) as string,
+            url,
+            sha256: sha256(content),
+            size: content.byteLength,
+          })),
+        ],
+      }),
+      assetDownloader: async (url) => {
+        const content = assets.get(url)
+        if (!content) throw new Error(`unexpected URL: ${url}`)
+        return content
+      },
+      onProgress: (message) => progress.push(message),
+    })
+
+    const projectRoot = join(root, 'maa-ocr-fallback')
+    expect(result.config.ocr).toBeUndefined()
+    expect(progress).toEqual([
+      'Downloading OCR models...',
+      'OCR models downloaded.',
+    ])
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
+      assets.get('https://example.test/det.onnx'),
+    )
+    expect(await readJson(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).toMatchObject({
+      schemaVersion: 1,
+    })
+    await expect(stat(join(projectRoot, '.gitmodules'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(stat(join(projectRoot, 'MaaCommonAssets'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).not.toContain('resource/base/model/ocr/')
+  })
+
+  it('errors with recovery guidance when ocr.source points at a missing submodule', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-ocr-switch-missing', skipDownload: true }), {
+      ocrSource: 'download',
+    })
+    const projectRoot = join(root, 'maa-ocr-switch-missing')
+    const config = await readProjectConfig(projectRoot)
+    config.ocr = {
+      source: 'submodule',
+      submodulePath: 'MaaCommonAssets/OCR',
+      files: {
+        'det.onnx': 'ppocr_v6/small/det.onnx',
+      },
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    await expect(
+      recordUpdateRequests(
+        defaultOptions({
+          update: [
+            'ocr-models',
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/git submodule add https:\/\/github\.com\/MaaXYZ\/MaaCommonAssets\.git MaaCommonAssets/)
+  })
+
+  it('removes the OCR gitignore line when updating models from the download source', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-ocr-switch-download', skipDownload: true }), {
+      ocrSource: 'submodule',
+    })
+    const projectRoot = join(root, 'maa-ocr-switch-download')
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).toContain('resource/base/model/ocr/')
+    const config = await readProjectConfig(projectRoot)
+    config.ocr = {
+      source: 'download',
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    const assets = new Map<string, Buffer>([
+      ['https://example.test/det.onnx', Buffer.from([1])],
+      ['https://example.test/rec.onnx', Buffer.from([2])],
+      ['https://example.test/keys.txt', Buffer.from('k')],
+      ['https://example.test/README.md', Buffer.from('# r')],
+    ])
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+      {
+        ocrManifestResolver: async () => ({
+          schemaVersion: 1,
+          assets: [
+            ...[
+              ...assets.entries(),
+            ].map(([url, content]) => ({
+              path: url.split('/').at(-1) as string,
+              url,
+              sha256: sha256(content),
+              size: content.byteLength,
+            })),
+          ],
+        }),
+        assetDownloader: async (url) => {
+          const content = assets.get(url)
+          if (!content) throw new Error(`unexpected URL: ${url}`)
+          return content
+        },
+      },
+    )
+
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).not.toContain('resource/base/model/ocr/')
+    expect(result.written).toContain('.gitignore')
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'))).toEqual(
+      assets.get('https://example.test/det.onnx'),
+    )
+  })
+
+  it('adds the OCR gitignore line when copying models from a vendored submodule directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-ocr-switch-submodule', skipDownload: true }), {
+      ocrSource: 'download',
+    })
+    const projectRoot = join(root, 'maa-ocr-switch-submodule')
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).not.toContain('resource/base/model/ocr/')
+    const vendored = join(projectRoot, 'vendor/ocr-assets/ppocr_v6/small')
+    await mkdir(vendored, { recursive: true })
+    await writeFile(join(vendored, 'det.onnx'), 'vendored detector', 'utf8')
+    const config = await readProjectConfig(projectRoot)
+    config.ocr = {
+      source: 'submodule',
+      submodulePath: 'vendor/ocr-assets',
+      files: {
+        'det.onnx': 'ppocr_v6/small/det.onnx',
+      },
+    }
+    await writeFile(join(projectRoot, 'maa-project.json'), `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+    )
+
+    const gitignore = await readFile(join(projectRoot, '.gitignore'), 'utf8')
+    expect(gitignore).toContain('resource/base/model/ocr/')
+    expect(gitignore).toContain('# OCR models are copied from the MaaCommonAssets submodule')
+    expect(result.written).toContain('.gitignore')
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('vendored detector')
+  })
+
+  it('keeps submodule intent and a pending action when the submodule clone fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const progress: string[] = []
+    const result = await createProject(defaultOptions({ name: 'maa-ocr-clone-fail' }), {
+      downloadOcrModels: true,
+      gitRunner: async () => {
+        throw new Error('github unreachable')
+      },
+      onProgress: (message) => progress.push(message),
+    })
+
+    const projectRoot = join(root, 'maa-ocr-clone-fail')
+    expect(result.config.ocr).toEqual({
+      source: 'submodule',
+      submodulePath: 'MaaCommonAssets/OCR',
+      files: {
+        'README.md': 'ppocr_v6/small/README.md',
+        'det.onnx': 'ppocr_v6/small/det.onnx',
+        'keys.txt': 'ppocr_v6/small/keys.txt',
+        'rec.onnx': 'ppocr_v6/small/rec.onnx',
+      },
+    })
+    expect(progress).toEqual([
+      'Fetching OCR models from the MaaCommonAssets submodule...',
+      'OCR model provisioning failed (github unreachable); continuing with a pending action.',
+    ])
+    expect(result.pending).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'ocr-model',
+          reason: expect.stringContaining('github unreachable'),
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
+    )
+    const ocrPending = result.pending.find((item) => item.kind === 'ocr-model')
+    expect(ocrPending?.reason).toContain('insteadOf')
+    expect(ocrPending?.reason).toContain('CREATE_MAA_PROJECT_OCR_ZIP_PATH')
+    expect(await readFile(join(projectRoot, '.gitmodules'), 'utf8')).toContain('MaaCommonAssets')
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).toContain('resource/base/model/ocr/')
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('')
+    await expect(stat(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+  })
+
+  it('keeps submodule intent and a pending action when downloads are skipped', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+
+    const result = await createProject(defaultOptions({ name: 'maa-ocr-skip', skipDownload: true }), {
+      ocrSource: 'submodule',
+    })
+
+    const projectRoot = join(root, 'maa-ocr-skip')
+    expect(result.config.ocr).toEqual({
+      source: 'submodule',
+      submodulePath: 'MaaCommonAssets/OCR',
+      files: {
+        'README.md': 'ppocr_v6/small/README.md',
+        'det.onnx': 'ppocr_v6/small/det.onnx',
+        'keys.txt': 'ppocr_v6/small/keys.txt',
+        'rec.onnx': 'ppocr_v6/small/rec.onnx',
+      },
+    })
+    expect(result.pending).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'ocr-model',
+          reason: expect.stringContaining('submodule'),
+          command: 'create-maa-project --update ocr-models',
+        }),
+      ]),
+    )
+    expect(await readFile(join(projectRoot, '.gitmodules'), 'utf8')).toContain('MaaCommonAssets')
+    expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).toContain('resource/base/model/ocr/')
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('')
+    await expect(stat(join(projectRoot, 'resource/base/model/ocr/manifest.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+  })
+
+  it('initializes a registered but empty OCR submodule during --update ocr-models', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-ocr-autoinit',
+        skipDownload: true,
+        initializeGit: true,
+      }),
+      {
+        ocrSource: 'submodule',
+      },
+    )
+    const projectRoot = join(root, 'maa-ocr-autoinit')
+    process.chdir(projectRoot)
+
+    const commands: Array<{ command: string; args: string[] }> = []
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+      {
+        commandRunner: async (cwd, command, args) => {
+          commands.push({
+            command,
+            args,
+          })
+          if (command === 'git' && args[0] === 'submodule') {
+            const modelDir = join(cwd, 'MaaCommonAssets/OCR/ppocr_v6/small')
+            await mkdir(modelDir, { recursive: true })
+            await writeFile(join(modelDir, 'det.onnx'), 'autoinit detector', 'utf8')
+            await writeFile(join(modelDir, 'rec.onnx'), 'autoinit recognizer', 'utf8')
+            await writeFile(join(modelDir, 'keys.txt'), 'keys\n', 'utf8')
+            await writeFile(join(modelDir, 'README.md'), '# readme\n', 'utf8')
+            return
+          }
+          throw new Error(`unexpected command: ${command} ${args.join(' ')}`)
+        },
+      },
+    )
+
+    expect(commands).toEqual([
+      {
+        command: 'git',
+        args: [
+          'submodule',
+          'update',
+          '--init',
+          '--depth',
+          '1',
+          '--',
+          'MaaCommonAssets',
+        ],
+      },
+    ])
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('autoinit detector')
+    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
+  })
+
+  it('clones the OCR submodule directly when the project is not a Git repository', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-ocr-nogit-clone',
+        skipDownload: true,
+        initializeGit: false,
+      }),
+      {
+        ocrSource: 'submodule',
+      },
+    )
+    const projectRoot = join(root, 'maa-ocr-nogit-clone')
+    process.chdir(projectRoot)
+
+    const result = await recordUpdateRequests(
+      defaultOptions({
+        update: [
+          'ocr-models',
+        ],
+      }),
+      {
+        commandRunner: async (cwd, command, args) => {
+          if (command === 'git' && args[0] === 'clone') {
+            const modelDir = join(cwd, 'MaaCommonAssets/OCR/ppocr_v6/small')
+            await mkdir(modelDir, { recursive: true })
+            await writeFile(join(modelDir, 'det.onnx'), 'cloned detector', 'utf8')
+            await writeFile(join(modelDir, 'rec.onnx'), 'cloned recognizer', 'utf8')
+            await writeFile(join(modelDir, 'keys.txt'), 'keys\n', 'utf8')
+            await writeFile(join(modelDir, 'README.md'), '# readme\n', 'utf8')
+            return
+          }
+          throw new Error(`unexpected command: ${command} ${args.join(' ')}`)
+        },
+      },
+    )
+
+    expect(await readFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'utf8')).toBe('cloned detector')
+    expect(result.pending.some((item) => item.kind === 'ocr-model')).toBe(false)
+  })
+
   it('runs dependency updates and clears resolved pending items', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     const commands: Array<{ root: string; command: string; args: string[] }> = []

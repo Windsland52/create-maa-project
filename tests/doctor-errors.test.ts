@@ -67,6 +67,38 @@ describe('doctor malformed JSON diagnostics', () => {
       ]),
     )
   })
+
+  it('reports empty OCR model files with a repair command', async () => {
+    const projectRoot = await createTempProject('empty-ocr-models')
+
+    const pendingReport = await runDoctor(projectRoot)
+    const pendingOutput = pendingReport.lines.join('\n')
+
+    expect(pendingReport.ok).toBe(false)
+    expect(pendingOutput).toContain('[ERR] OCR model file is missing or empty: resource/base/model/ocr/det.onnx')
+    expect(pendingOutput).toContain('[ERR] OCR model file is missing or empty: resource/base/model/ocr/rec.onnx')
+    expect(pendingOutput).toContain('[ERR] OCR model file is missing or empty: resource/base/model/ocr/keys.txt')
+    expect(pendingOutput).toContain('To fix: create-maa-project --update ocr-models')
+    expect(pendingReport.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'ocr-models', status: 'fail' }),
+      ]),
+    )
+
+    await writeFile(join(projectRoot, 'resource/base/model/ocr/det.onnx'), 'detector', 'utf8')
+    await writeFile(join(projectRoot, 'resource/base/model/ocr/rec.onnx'), 'recognizer', 'utf8')
+    await writeFile(join(projectRoot, 'resource/base/model/ocr/keys.txt'), 'keys\n', 'utf8')
+
+    const provisionedReport = await runDoctor(projectRoot)
+    expect(provisionedReport.lines.join('\n')).toContain(
+      '[OK] OCR model files are present under resource/base/model/ocr.',
+    )
+    expect(provisionedReport.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'ocr-models', status: 'pass' }),
+      ]),
+    )
+  })
 })
 
 async function createTempProject(name: string, addons: string[] = []): Promise<string> {

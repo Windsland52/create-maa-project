@@ -30,7 +30,7 @@ import {
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { CliOptions } from './types.js'
-import { recordUpdateRequests } from './update.js'
+import { recordUpdateRequests, resolveOcrSourceFromEnvironment } from './update.js'
 import { UPDATE_TARGETS } from './update-targets.js'
 import { throwIfAborted } from './utils.js'
 
@@ -742,10 +742,12 @@ async function callCreateProject(
       throwIfAborted(signal)
       const createOptions = await promptForCreateOptions(options)
       createOptions.name = targetRoot
+      const ocrSource = resolveOcrSourceFromEnvironment()
       const result = await createProject(createOptions, {
         cwd: context.root,
         installNodeDeps: true,
         downloadOcrModels: true,
+        ...(ocrSource ? { ocrSource } : {}),
         commandRunner: (root, command, args) => runMcpChildCommand(root, command, args, signal),
         gitRunner: (root, args) => runMcpChildCommand(root, 'git', args, signal),
         ocrManifestResolver: () => resolveOcrManifestFromEnvironment(signal ? { signal } : {}),

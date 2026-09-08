@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
+import { DEFAULT_OCR_SUBMODULE_PATH, DEFAULT_OCR_SUBMODULE_URL } from './assets.js'
 import { embeddedBinaryTemplates, embeddedTextTemplates } from './template-assets.generated.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
@@ -82,6 +83,7 @@ export type ProjectTemplateInput = {
   includeSchemaSync: boolean
   pythonDevCommand?: string[] | undefined
   resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
+  ocrSubmodule?: boolean
 }
 
 const AGENT_DEBUG_SESSION_NAME = 'Maa Agent: Debug'
@@ -102,14 +104,20 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
   const generatedLicense = licenseText(input)
   const files: ManagedFileInput[] = [
     managed('.editorconfig', template('base/.editorconfig')),
-    once('.gitignore', template('base/gitignore.tmpl')),
+    once('.gitignore', projectGitignore(input.ocrSubmodule === true)),
     managed('.gitattributes', template('base/.gitattributes')),
     once('interface.json', interfaceJson(input)),
     once('tasks/tutorial.json', tutorialTaskJson()),
     once('resource/base/default_pipeline.json', defaultPipelineJson()),
     once('resource/base/pipeline/tutorial.json', tutorialPipelineJson()),
     once('resource/base/image/empty.png', templateBinary('base/resource/base/image/empty.png')),
-    once('resource/base/model/ocr/manifest.json', ocrManifestJson()),
+    ...(input.ocrSubmodule
+      ? [
+          once('.gitmodules', ocrSubmodulesFile()),
+        ]
+      : [
+          once('resource/base/model/ocr/manifest.json', ocrManifestJson()),
+        ]),
     once('resource/base/model/ocr/det.onnx', ''),
     once('resource/base/model/ocr/rec.onnx', ''),
     once('resource/base/model/ocr/keys.txt', ''),
@@ -380,6 +388,22 @@ function tutorialPipelineJson(): string {
 
 function ocrManifestJson(): string {
   return template('base/resource/base/model/ocr/manifest.json')
+}
+
+function projectGitignore(ocrSubmodule: boolean): string {
+  const base = template('base/gitignore.tmpl')
+  return ocrSubmodule
+    ? `${base}# OCR models are copied from the MaaCommonAssets submodule and must not be committed.\nresource/base/model/ocr/\n`
+    : base
+}
+
+function ocrSubmodulesFile(): string {
+  return [
+    `[submodule "${DEFAULT_OCR_SUBMODULE_PATH}"]`,
+    `\tpath = ${DEFAULT_OCR_SUBMODULE_PATH}`,
+    `\turl = ${DEFAULT_OCR_SUBMODULE_URL}`,
+    '',
+  ].join('\n')
 }
 
 export function projectCustomSchemaFiles(includeAgent: boolean): ManagedFileInput[] {

@@ -42,7 +42,7 @@ import {
 import { createProject } from './scaffold.js'
 import { syncProject } from './sync.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
-import { recordUpdateRequests } from './update.js'
+import { recordUpdateRequests, resolveOcrSourceFromEnvironment, type OcrSourcePreference } from './update.js'
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
@@ -175,6 +175,7 @@ async function main(): Promise<void> {
       const result = await createProject(createOptions, {
         installNodeDeps: true,
         downloadOcrModels: true,
+        ...withOcrSourceOption(),
         commandRunner: runReportChildCommand,
         ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
         onProgress: progress.onProgress,
@@ -253,6 +254,7 @@ async function main(): Promise<void> {
     const result = await createProject(createOptions, {
       installNodeDeps: true,
       downloadOcrModels: true,
+      ...withOcrSourceOption(),
       ocrManifestResolver: () => resolveOcrManifestFromEnvironment(),
       onProgress: progress.onProgress,
       onDownloadProgress: progress.onDownloadProgress,
@@ -289,6 +291,11 @@ async function main(): Promise<void> {
     printLogPath(logger, true)
     process.exitCode = 1
   }
+}
+
+function withOcrSourceOption(): { ocrSource?: OcrSourcePreference } {
+  const ocrSource = resolveOcrSourceFromEnvironment()
+  return ocrSource ? { ocrSource } : {}
 }
 
 function isBackupCommand(options: CliOptions): boolean {

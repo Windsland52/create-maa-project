@@ -64,7 +64,12 @@ import {
 } from './assets.js'
 import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
-import { updateOcrModels } from './update.js'
+import {
+  defaultOcrSubmoduleConfig,
+  provisionOcrFromSubmodule,
+  updateOcrModels,
+  type OcrSourcePreference,
+} from './update.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -72,14 +77,17 @@ export type GitRunner = (root: string, args: string[]) => Promise<void>
 export type GitTreeDetector = (path: string) => Promise<boolean>
 export type CommandRunner = (root: string, command: string, args: string[]) => Promise<void>
 export type ProgressReporter = (message: string) => void
+export type GitAvailabilityDetector = (root: string) => Promise<boolean>
 
 export async function createProject(
   options: CliOptions,
   environment: {
     gitRunner?: GitRunner
     detectGitTree?: GitTreeDetector
+    detectGitAvailability?: GitAvailabilityDetector
     installNodeDeps?: boolean
     downloadOcrModels?: boolean
+    ocrSource?: OcrSourcePreference
     commandRunner?: CommandRunner
     ocrManifestResolver?: AssetManifestResolver
     assetDownloader?: AssetDownloader
@@ -94,6 +102,7 @@ export async function createProject(
   assertSupportedCreateAddons(options.add)
   const targetRoot = resolve(environment.cwd ?? process.cwd(), options.name ?? '.')
   const detectGitTree = environment.detectGitTree ?? ((path) => isInsideGitTree(path, environment.signal))
+  const detectGitAvailability = environment.detectGitAvailability ?? isGitAvailable
   const targetInsideGitTree = await detectGitTree(targetRoot)
   throwIfAborted(environment.signal)
   const defaultName = options.name && options.name !== '.' ? basename(options.name) : basename(targetRoot)
@@ -125,12 +134,17 @@ export async function createProject(
     options,
     resolvedAddons,
   })
+  const ocrIntent = await resolveCreateOcrIntent(environment, targetRoot, detectGitAvailability)
+  if (ocrIntent === 'submodule') {
+    config.ocr = defaultOcrSubmoduleConfig()
+  }
   const shouldDownloadOcrModels = environment.downloadOcrModels === true && !options.skipDownload
   let pending = defaultPending({
     includeAgent,
     options,
     includeDevTools,
     includeOcrPending: !shouldDownloadOcrModels,
+    ocrIntent,
   })
   const files = [
     ...baseProjectFiles({
@@ -148,6 +162,7 @@ export async function createProject(
       includeSchemaSync: resolvedAddons.includes('schema-sync'),
       pythonDevCommand,
       resources: config.resources,
+      ocrSubmodule: ocrIntent === 'submodule',
     }),
     ...addonFilesForCreate({ ...options, add: resolvedAddons }, config.resources, { displayName, includeAgent }),
     configFile(config),
@@ -168,21 +183,36 @@ export async function createProject(
         const written = new Set(result.written)
         if (shouldDownloadOcrModels) {
           const checkpoint = await createPathCheckpoint(targetRoot, 'resource/base/model/ocr')
+          const ocrLabel = ocrIntent === 'submodule' ? 'OCR model provisioning' : 'OCR model download'
           try {
-            environment.onProgress?.('Downloading OCR models...')
-            const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
-            if (ocrResult) {
-              for (const path of ocrResult.written) written.add(path)
-              environment.onProgress?.('OCR models downloaded.')
+            if (ocrIntent === 'submodule') {
+              environment.onProgress?.('Fetching OCR models from the MaaCommonAssets submodule...')
+              for (const path of await provisionOcrFromSubmodule(targetRoot, {
+                gitRunner: environment.gitRunner ?? runGit,
+                ...(environment.signal ? { signal: environment.signal } : {}),
+              })) {
+                written.add(path)
+              }
+              environment.onProgress?.('OCR models provisioned from submodule.')
+            } else {
+              environment.onProgress?.('Downloading OCR models...')
+              const ocrResult = await updateOcrModels(targetRoot, createOcrUpdateOptions(environment))
+              if (ocrResult) {
+                for (const path of ocrResult.written) written.add(path)
+                environment.onProgress?.('OCR models downloaded.')
+              }
             }
           } catch (error) {
-            await restoreCheckpoint(checkpoint, error, 'OCR model download')
+            await restoreCheckpoint(checkpoint, error, ocrLabel)
             throwIfAborted(environment.signal)
-            environment.onProgress?.(
-              `OCR model download failed (${errorMessage(error)}); continuing with a pending action.`,
-            )
+            const firstLine = errorMessage(error).split('\n')[0] ?? errorMessage(error)
+            environment.onProgress?.(`${ocrLabel} failed (${firstLine}); continuing with a pending action.`)
             pending = mergePending(pending, [
-              ocrDownloadPending(error),
+              {
+                kind: 'ocr-model',
+                reason: `${ocrLabel} failed during project creation: ${errorMessage(error)}`,
+                command: 'create-maa-project --update ocr-models',
+              },
             ])
           } finally {
             await checkpoint.dispose()
@@ -1154,6 +1184,29 @@ async function maybeInstallNodeDependencies(
   }
 }
 
+async function isGitAvailable(root: string): Promise<boolean> {
+  try {
+    await runGit(root, ['--version'])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function resolveCreateOcrIntent(
+  environment: {
+    ocrSource?: OcrSourcePreference
+    signal?: AbortSignal
+  },
+  targetRoot: string,
+  detectGitAvailability: GitAvailabilityDetector,
+): Promise<OcrSourcePreference> {
+  if (environment.ocrSource) return environment.ocrSource
+  const gitAvailable = await detectGitAvailability(targetRoot)
+  throwIfAborted(environment.signal)
+  return gitAvailable ? 'submodule' : 'download'
+}
+
 async function createPathCheckpoint(
   root: string,
   relativePath: string,
@@ -1213,6 +1266,7 @@ function defaultPending(input: {
   includeDevTools: boolean
   options: CliOptions
   includeOcrPending?: boolean
+  ocrIntent?: OcrSourcePreference
 }): PendingItem[] {
   const pending: PendingItem[] = []
   if (input.includeDevTools) {
@@ -1225,13 +1279,19 @@ function defaultPending(input: {
   if (input.includeOcrPending !== false && input.options.skipDownload) {
     pending.push({
       kind: 'ocr-model',
-      reason: 'OCR model download was skipped.',
+      reason:
+        input.ocrIntent === 'submodule'
+          ? 'OCR model provisioning was skipped; the MaaCommonAssets submodule is not initialized yet.'
+          : 'OCR model download was skipped.',
       command: 'create-maa-project --update ocr-models',
     })
   } else if (input.includeOcrPending !== false) {
     pending.push({
       kind: 'ocr-model',
-      reason: 'OCR model manifest source is not configured.',
+      reason:
+        input.ocrIntent === 'submodule'
+          ? 'OCR models are pending: the MaaCommonAssets submodule has not been provisioned yet.'
+          : 'OCR model manifest source is not configured.',
       command: 'create-maa-project --update ocr-models',
     })
   }
@@ -1239,14 +1299,6 @@ function defaultPending(input: {
     pending.push(...pythonPending())
   }
   return pending
-}
-
-function ocrDownloadPending(error: unknown): PendingItem {
-  return {
-    kind: 'ocr-model',
-    reason: `OCR model download failed during project creation: ${errorMessage(error)}`,
-    command: 'create-maa-project --update ocr-models',
-  }
 }
 
 function pythonPending(): PendingItem[] {

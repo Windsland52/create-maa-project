@@ -378,11 +378,26 @@ additionally run `uv sync`.
 
 Asset and dependency operations are explicit and recoverable:
 
-- Project creation tries OCR download and `pnpm install` when relevant.
+- Project creation clones `MaaXYZ/MaaCommonAssets` as a `--depth 1` submodule by default
+  and copies the `ppocr_v6/small` OCR models into `resource/base/model/ocr/`. In submodule
+  mode that directory is gitignored (models are derived files) and `.gitmodules` pins the
+  model version through the committed gitlink.
+- When local Git is unavailable (or `CREATE_MAA_PROJECT_OCR_SOURCE=download` is set
+  explicitly), models are fetched from the download source instead: recorded in
+  `manifest.json` with sha256 checksums, with model files tracked in version control.
+- When the submodule clone fails, a pending action is recorded; run
+  `create-maa-project --update ocr-models` later to recover. That command also initializes
+  a registered but not-yet-fetched submodule automatically. The failure message lists the
+  recovery exits: with the default v6 setup, switch `ocr.source` to `download` to use the
+  CDN (hosts ppocr_v6 tiny/small/medium only); for other model versions configure a GitHub
+  mirror, e.g. `git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"`, and retry.
+- `--doctor` checks that `det.onnx`/`rec.onnx`/`keys.txt` exist and are non-empty under
+  `resource/base/model/ocr/` (fresh clones without provisioned models surface here).
 - Network or tool failures return pending actions for the current command with repair commands.
 - `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` changes download retry attempts.
-- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip.
-- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest.
+- `CREATE_MAA_PROJECT_OCR_SOURCE=submodule|download` selects the creation-time OCR source.
+- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip (download fallback).
+- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest (download fallback).
 - `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` syncs all desktop MaaFramework and
   MFAAvalonia runtime platforms.
 - `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` controls interactive prompt language.

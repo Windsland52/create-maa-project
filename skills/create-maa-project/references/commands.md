@@ -83,10 +83,25 @@ where each is valid; the parser rejects mismatched options instead of ignoring t
 | `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Download retry count                                                                              |
 | `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap (default 1 GiB; declared manifest sizes win when stricter)                  |
 | `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry cap (default 100000)                                                            |
-| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Serve OCR assets from a local zip                                                                 |
-| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Use a verified OCR manifest                                                                       |
+| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Creation-time OCR source (default: `submodule` when Git is available, otherwise `download`)       |
+| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Serve OCR assets from a local zip (download source)                                               |
+| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Use a verified OCR manifest (download source)                                                     |
 | `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Sync every desktop MaaFramework and MFAAvalonia runtime platform (release jobs use `<os>-<arch>`) |
 | `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Interactive prompt language                                                                       |
+
+### OCR submodule recovery
+
+Submodule-clone failures (during creation or `--update ocr-models`) list the exits in the
+error message: switch `ocr.source` to `download` (CDN hosts ppocr_v6 tiny/small/medium
+only), configure a scoped GitHub mirror, or point `CREATE_MAA_PROJECT_OCR_ZIP_PATH` at a
+local zip. Mirror example:
+
+```bash
+git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"
+```
+
+`--doctor` reports empty/missing `resource/base/model/ocr/{det.onnx,rec.onnx,keys.txt}` as
+a finding with the `--update ocr-models` repair command.
 
 ## Generated project toolchain
 

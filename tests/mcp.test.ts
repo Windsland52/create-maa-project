@@ -1556,6 +1556,13 @@ async function createValidProject(name: string): Promise<string> {
   )
   const projectRoot = join(root, name)
   await writeFile(join(projectRoot, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\n", 'utf8')
+  for (const modelFile of [
+    'det.onnx',
+    'rec.onnx',
+    'keys.txt',
+  ]) {
+    await writeFile(join(projectRoot, 'resource/base/model/ocr', modelFile), 'model', 'utf8')
+  }
   return projectRoot
 }
 

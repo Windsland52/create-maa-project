@@ -10,6 +10,16 @@ function posixJoin(...segments: string[]): string {
 }
 
 export const DEFAULT_OCR_ZIP_URL = 'https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip'
+export const DEFAULT_OCR_SUBMODULE_URL = 'https://github.com/MaaXYZ/MaaCommonAssets.git'
+export const DEFAULT_OCR_SUBMODULE_PATH = 'MaaCommonAssets'
+export const DEFAULT_OCR_SUBMODULE_ASSETS_DIR = 'OCR'
+export const DEFAULT_OCR_MODEL_DIR = 'ppocr_v6/small'
+export const DEFAULT_OCR_FILES = [
+  'README.md',
+  'det.onnx',
+  'keys.txt',
+  'rec.onnx',
+] as const
 
 export type AssetManifest = {
   schemaVersion?: number

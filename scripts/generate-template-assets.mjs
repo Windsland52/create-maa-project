@@ -1,13 +1,18 @@
-import {readdir, readFile, writeFile} from "node:fs/promises";
-import {join, relative} from "node:path";
+import {execFile} from "node:child_process";
+import {readFile, writeFile} from "node:fs/promises";
+import {relative} from "node:path";
+import {promisify} from "node:util";
 import {format, resolveConfig} from "prettier";
+
+const execFileAsync = promisify(execFile);
 
 const templateRoot = "templates";
 const outputPath = "src/template-assets.generated.ts";
+
 const textTemplates = {};
 const binaryTemplates = {};
 
-for (const file of await listFiles(templateRoot)) {
+for (const file of await listFiles()) {
     const key = relative(templateRoot, file).replaceAll("\\", "/");
     const content = await readFile(file);
     if (isTextTemplate(key, content)) {
@@ -29,18 +34,21 @@ source = await format(source, {...config, filepath: outputPath});
 
 await writeFile(outputPath, source, "utf8");
 
-async function listFiles(root) {
-    const entries = await readdir(root, {withFileTypes: true});
-    const files = [];
-    for (const entry of entries) {
-        const path = join(root, entry.name);
-        if (entry.isDirectory()) {
-            files.push(...(await listFiles(path)));
-        } else if (entry.isFile()) {
-            files.push(path);
-        }
-    }
-    return files.sort();
+// git ls-files reports exactly the tracked paths: untracked and ignored files
+// (local caches, editor droppings) stay out, and a new template must be
+// `git add`-ed before the generator picks it up. The manifest therefore always
+// mirrors the tracked template set — nothing is silently filtered here, so a
+// junk file that got committed shows up in the manifest and gets fixed in git.
+// Paths come back with `/` separators on every platform, which readFile and
+// relative() accept as-is.
+async function listFiles() {
+    const {stdout} = await execFileAsync("git", [
+        "ls-files",
+        "-z",
+        "--",
+        templateRoot,
+    ]);
+    return stdout.split("\0").filter(Boolean).sort();
 }
 
 function isTextTemplate(path, content) {

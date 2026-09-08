@@ -1078,6 +1078,7 @@ export async function provisionOcrFromSubmodule(
   root: string,
   options: {
     gitRunner: OcrSubmoduleGitRunner
+    url?: string
     signal?: AbortSignal
   },
 ): Promise<string[]> {
@@ -1087,7 +1088,7 @@ export async function provisionOcrFromSubmodule(
       'clone',
       '--depth',
       '1',
-      DEFAULT_OCR_SUBMODULE_URL,
+      options.url ?? DEFAULT_OCR_SUBMODULE_URL,
       DEFAULT_OCR_SUBMODULE_PATH,
     ])
   } catch (error) {

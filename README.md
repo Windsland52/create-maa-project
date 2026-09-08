@@ -344,7 +344,8 @@ create-maa-project --clean-cache
 
 资产和依赖操作是显式且可恢复的：
 
-- 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成 `.gitmodules`，版本由提交中的 gitlink 钉死。
+- 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成或合并 `.gitmodules`，保留已有子模块映射，版本由提交中的 gitlink 钉死。
+- 在已有 Git 仓库的子目录中创建项目时，默认使用 download 模式，模型随子项目提交。显式设置 `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 时需要在 Git 工作树根目录或父仓库之外创建项目；子项目不会改写父仓库的 `.gitmodules`。
 - 本地 Git 不可用（或显式 `CREATE_MAA_PROJECT_OCR_SOURCE=download`）时改为从下载源获取 OCR 模型：写入 `manifest.json` 记录 sha256，模型文件纳入版本控制。
 - 子模块克隆失败会登记 pending action，稍后执行 `create-maa-project --update ocr-models` 补齐；该命令也会自动初始化已注册但尚未拉取的子模块。失败信息自带恢复出口：默认 v6 配置可把 `ocr.source` 切为 `download` 直接走 CDN（仅托管 ppocr_v6 tiny/small/medium）；需要其他版本时给 GitHub 配镜像，例如 `git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"` 后重试。
 - `--doctor` 会检查 `resource/base/model/ocr/` 下 `det.onnx`/`rec.onnx`/`keys.txt` 是否存在且非空（新建克隆后未供模型的项目会在此报出 finding）。

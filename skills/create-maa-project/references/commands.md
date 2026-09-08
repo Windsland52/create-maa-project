@@ -76,20 +76,25 @@ where each is valid; the parser rejects mismatched options instead of ignoring t
 
 ## Environment variables
 
-| Variable                                            | Effect                                                                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `CREATE_MAA_PROJECT_AUTO_UPDATE=0`                  | Disable automatic CLI runtime handoff and Skill sync (default: enabled unless in CI)              |
-| `CREATE_MAA_PROJECT_CONFIG_DIR=<path>`              | Custom path for CLI updates and persistent cache state                                            |
-| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Download retry count                                                                              |
-| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap (default 1 GiB; declared manifest sizes win when stricter)                  |
-| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry cap (default 100000)                                                            |
-| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Creation-time OCR source (default: `submodule` when Git is available, otherwise `download`)       |
-| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Serve OCR assets from a local zip (download source)                                               |
-| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Use a verified OCR manifest (download source)                                                     |
-| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Sync every desktop MaaFramework and MFAAvalonia runtime platform (release jobs use `<os>-<arch>`) |
-| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Interactive prompt language                                                                       |
+| Variable                                            | Effect                                                                                                                      |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `CREATE_MAA_PROJECT_AUTO_UPDATE=0`                  | Disable automatic CLI runtime handoff and Skill sync (default: enabled unless in CI)                                        |
+| `CREATE_MAA_PROJECT_CONFIG_DIR=<path>`              | Custom path for CLI updates and persistent cache state                                                                      |
+| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Download retry count                                                                                                        |
+| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap (default 1 GiB; declared manifest sizes win when stricter)                                            |
+| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry cap (default 100000)                                                                                      |
+| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Creation-time OCR source (default: `submodule` when Git is available; `download` inside a parent repository or without Git) |
+| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Serve OCR assets from a local zip (download source)                                                                         |
+| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Use a verified OCR manifest (download source)                                                                               |
+| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Sync every desktop MaaFramework and MFAAvalonia runtime platform (release jobs use `<os>-<arch>`)                           |
+| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Interactive prompt language                                                                                                 |
 
 ### OCR submodule recovery
+
+When creating a project in a subdirectory of an existing Git repository, use the default
+download source. Explicit `submodule` mode requires a Git worktree root or a directory
+outside the parent repository. At the worktree root, existing `.gitmodules` entries are
+preserved when the OCR mapping is added.
 
 Submodule-clone failures (during creation or `--update ocr-models`) list the exits in the
 error message: switch `ocr.source` to `download` (CDN hosts ppocr_v6 tiny/small/medium

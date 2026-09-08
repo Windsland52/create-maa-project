@@ -397,9 +397,9 @@ function projectGitignore(ocrSubmodule: boolean): string {
     : base
 }
 
-function ocrSubmodulesFile(): string {
+export function ocrSubmodulesFile(name = DEFAULT_OCR_SUBMODULE_PATH): string {
   return [
-    `[submodule "${DEFAULT_OCR_SUBMODULE_PATH}"]`,
+    `[submodule "${name}"]`,
     `\tpath = ${DEFAULT_OCR_SUBMODULE_PATH}`,
     `\turl = ${DEFAULT_OCR_SUBMODULE_URL}`,
     '',

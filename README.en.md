@@ -380,8 +380,12 @@ Asset and dependency operations are explicit and recoverable:
 
 - Project creation clones `MaaXYZ/MaaCommonAssets` as a `--depth 1` submodule by default
   and copies the `ppocr_v6/small` OCR models into `resource/base/model/ocr/`. In submodule
-  mode that directory is gitignored (models are derived files) and `.gitmodules` pins the
-  model version through the committed gitlink.
+  mode that directory is gitignored (models are derived files). The CLI creates or merges
+  `.gitmodules`, preserving existing submodule mappings; the committed gitlink pins the model version.
+- Projects created in a subdirectory of an existing Git repository default to downloaded,
+  tracked OCR models. Explicit `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` requires a Git
+  worktree root or a directory outside the parent repository. Child projects do not edit
+  the parent repository's `.gitmodules`.
 - When local Git is unavailable (or `CREATE_MAA_PROJECT_OCR_SOURCE=download` is set
   explicitly), models are fetched from the download source instead: recorded in
   `manifest.json` with sha256 checksums, with model files tracked in version control.

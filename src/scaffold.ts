@@ -19,6 +19,7 @@ import {
   interfaceAgent,
   interfaceResourceItems,
   maatoolsConfigFile,
+  ocrSubmodulesFile,
   optimizeImagesFiles,
   projectCustomSchemaFiles,
   releaseWorkflowFile,
@@ -57,6 +58,8 @@ import {
 } from './project.js'
 import { assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
 import {
+  DEFAULT_OCR_SUBMODULE_PATH,
+  DEFAULT_OCR_SUBMODULE_URL,
   resolveOcrManifestFromEnvironment,
   type AssetDownloader,
   type AssetManifestResolver,
@@ -134,7 +137,7 @@ export async function createProject(
     options,
     resolvedAddons,
   })
-  const ocrIntent = await resolveCreateOcrIntent(environment, targetRoot, detectGitAvailability)
+  const ocrIntent = await resolveCreateOcrIntent(environment, targetRoot, detectGitAvailability, targetInsideGitTree)
   if (ocrIntent === 'submodule') {
     config.ocr = defaultOcrSubmoduleConfig()
   }
@@ -181,6 +184,16 @@ export async function createProject(
         })
         throwIfAborted(environment.signal)
         const written = new Set(result.written)
+        let skipped = result.skipped
+        let ocrSubmoduleUrl = DEFAULT_OCR_SUBMODULE_URL
+        if (ocrIntent === 'submodule' && skipped.includes('.gitmodules')) {
+          const registration = await mergeOcrSubmoduleRegistration(targetRoot, environment.signal)
+          ocrSubmoduleUrl = registration.url
+          if (registration.changed) {
+            written.add('.gitmodules')
+            skipped = skipped.filter((path) => path !== '.gitmodules')
+          }
+        }
         if (shouldDownloadOcrModels) {
           const checkpoint = await createPathCheckpoint(targetRoot, 'resource/base/model/ocr')
           const ocrLabel = ocrIntent === 'submodule' ? 'OCR model provisioning' : 'OCR model download'
@@ -189,6 +202,7 @@ export async function createProject(
               environment.onProgress?.('Fetching OCR models from the MaaCommonAssets submodule...')
               for (const path of await provisionOcrFromSubmodule(targetRoot, {
                 gitRunner: environment.gitRunner ?? runGit,
+                url: ocrSubmoduleUrl,
                 ...(environment.signal ? { signal: environment.signal } : {}),
               })) {
                 written.add(path)
@@ -226,7 +240,7 @@ export async function createProject(
           written: [
             ...written,
           ],
-          skipped: result.skipped,
+          skipped,
           pending,
         }
         const afterDependencies = await maybeInstallNodeDependencies(
@@ -1200,11 +1214,65 @@ async function resolveCreateOcrIntent(
   },
   targetRoot: string,
   detectGitAvailability: GitAvailabilityDetector,
+  targetInsideGitTree: boolean,
 ): Promise<OcrSourcePreference> {
+  if (environment.ocrSource === 'download') return 'download'
+  // Git only reads .gitmodules at the worktree root. A .git file also marks a
+  // root, as used by linked worktrees and checked-out submodules.
+  if (targetInsideGitTree && !(await exists(join(targetRoot, '.git')))) {
+    if (environment.ocrSource === 'submodule') {
+      throw new Error(
+        'OCR submodules require the project directory to be a Git worktree root. Use CREATE_MAA_PROJECT_OCR_SOURCE=download for a project inside a parent repository, or create it outside that repository.',
+      )
+    }
+    return 'download'
+  }
   if (environment.ocrSource) return environment.ocrSource
   const gitAvailable = await detectGitAvailability(targetRoot)
   throwIfAborted(environment.signal)
   return gitAvailable ? 'submodule' : 'download'
+}
+
+async function mergeOcrSubmoduleRegistration(
+  root: string,
+  signal?: AbortSignal,
+): Promise<{ changed: boolean; url: string }> {
+  const { stdout } = await execFileAsync('git', ['config', '--null', '--file', '.gitmodules', '--list'], {
+    cwd: root,
+    windowsHide: true,
+    ...(signal ? { signal } : {}),
+  })
+  throwIfAborted(signal)
+  const modules = new Map<string, { path?: string; url?: string }>()
+  for (const record of stdout.split('\0')) {
+    const separator = record.indexOf('\n')
+    const key = separator < 0 ? record : record.slice(0, separator)
+    const value = separator < 0 ? '' : record.slice(separator + 1)
+    const match = /^submodule\.(.+)\.([^.]+)$/u.exec(key)
+    if (!match?.[1]) continue
+    const entry = modules.get(match[1]) ?? {}
+    if (match[2] === 'path') entry.path = value
+    if (match[2] === 'url') entry.url = value
+    modules.set(match[1], entry)
+  }
+  for (const [name, entry] of modules) {
+    if (entry.path !== DEFAULT_OCR_SUBMODULE_PATH) continue
+    if (!entry.url) {
+      throw new Error(`The existing OCR submodule has no URL. Set submodule.${name}.url in .gitmodules and retry.`)
+    }
+    return { changed: false, url: entry.url }
+  }
+
+  let name = DEFAULT_OCR_SUBMODULE_PATH
+  for (let suffix = 1; modules.has(name); suffix += 1) {
+    name = `${DEFAULT_OCR_SUBMODULE_PATH}-${suffix}`
+  }
+  const path = join(root, '.gitmodules')
+  const current = await readText(path)
+  await trackProjectPathForBackup(root, '.gitmodules')
+  const prefix = current.length === 0 || current.endsWith('\n') ? current : `${current}\n`
+  await writeText(path, `${prefix}${ocrSubmodulesFile(name)}`)
+  return { changed: true, url: DEFAULT_OCR_SUBMODULE_URL }
 }
 
 async function createPathCheckpoint(

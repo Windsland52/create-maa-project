@@ -3864,7 +3864,8 @@ export default defineConfig({
       ]),
     })
     const editorconfig = await readFile(join(root, 'Maa Test', '.editorconfig'), 'utf8')
-    expect(editorconfig).toContain('[*.{yml,yaml,json,jsonc}]')
+    expect(editorconfig).toContain('[*.{json,jsonc}]')
+    expect(editorconfig).not.toContain('[*.{yml,yaml,json,jsonc}]')
     const gitattributes = await readFile(join(root, 'Maa Test', '.gitattributes'), 'utf8')
     expect(gitattributes).toContain('interface.json linguist-language=JSON-with-Comments')
     expect(gitattributes).toContain('resource/**/default_pipeline.json linguist-language=JSON-with-Comments')

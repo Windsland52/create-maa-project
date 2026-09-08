@@ -6,18 +6,19 @@
 
 ```bash
 uv sync
-uv run python agent/bootstrap.py
+uv run python agent/main.py
 ```
 
 如果根目录存在 `package.json`，还可运行 `pnpm install`、`pnpm check` 和 `pnpm check:py`
 使用生成的格式化与校验工具。在 VS Code 中打开项目时，`.vscode/tasks.json` 会自动执行
 `uv sync` 和 `pnpm install --frozen-lockfile`。
 
-Agent 入口在 `agent/main.py`，启动前的 Python 版本和依赖检查在 `agent/bootstrap.py`。
+Agent 入口在 `agent/main.py`（含 Python 版本检查）；Linux 发布包由 `agent/bootstrap.py`
+创建虚拟环境并安装运行依赖。
 Agent runtime 在 `agent/agent_runtime.py`，会导入 `agent/custom/action`、`agent/custom/reco`
 和 `agent/custom/sink` 中的模块并注册自定义逻辑。PI 环境变量、参数解析、日志和路径工具在
 `agent/utils/`。
-VS Code Maa Support 插件通过 `uv run python agent/bootstrap.py` 启动 AgentServer；
+VS Code Maa Support 插件通过 `uv run python agent/main.py` 启动 AgentServer；
 调试会使用 `.vscode/launch.json` 中的 `Maa Agent: Debug` 配置，映射在
 `maatools.config.mts`。
 

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import errno
-import hashlib
-import importlib.metadata
-import json
 import re
 import runpy
 import shutil
@@ -14,25 +11,18 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import BinaryIO
 
 PYTHON_MIN = (3, 13)
 PYTHON_MAX = (3, 14)
 VENV_NAME = ".venv"
-REQUIREMENTS_MARKER = ".create-maa-project-requirements.sha256"
 REQUIREMENTS_LOCK = ".create-maa-project-requirements.lock"
 REQUIREMENTS_LOCK_TIMEOUT_SECONDS = 300.0
-DEFAULT_PIP_CONFIG = {
-    "enable_pip_install": True,
-    "mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",
-    "backup_mirror": "https://mirrors.ustc.edu.cn/pypi/simple",
-}
 
 
 def main() -> None:
     project_root = find_project_root()
     log(project_root, "bootstrap started")
-    ensure_runtime_config(project_root)
     if should_use_linux_project_venv():
         ensure_venv_and_relaunch(project_root)
     if sys.version_info < PYTHON_MIN or sys.version_info >= PYTHON_MAX:
@@ -41,16 +31,12 @@ def main() -> None:
     log(project_root, "Python " + sys.version.split()[0])
     requirements = check_requirements(project_root)
     if requirements is not None:
-        ensure_requirements_installed(project_root, requirements[0], requirements[1])
-    check_maafw(project_root)
+        ensure_requirements_installed(project_root, requirements)
     runpy.run_path(str(Path(__file__).with_name("main.py")), run_name="__main__")
 
 
 def find_project_root() -> Path:
-    path = Path(__file__).resolve()
-    if path.parent.name == "agent" and path.parent.parent.name == "python":
-        return path.parent.parent.parent
-    return path.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 def should_use_linux_project_venv() -> bool:
@@ -157,75 +143,33 @@ def venv_python(target_venv: Path) -> Path:
     return target_venv / "bin" / "python"
 
 
-def check_requirements(project_root: Path) -> tuple[Path, str] | None:
-    requirements = find_requirements_file(project_root)
+def check_requirements(project_root: Path) -> Path | None:
+    requirements = project_root / "requirements.txt"
     if not requirements.exists():
         warn(
             project_root,
             "requirements.txt is missing; run create-maa-project --update python-deps",
         )
         return None
-    digest = hashlib.sha256(requirements.read_bytes()).hexdigest()
-    log(project_root, "requirements sha256=" + digest)
-    return requirements, digest
+    return requirements
 
 
-def find_requirements_file(project_root: Path) -> Path:
-    packaged = project_root / "python" / "requirements.txt"
-    if packaged.exists():
-        return packaged
-    return project_root / "requirements.txt"
-
-
-def ensure_requirements_installed(project_root: Path, requirements: Path, digest: str) -> None:
+def ensure_requirements_installed(project_root: Path, requirements: Path) -> None:
     with requirements_install_lock(project_root):
-        # Another Agent may have completed the installation while this process
-        # waited for the shared environment lock.
-        if not needs_requirement_install(project_root, digest):
-            return
-
-        pip_config = read_pip_config(project_root)
-        if not pip_config.get("enable_pip_install", True):
-            warn(project_root, "pip install is disabled by config/pip_config.json")
-            return
-
+        # Requirements are fully pinned, so pip is a no-op when everything is
+        # already installed; no marker recheck is needed after waiting for the lock.
         if install_from_local_wheels(project_root, requirements) or install_from_indexes(
             project_root,
             requirements,
-            pip_config,
         ):
-            write_requirements_marker(project_root, digest)
             return
-
         warn(project_root, "Python dependencies were not installed successfully")
 
 
-def needs_requirement_install(project_root: Path, digest: str) -> bool:
-    marker = requirements_marker(project_root)
-    if marker.exists() and marker.read_text(encoding="utf8").strip() == digest:
-        if is_package_installed("maafw"):
-            log(project_root, "Python requirements are already installed")
-            return False
-    return True
-
-
-def requirements_marker(project_root: Path) -> Path:
-    if is_running_in_project_venv(project_root):
-        return venv_dir(project_root) / REQUIREMENTS_MARKER
-    if is_running_in_embedded_python(project_root):
-        return project_root / "python" / REQUIREMENTS_MARKER
-    return project_root / "debug" / REQUIREMENTS_MARKER
-
-
-def is_running_in_embedded_python(project_root: Path) -> bool:
-    try:
-        return Path(sys.executable).resolve().is_relative_to((project_root / "python").resolve())
-    except OSError:
-        return False
-
-
 def requirements_lock_path(project_root: Path) -> Path:
-    return requirements_marker(project_root).with_name(REQUIREMENTS_LOCK)
+    if is_running_in_project_venv(project_root):
+        return venv_dir(project_root) / REQUIREMENTS_LOCK
+    return project_root / "debug" / REQUIREMENTS_LOCK
 
 
 @contextmanager
@@ -314,21 +258,6 @@ def unlock_file(handle: BinaryIO) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def write_requirements_marker(project_root: Path, digest: str) -> None:
-    marker = requirements_marker(project_root)
-    temp_marker = marker.with_name(marker.name + ".tmp")
-    try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        temp_marker.write_text(digest + "\n", encoding="utf8")
-        temp_marker.replace(marker)
-    except OSError as error:
-        warn(project_root, "failed to write requirements marker: " + str(error))
-        try:
-            temp_marker.unlink(missing_ok=True)
-        except OSError:
-            pass
-
-
 def install_from_local_wheels(project_root: Path, requirements: Path) -> bool:
     deps_dir = project_root / "deps"
     if not deps_dir.exists() or not any(deps_dir.glob("*.whl")):
@@ -341,7 +270,6 @@ def install_from_local_wheels(project_root: Path, requirements: Path) -> bool:
             "-m",
             "pip",
             "install",
-            "-U",
             "--no-warn-script-location",
             "--requirement",
             str(requirements),
@@ -353,24 +281,20 @@ def install_from_local_wheels(project_root: Path, requirements: Path) -> bool:
     )
 
 
-def install_from_indexes(project_root: Path, requirements: Path, pip_config: dict[str, Any]) -> bool:
-    command = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "-U",
-        "--no-warn-script-location",
-        "--requirement",
-        str(requirements),
-    ]
-    mirror = str(pip_config.get("mirror") or "").strip()
-    backup_mirror = str(pip_config.get("backup_mirror") or "").strip()
-    if mirror:
-        command.extend(["-i", mirror])
-    if backup_mirror:
-        command.extend(["--extra-index-url", backup_mirror])
-    return run_pip(project_root, command, "installing Python dependencies from indexes")
+def install_from_indexes(project_root: Path, requirements: Path) -> bool:
+    return run_pip(
+        project_root,
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-warn-script-location",
+            "--requirement",
+            str(requirements),
+        ],
+        "installing Python dependencies from indexes",
+    )
 
 
 def run_pip(project_root: Path, command: list[str], label: str) -> bool:
@@ -399,55 +323,6 @@ def run_pip(project_root: Path, command: list[str], label: str) -> bool:
     return True
 
 
-def read_pip_config(project_root: Path) -> dict[str, Any]:
-    config_path = project_root / "config" / "pip_config.json"
-    if not config_path.exists():
-        return DEFAULT_PIP_CONFIG
-    try:
-        with config_path.open(encoding="utf8") as handle:
-            value = json.load(handle)
-    except (OSError, json.JSONDecodeError) as error:
-        warn(project_root, "failed to read config/pip_config.json: " + str(error))
-        return DEFAULT_PIP_CONFIG
-    return value if isinstance(value, dict) else DEFAULT_PIP_CONFIG
-
-
-def ensure_runtime_config(project_root: Path) -> None:
-    config_dir = project_root / "config"
-    config_path = config_dir / "pip_config.json"
-    if config_path.exists():
-        return
-    try:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(
-            json.dumps(DEFAULT_PIP_CONFIG, indent=4, ensure_ascii=False) + "\n",
-            encoding="utf8",
-        )
-        log(project_root, "created config/pip_config.json")
-    except OSError as error:
-        warn(project_root, "failed to create config/pip_config.json: " + str(error))
-
-
-def check_maafw(project_root: Path) -> None:
-    try:
-        version = importlib.metadata.version("maafw")
-    except importlib.metadata.PackageNotFoundError:
-        warn(project_root, "Python package maafw is not installed")
-        return
-    if not version:
-        warn(project_root, "Python package maafw has invalid or incomplete metadata")
-        return
-    log(project_root, "maafw " + version)
-
-
-def is_package_installed(name: str) -> bool:
-    try:
-        version = importlib.metadata.version(name)
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return bool(version)
-
-
 def command_output(error: subprocess.CalledProcessError) -> str:
     output = []
     if error.stdout:
@@ -474,15 +349,13 @@ def find_compatible_python() -> Path | None:
     candidates = (
         "python3.13",
         "python313",
-        "python3.12",
-        "python312",
-        "python3.11",
-        "python311",
         "python3",
         "python",
+        "/usr/local/bin/python3.13",
+        "/usr/bin/python3.13",
     )
-    for name in candidates:
-        path = shutil.which(name)
+    for candidate in candidates:
+        path = shutil.which(candidate)
         if path is None:
             continue
         try:

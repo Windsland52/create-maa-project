@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import os
 import sys
 
@@ -20,6 +21,11 @@ PI_ENV_KEYS = (
 
 def run_agent(project_root_dir: str) -> int:
     configure_runtime_paths(project_root=project_root_dir, work_root=os.getcwd())
+
+    try:
+        logger.info("maafw {}", importlib.metadata.version("maafw"))
+    except importlib.metadata.PackageNotFoundError:
+        pass
 
     if len(sys.argv) < 2:
         logger.error("Missing MaaFW Agent socket id argument.")

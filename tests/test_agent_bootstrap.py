@@ -5,9 +5,8 @@ import multiprocessing
 import tempfile
 import time
 import unittest
-from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 BOOTSTRAP_PATH = Path(__file__).resolve().parents[1] / "templates" / "agent" / "agent" / "bootstrap.py"
@@ -24,60 +23,85 @@ def acquire_requirements_lock_and_touch(project_root: str, touched_path: str) ->
 
 
 class AgentBootstrapRequirementsTest(unittest.TestCase):
-    def test_external_maafw_without_marker_does_not_skip_requirements(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            with patch.object(agent_bootstrap, "is_package_installed", return_value=True):
-                with patch.object(agent_bootstrap, "is_running_in_project_venv", return_value=False):
-                    self.assertTrue(agent_bootstrap.needs_requirement_install(project_root, "digest"))
-
-    def test_matching_marker_skips_reinstall_when_maafw_is_available(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            marker = project_root / "debug" / agent_bootstrap.REQUIREMENTS_MARKER
-            marker.parent.mkdir()
-            marker.write_text("digest\n", encoding="utf8")
-
-            with patch.object(agent_bootstrap, "is_package_installed", return_value=True):
-                with patch.object(agent_bootstrap, "is_running_in_project_venv", return_value=False):
-                    self.assertFalse(agent_bootstrap.needs_requirement_install(project_root, "digest"))
-
-    def test_system_python_bin_is_not_treated_as_embedded(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            with patch.object(agent_bootstrap.sys, "executable", "/usr/bin/python3"):
-                self.assertFalse(agent_bootstrap.is_running_in_embedded_python(project_root))
-
-    def test_macos_packaged_python_path_is_treated_as_embedded(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            embedded_python = project_root / "python" / "bin" / "python3"
-            with patch.object(agent_bootstrap.sys, "executable", str(embedded_python)):
-                self.assertTrue(agent_bootstrap.is_running_in_embedded_python(project_root))
-
-    def test_project_venv_marker_takes_priority_over_embedded_runtime(self) -> None:
+    def test_requirements_lock_path_prefers_project_venv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir)
             with patch.object(agent_bootstrap, "is_running_in_project_venv", return_value=True):
-                with patch.object(agent_bootstrap, "is_running_in_embedded_python", return_value=True):
-                    marker = agent_bootstrap.requirements_marker(project_root)
+                lock_path = agent_bootstrap.requirements_lock_path(project_root)
 
-            self.assertEqual(marker, project_root / ".venv" / agent_bootstrap.REQUIREMENTS_MARKER)
+            self.assertEqual(lock_path, project_root / ".venv" / agent_bootstrap.REQUIREMENTS_LOCK)
 
-    def test_waiting_installer_rechecks_marker_after_acquiring_lock(self) -> None:
+    def test_requirements_lock_path_falls_back_to_debug_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            with patch.object(agent_bootstrap, "is_running_in_project_venv", return_value=False):
+                lock_path = agent_bootstrap.requirements_lock_path(project_root)
+
+            self.assertEqual(lock_path, project_root / "debug" / agent_bootstrap.REQUIREMENTS_LOCK)
+
+    def test_ensure_requirements_installed_skips_index_fallback_when_local_wheels_succeed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir)
             requirements = project_root / "requirements.txt"
             requirements.write_text("maafw==1.0.0\n", encoding="utf8")
 
-            with patch.object(agent_bootstrap, "requirements_install_lock", return_value=nullcontext()):
-                with patch.object(agent_bootstrap, "needs_requirement_install", return_value=False):
-                    with patch.object(agent_bootstrap, "install_from_local_wheels") as install_local:
-                        with patch.object(agent_bootstrap, "install_from_indexes") as install_indexes:
-                            agent_bootstrap.ensure_requirements_installed(project_root, requirements, "digest")
+            with patch.object(agent_bootstrap, "warn") as warn:
+                with patch.object(agent_bootstrap, "install_from_local_wheels", return_value=True):
+                    with patch.object(agent_bootstrap, "install_from_indexes") as install_indexes:
+                        agent_bootstrap.ensure_requirements_installed(project_root, requirements)
 
-            install_local.assert_not_called()
+            warn.assert_not_called()
             install_indexes.assert_not_called()
+
+    def test_ensure_requirements_installed_warns_when_all_install_paths_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            requirements = project_root / "requirements.txt"
+            requirements.write_text("maafw==1.0.0\n", encoding="utf8")
+
+            with patch.object(agent_bootstrap, "warn") as warn:
+                with patch.object(agent_bootstrap, "install_from_local_wheels", return_value=False):
+                    with patch.object(agent_bootstrap, "install_from_indexes", return_value=False):
+                        agent_bootstrap.ensure_requirements_installed(project_root, requirements)
+
+            warn.assert_called_once_with(project_root, "Python dependencies were not installed successfully")
+
+    def test_install_commands_have_no_upgrade_or_mirror_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            requirements = project_root / "requirements.txt"
+            requirements.write_text("maafw==1.0.0\n", encoding="utf8")
+            deps_dir = project_root / "deps"
+            deps_dir.mkdir()
+            (deps_dir / "maafw-1.0.0-py3-none-any.whl").write_bytes(b"wheel")
+
+            commands: list[list[str]] = []
+
+            def record_run_pip(_project_root: Path, command: list[str], _label: str) -> bool:
+                commands.append(command)
+                return True
+
+            with patch.object(agent_bootstrap, "run_pip", side_effect=record_run_pip):
+                self.assertTrue(agent_bootstrap.install_from_local_wheels(project_root, requirements))
+                self.assertTrue(agent_bootstrap.install_from_indexes(project_root, requirements))
+
+        self.assertEqual(len(commands), 2)
+        for command in commands:
+            self.assertIn("--requirement", command)
+            self.assertFalse({"-U", "-i", "--extra-index-url"} & set(command))
+        self.assertIn("--no-index", commands[0])
+        self.assertIn("--find-links", commands[0])
+
+    def test_install_from_local_wheels_without_deps_dir_is_noop(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            requirements = project_root / "requirements.txt"
+            requirements.write_text("maafw==1.0.0\n", encoding="utf8")
+
+            with patch.object(agent_bootstrap, "run_pip") as run_pip:
+                self.assertFalse(agent_bootstrap.install_from_local_wheels(project_root, requirements))
+
+            run_pip.assert_not_called()
 
     def test_requirements_lock_retries_and_releases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -124,29 +148,26 @@ class AgentBootstrapRequirementsTest(unittest.TestCase):
             self.assertEqual(process.exitcode, 0)
             self.assertTrue(touched_path.exists())
 
-    def test_requirements_marker_is_written_atomically(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            with patch.object(agent_bootstrap, "is_running_in_project_venv", return_value=False):
-                with patch.object(agent_bootstrap, "is_running_in_embedded_python", return_value=False):
-                    agent_bootstrap.write_requirements_marker(project_root, "digest")
+    def test_find_compatible_python_skips_incompatible_versions(self) -> None:
+        probes: list[list[str]] = []
 
-            marker = project_root / "debug" / agent_bootstrap.REQUIREMENTS_MARKER
-            self.assertEqual(marker.read_text(encoding="utf8"), "digest\n")
-            self.assertFalse(marker.with_name(marker.name + ".tmp").exists())
+        def fake_run(command: list[str], **_kwargs: object) -> Mock:
+            probes.append(command)
+            return Mock(returncode=0, stdout="Python 3.12.10", stderr="")
 
-    def test_empty_package_version_is_not_installed(self) -> None:
-        with patch.object(agent_bootstrap.importlib.metadata, "version", return_value=None):
-            self.assertFalse(agent_bootstrap.is_package_installed("maafw"))
+        with patch.object(agent_bootstrap.shutil, "which", return_value="/usr/bin/python3"):
+            with patch.object(agent_bootstrap.subprocess, "run", side_effect=fake_run):
+                self.assertIsNone(agent_bootstrap.find_compatible_python())
 
-    def test_empty_maafw_version_reports_invalid_metadata(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir)
-            with patch.object(agent_bootstrap.importlib.metadata, "version", return_value=None):
-                with patch.object(agent_bootstrap, "warn") as warn:
-                    agent_bootstrap.check_maafw(project_root)
+        self.assertTrue(probes)
 
-            warn.assert_called_once_with(project_root, "Python package maafw has invalid or incomplete metadata")
+    def test_find_compatible_python_returns_first_matching_candidate(self) -> None:
+        def fake_run(_command: list[str], **_kwargs: object) -> Mock:
+            return Mock(returncode=0, stdout="Python 3.13.5", stderr="")
+
+        with patch.object(agent_bootstrap.shutil, "which", return_value="/usr/bin/python3.13"):
+            with patch.object(agent_bootstrap.subprocess, "run", side_effect=fake_run):
+                self.assertEqual(agent_bootstrap.find_compatible_python(), Path("/usr/bin/python3.13"))
 
 
 if __name__ == "__main__":

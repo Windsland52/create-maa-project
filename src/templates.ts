@@ -89,7 +89,7 @@ const DEFAULT_AGENT_DEV_COMMAND = [
   'uv',
   'run',
   'python',
-  'agent/bootstrap.py',
+  'agent/main.py',
 ]
 
 export function defaultAgentDevCommand(): string[] {

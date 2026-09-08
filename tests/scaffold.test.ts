@@ -620,8 +620,9 @@ describe('scaffold', () => {
     const gitignore = await readFile(join(root, 'maa-agent-test', '.gitignore'), 'utf8')
     expect(bootstrap).toContain('debug')
     expect(bootstrap).toContain('agent-bootstrap.log')
-    expect(bootstrap).toContain('created config/pip_config.json')
-    expect(bootstrap).toContain('importlib.metadata.version("maafw")')
+    expect(bootstrap).toContain('requirements_install_lock')
+    expect(bootstrap).not.toContain('requirements_marker')
+    expect(bootstrap).not.toContain('pip_config.json')
     expect(bootstrap).toContain('create-maa-project --update python-deps')
     expect(bootstrap).toContain('from datetime import UTC, datetime')
     expect(bootstrap).not.toContain('timezone.utc')
@@ -733,7 +734,7 @@ describe('scaffold', () => {
         expect.objectContaining({
           name: 'Maa Agent: Debug',
           type: 'debugpy',
-          program: '${workspaceFolder}/agent/bootstrap.py',
+          program: '${workspaceFolder}/agent/main.py',
           args: [
             '{AGENT_ID}',
           ],
@@ -767,7 +768,7 @@ describe('scaffold', () => {
           child_args: [
             'run',
             'python',
-            'agent/bootstrap.py',
+            'agent/main.py',
           ],
         },
       ],
@@ -1019,7 +1020,7 @@ describe('scaffold', () => {
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-agent-dependabot', template: 'agent' }))
     const agentReadme = await readFile(join(root, 'maa-agent-dependabot', 'README.md'), 'utf8')
-    expect(agentReadme).toContain('uv run python agent/bootstrap.py')
+    expect(agentReadme).toContain('uv run python agent/main.py')
     expect(agentReadme).toContain('如果根目录存在 `package.json`')
     expect(agentReadme).toContain('如果存在 `.github/workflows/release.yml`')
     process.chdir(join(root, 'maa-agent-dependabot'))
@@ -2325,12 +2326,15 @@ export default defineConfig({
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
       expect(packageInterface.agent?.[0]?.child_args).toEqual([
         '-u',
-        'agent/bootstrap.py',
+        runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py',
       ])
       expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(packageInterface.agent?.[0]?.child_args)
-      const packagedBootstrap = await readFile(join(projectRoot, 'dist/package-mfaa/agent/bootstrap.py'), 'utf8')
-      expect(packagedBootstrap).toContain('Python >=3.13,<3.14 is required')
-      expect(packagedBootstrap).toContain('agent-bootstrap.log')
+      const packagedAgentEntry = runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py'
+      const packagedEntry = await readFile(join(projectRoot, 'dist/package-mfaa', packagedAgentEntry), 'utf8')
+      expect(packagedEntry).toContain('Python >=3.13,<3.14 is required')
+      if (runtimePlatform.startsWith('linux-')) {
+        expect(packagedEntry).toContain('agent-bootstrap.log')
+      }
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/__pycache__'))).toBe(false)
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/main.pyo'))).toBe(false)
       if (runtimePlatform.startsWith('linux-')) {
@@ -2338,12 +2342,10 @@ export default defineConfig({
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
       } else {
         expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
-        const packagedRequirements = await readFile(join(projectRoot, 'dist/package-mfaa/requirements.txt'))
-        const packagedMarker = await readFile(
-          join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256'),
-          'utf8',
-        )
-        expect(packagedMarker).toBe(`${sha256(packagedRequirements)}\n`)
+        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/requirements.txt'))).toBe(false)
+        expect(
+          await pathExists(join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256')),
+        ).toBe(false)
       }
       if (!runtimePlatform.startsWith('win-') && process.platform !== 'win32') {
         expect(

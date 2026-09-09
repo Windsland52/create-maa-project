@@ -1153,7 +1153,9 @@ async function maybeInstallNodeDependencies(
       '--modules-dir',
       'node_modules',
       '--virtual-store-dir',
-      'node_modules/.pnpm',
+      // pnpm 11 persists an explicit relative path verbatim, then rejects it
+      // against the absolute default path on the next ordinary install.
+      resolve(root, 'node_modules/.pnpm'),
     ])
     onProgress?.('Node dependencies installed.')
     pending = pending.filter((item) => item.kind !== 'node-deps')

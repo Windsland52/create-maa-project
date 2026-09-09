@@ -406,7 +406,7 @@ async function updateNodeDeps(root: string, commandRunner: UpdateCommandRunner):
     '--modules-dir',
     'node_modules',
     '--virtual-store-dir',
-    'node_modules/.pnpm',
+    resolve(root, 'node_modules/.pnpm'),
   ])
 }
 

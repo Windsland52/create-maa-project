@@ -259,7 +259,7 @@ describe('scaffold', () => {
           '--modules-dir',
           'node_modules',
           '--virtual-store-dir',
-          'node_modules/.pnpm',
+          join(projectRoot, 'node_modules/.pnpm'),
         ],
       },
     ])
@@ -4957,7 +4957,7 @@ export default defineConfig({
           '--modules-dir',
           'node_modules',
           '--virtual-store-dir',
-          'node_modules/.pnpm',
+          join(projectRoot, 'node_modules/.pnpm'),
         ],
       },
       {

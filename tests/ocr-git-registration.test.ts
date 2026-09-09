@@ -162,6 +162,8 @@ describe('OCR submodule registration', () => {
       await recordUpdateRequests(parseArgs(['--update', 'ocr-models']), { root: checkout })
       expect(await readFile(join(checkout, 'resource/base/model/ocr/det.onnx'))).toEqual(modelContent)
     },
+    // Recursive local clones and provisioning exceed 15s on Windows with coverage.
+    30_000,
   )
 
   it('preserves an existing OCR mapping and uses its configured URL', async () => {

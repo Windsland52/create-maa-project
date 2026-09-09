@@ -3485,10 +3485,6 @@ export default defineConfig({
       '--all',
       '--',
       '.',
-      ':(exclude).create-maa-project',
-      ':(exclude).create-maa-project/**',
-      ':(exclude)node_modules',
-      ':(exclude)node_modules/**',
     ])
   })
 
@@ -3553,10 +3549,6 @@ export default defineConfig({
         '--all',
         '--',
         '.',
-        ':(exclude).create-maa-project',
-        ':(exclude).create-maa-project/**',
-        ':(exclude)node_modules',
-        ':(exclude)node_modules/**',
       ],
       [
         'commit',

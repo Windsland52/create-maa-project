@@ -1019,15 +1019,13 @@ async function maybeInitializeGit(
   }
 
   try {
+    // .git/info/exclude already protects local state. Explicit exclude pathspecs
+    // naming those ignored directories can make Git reject the initial staging.
     await gitRunner(root, [
       'add',
       '--all',
       '--',
       '.',
-      ':(exclude).create-maa-project',
-      ':(exclude).create-maa-project/**',
-      ':(exclude)node_modules',
-      ':(exclude)node_modules/**',
     ])
   } catch (error) {
     throwIfAborted(signal)

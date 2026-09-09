@@ -1,11 +1,15 @@
+import { execFile } from 'node:child_process'
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createProject, type GitRunner } from '../src/scaffold.js'
+import { setupAddons } from '../src/prompt.js'
 import type { CliOptions } from '../src/types.js'
 
 const tempRoots: string[] = []
+const execFileAsync = promisify(execFile)
 let previousCwd = process.cwd()
 
 beforeEach(() => {
@@ -18,6 +22,57 @@ afterEach(async () => {
 })
 
 describe('Git initialization after project creation', () => {
+  it('commits All preset GitHub files with real Git while leaving dependencies and local state untracked', async () => {
+    const root = await tempRoot()
+    const gitRunner: GitRunner = async (cwd, args) => {
+      await execFileAsync(
+        'git',
+        [
+          '-c',
+          'user.name=CMP Tests',
+          '-c',
+          'user.email=cmp-tests@example.invalid',
+          '-c',
+          'commit.gpgsign=false',
+          ...args,
+        ],
+        { cwd, windowsHide: true },
+      )
+      if (args[0] === 'init') {
+        await mkdir(join(cwd, 'node_modules/example'), { recursive: true })
+        await writeFile(join(cwd, 'node_modules/example/package.json'), '{}\n')
+        await writeFile(join(cwd, '.create-maa-project/local-cache.json'), '{}\n')
+      }
+    }
+
+    const result = await createProject(createOptions('git-all-addons', { add: setupAddons('all', []) }), {
+      cwd: root,
+      gitRunner,
+    })
+
+    expect(result.git).toEqual({ initialized: true, committed: true })
+    const { stdout } = await execFileAsync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: result.root })
+    const committed = stdout.trim().split(/\r?\n/)
+    expect(committed).toEqual(
+      expect.arrayContaining([
+        '.github/workflows/check.yml',
+        '.github/workflows/release.yml',
+        '.github/workflows/format.yml',
+        '.github/workflows/optimize-images.yml',
+        '.github/workflows/schema-sync.yml',
+        '.github/cliff.toml',
+        '.github/PULL_REQUEST_TEMPLATE.md',
+        '.github/ISSUE_TEMPLATE/config.yml',
+        '.github/ISSUE_TEMPLATE/bug_report.yml',
+        '.github/ISSUE_TEMPLATE/feature_request.yml',
+        '.github/ISSUE_TEMPLATE/other_issue.yml',
+      ]),
+    )
+    expect(committed.some((path) => path.startsWith('node_modules/') || path.startsWith('.create-maa-project/'))).toBe(
+      false,
+    )
+  })
+
   it('returns the created project when git init fails', async () => {
     const root = await tempRoot()
     process.chdir(root)
@@ -79,10 +134,6 @@ describe('Git initialization after project creation', () => {
         '--all',
         '--',
         '.',
-        ':(exclude).create-maa-project',
-        ':(exclude).create-maa-project/**',
-        ':(exclude)node_modules',
-        ':(exclude)node_modules/**',
       ],
       [
         'commit',
@@ -147,10 +198,6 @@ describe('Git initialization after project creation', () => {
         '--all',
         '--',
         '.',
-        ':(exclude).create-maa-project',
-        ':(exclude).create-maa-project/**',
-        ':(exclude)node_modules',
-        ':(exclude)node_modules/**',
       ],
     ])
   })

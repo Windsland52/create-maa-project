@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { withProjectLock } from '../src/project.js'
@@ -56,6 +56,47 @@ afterEach(async () => {
 })
 
 describe('CLI JSON reports', () => {
+  it(
+    'preserves dependency paths containing spaces and keeps command output out of stdout JSON',
+    async () => {
+      const root = await tempRoot()
+      const parent = join(root, 'parent with spaces')
+      await mkdir(parent)
+      const created = await runCli(['project', '--add', 'dev-tools', '--skip-download', '--no-git', '--report'], parent)
+      expect(created.exitCode, created.stderr).toBe(0)
+      const projectRoot = join(parent, 'project')
+      const commandRoot = join(root, 'command shims')
+      await mkdir(commandRoot)
+      await writeFile(
+        join(commandRoot, 'record-args.mjs'),
+        'import {writeFileSync} from "node:fs"; writeFileSync(".create-maa-project/command-args.json", JSON.stringify(process.argv.slice(2))); console.log("dependency stdout"); console.error("dependency stderr");\n',
+      )
+      const shim = join(commandRoot, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+      await writeFile(
+        shim,
+        process.platform === 'win32'
+          ? `@echo off\r\n"${process.execPath}" "%~dp0record-args.mjs" %*\r\n`
+          : `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "$(dirname "$0")/record-args.mjs" "$@"\n`,
+      )
+      if (process.platform !== 'win32') await chmod(shim, 0o755)
+
+      const updated = await runCli(['--update', 'node-deps', '--report'], projectRoot, {
+        PATH: `${commandRoot}${delimiter}${process.env.PATH ?? ''}`,
+      })
+      const report = parseStdoutReport(updated.stdout, updated.stderr)
+      expect(updated.exitCode, updated.stderr).toBe(0)
+      expect(report.pending.some((item) => item.kind === 'node-deps')).toBe(false)
+      expect(updated.stderr).toContain('dependency stdout')
+      expect(updated.stderr).toContain('dependency stderr')
+      const args = JSON.parse(
+        await readFile(join(projectRoot, '.create-maa-project/command-args.json'), 'utf8'),
+      ) as string[]
+      expect(args).toContain('--virtual-store-dir')
+      expect(args.slice(args.indexOf('--virtual-store-dir') + 1)).toEqual([join(projectRoot, 'node_modules/.pnpm')])
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
   it(
     'only advertises log files that were actually created',
     async () => {
@@ -528,7 +569,7 @@ async function tempRoot(): Promise<string> {
   return root
 }
 
-async function runCli(args: string[], cwd: string): Promise<CliResult> {
+async function runCli(args: string[], cwd: string, env: NodeJS.ProcessEnv = {}): Promise<CliResult> {
   const ioRoot = await mkdtemp(join(tmpdir(), 'cmp-report-io-'))
   tempRoots.push(ioRoot)
   const stdoutPath = join(ioRoot, 'stdout.txt')
@@ -546,7 +587,7 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
       ],
       {
         cwd,
-        env: testChildEnv(),
+        env: { ...testChildEnv(), ...env },
         stdio: [
           'ignore',
           stdout.fd,

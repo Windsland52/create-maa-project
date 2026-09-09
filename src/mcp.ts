@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import packageJson from '../package.json' with { type: 'json' }
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
+import { spawnCommand } from './command.js'
 import { CONTROLLER_KINDS } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
@@ -1384,15 +1385,7 @@ async function runMcpChildCommand(root: string, command: string, args: string[],
       settled = true
       reject(error)
     }
-    const child = spawn(command, args, {
-      cwd: root,
-      shell: process.platform === 'win32',
-      stdio: [
-        'ignore',
-        'pipe',
-        'pipe',
-      ],
-    })
+    const child = spawnCommand(root, command, args, ['ignore', 'pipe', 'pipe'])
     const onAbort = (): void => {
       aborted = true
       terminateChildProcess(child)

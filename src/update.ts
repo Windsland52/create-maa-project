@@ -9,7 +9,6 @@ import {
 import type { ProjectWriteOperation } from './project.js'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { spawn } from 'node:child_process'
 import { chmod, cp, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import {
@@ -50,6 +49,7 @@ import {
 import { projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
+import { runCommand } from './command.js'
 
 const SYNC_REQUIREMENTS_IN_SCRIPT = `from pathlib import Path
 import tomllib
@@ -1233,41 +1233,6 @@ export async function ensureOcrSubmoduleReady(
     if (error instanceof OcrSubmoduleRecoveryError) throw error
     throw withOcrSubmoduleRecoveryHint(error)
   }
-}
-
-async function runCommand(root: string, command: string, args: string[]): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: root,
-      shell: process.platform === 'win32',
-      stdio: 'inherit',
-    })
-    child.on('error', (error) => {
-      reject(
-        new Error(
-          `Failed to run ${[
-            command,
-            ...args,
-          ].join(' ')}. ${error.message}`,
-        ),
-      )
-    })
-    child.on('exit', (code, signal) => {
-      if (code === 0) {
-        resolve()
-        return
-      }
-      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
-      reject(
-        new Error(
-          `Command failed: ${[
-            command,
-            ...args,
-          ].join(' ')} (${suffix})`,
-        ),
-      )
-    })
-  })
 }
 
 function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {

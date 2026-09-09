@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { cp, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -57,6 +57,7 @@ import {
   writeProjectState,
 } from './project.js'
 import { assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
+import { runCommand } from './command.js'
 import {
   DEFAULT_OCR_SUBMODULE_PATH,
   DEFAULT_OCR_SUBMODULE_URL,
@@ -1082,41 +1083,6 @@ async function ensureLocalGitExcludes(root: string): Promise<void> {
 
 async function runGit(root: string, args: string[]): Promise<void> {
   await execFileAsync('git', args, { cwd: root })
-}
-
-async function runCommand(root: string, command: string, args: string[]): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: root,
-      shell: process.platform === 'win32',
-      stdio: 'inherit',
-    })
-    child.on('error', (error) => {
-      reject(
-        new Error(
-          `Failed to run ${[
-            command,
-            ...args,
-          ].join(' ')}. ${error.message}`,
-        ),
-      )
-    })
-    child.on('exit', (code, signal) => {
-      if (code === 0) {
-        resolve()
-        return
-      }
-      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`
-      reject(
-        new Error(
-          `Command failed: ${[
-            command,
-            ...args,
-          ].join(' ')} (${suffix})`,
-        ),
-      )
-    })
-  })
 }
 
 async function maybeInstallNodeDependencies(

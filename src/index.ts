@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import packageJson from '../package.json' with { type: 'json' }
 import { applyCliEnvironment, formatCliHelp, parseArgs, validateCommandModes } from './args.js'
 import { runWithAutomaticUpdates } from './auto-update.js'
+import { spawnCommand } from './command.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { createLogger, type Logger } from './log.js'
@@ -457,15 +457,7 @@ function createReportProgressHandlers(label: string): {
 
 async function runReportChildCommand(root: string, command: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: root,
-      shell: process.platform === 'win32',
-      stdio: [
-        'ignore',
-        'pipe',
-        'pipe',
-      ],
-    })
+    const child = spawnCommand(root, command, args, ['ignore', 'pipe', 'pipe'])
     child.stdout?.on('data', (chunk: Buffer) => {
       process.stderr.write(chunk)
     })

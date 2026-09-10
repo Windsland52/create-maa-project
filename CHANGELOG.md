@@ -4,6 +4,16 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 > 维护方式：条目由人工精炼（合并同类项、以用户视角描述），可用 `pnpm run changelog:draft` 生成 git-cliff 草稿作为参考；完整逐提交历史见 `git log`。
 
+## [3.3.1] - 2026-09-10
+
+### 修复
+
+- npm 与 PyPI 改用 Trusted Publishing（OIDC）发布，不再依赖会到期的长期 token；npm 发布步骤在 npm 版本不足以支持 Trusted Publishing 时会立即给出明确报错，而不是报出那个会掩盖鉴权失败的 `E404`
+
+> **从 npm / PyPI 安装的用户请读这里**：`v3.3.0` 只发布了 GitHub Release（含 6 个平台二进制），它的 npm 与 PyPI 发布因发布凭据失效而失败。因此本版本是 3.3 系列在 npm / PyPI 上的**首个版本**，其用户可见变更与下方的 [3.3.0] 完全相同（包括两处不兼容变更），升级前请一并阅读。
+
+[3.3.1]: https://github.com/Windsland52/create-maa-project/compare/v3.3.0...v3.3.1
+
 ## [3.3.0] - 2026-09-10
 
 ### 新增

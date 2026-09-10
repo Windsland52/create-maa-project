@@ -87,7 +87,7 @@ The interactive flow asks the following questions in order; press Enter to accep
 6. **Control targets**: multi-select, defaults to Adb.
 7. **Repository setup**: all / minimal / custom; every preset prints a one-line summary
    (all = dev tools, GitHub automation, and community files; minimal = no repository
-   features). The add-ons All installs are `dev-tools`, `github`, `git-cliff`,
+   features). The add-ons All installs are `dev-tools`, `vscode`, `github`, `git-cliff`,
    `auto-format`, `optimize-images`, `schema-sync`, `community`, and `dependabot`; pick
    custom to review and toggle each one by name.
 8. **Extra resource pack**: not added by default.
@@ -99,9 +99,9 @@ terminal width, and Ctrl+C always exits quietly with code `130` instead of print
 
 Custom repository features are indented by dependency: selecting a feature also selects the
 features it requires, and clearing a required feature clears everything that depends on it, so
-the checkboxes always show the final set. The rule is `github` and `agent` require `dev-tools`,
-while `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync`
-require `github`. The same resolution applies to `--add`, and both the
+the checkboxes always show the final set. The rule is `vscode`, `github`, and `agent` require
+`dev-tools` (and `agent` also requires `vscode`), while `git-cliff`, `auto-format`,
+`optimize-images`, `community`, `dependabot`, and `schema-sync` require `github`. The same resolution applies to `--add`, and both the
 `Add-ons required by dependencies:` line and the `addons` field of the JSON report spell out the
 difference between what you asked for and what was enabled.
 
@@ -259,15 +259,15 @@ When a generated project is opened in VS Code, `.vscode/tasks.json` syncs depend
 automatically: pipeline projects run `pnpm install --frozen-lockfile`, agent projects
 additionally run `uv sync`.
 
-dev-tools writes 16 files (an agent project adds `.vscode/launch.json`): `.node-version`,
-`.prettierrc.mjs`, `.prettierignore`, `package.json`, `pnpm-workspace.yaml`,
-`.vscode/settings.json`, `.vscode/extensions.json`, `.vscode/tasks.json`,
-`tools/validate-schema.mjs`, and seven files under `tools/schema/` (four upstream schemas, two
-editable custom schemas, and `schema-manifest.json`). A minimal project without dev-tools has no
-`.vscode/` and no `tools/` directory. See the
-[commands reference](./docs/commands.en.md#files-written-by-dev-tools) for what each file does
-and how it is refreshed (`managed` files follow `--update`, `once` files are written at creation
-only).
+dev-tools writes 13 files: `.node-version`, `.prettierrc.mjs`, `.prettierignore`, `package.json`,
+`pnpm-workspace.yaml`, `tools/validate-schema.mjs`, and seven files under `tools/schema/` (four
+upstream schemas, two editable custom schemas, and `schema-manifest.json`). Editor integration is
+its own `vscode` add-on (which requires dev-tools): it writes `.vscode/settings.json`,
+`.vscode/extensions.json`, and `.vscode/tasks.json`, plus `launch.json` for agent projects. Without
+`--add vscode` there is no `.vscode/` directory at all. See the
+[commands reference](./docs/commands.en.md#files-written-by-dev-tools) and the
+[vscode section](./docs/commands.en.md#files-written-by-vscode) for what each file does and how it
+is refreshed (`managed` files follow `--update`, `once` files are written at creation only).
 
 ### OCR model provisioning
 

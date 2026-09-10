@@ -23,6 +23,7 @@ describe('prompt setup presets', () => {
   it('expands all repository features selected by the interactive setup prompt', () => {
     expect(setupAddons('all', [])).toEqual([
       'dev-tools',
+      'vscode',
       'github',
       'git-cliff',
       'auto-format',
@@ -43,6 +44,7 @@ describe('prompt setup presets', () => {
       'resource-pack',
       'github',
       'dev-tools',
+      'vscode',
       'git-cliff',
       'auto-format',
       'optimize-images',
@@ -50,6 +52,12 @@ describe('prompt setup presets', () => {
       'community',
       'dependabot',
     ])
+  })
+
+  it('includes editor integration in the All preset so presets keep the previous behaviour', () => {
+    // --add dev-tools no longer writes .vscode; the All preset and the interactive feature
+    // prompt still enable it, so preset users see no change.
+    expect(setupAddons('all', [])).toContain('vscode')
   })
 })
 
@@ -117,7 +125,7 @@ describe('setup preset descriptions', () => {
   it('summarizes the All preset instead of listing add-on slugs', () => {
     // The exhaustive list is pinned by the setupAddons tests above; the prompt should
     // convey what the preset is for without enumerating implementation-level names.
-    expect(setupAddons('all', [])).toHaveLength(8)
+    expect(setupAddons('all', [])).toHaveLength(9)
 
     // "community" is also a plain English word, so only the distinctive slug forms are
     // meaningful evidence that the description stopped enumerating add-ons.

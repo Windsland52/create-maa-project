@@ -75,6 +75,7 @@ export type ProjectTemplateInput = {
   controllers: ControllerKind[]
   license: LicenseKind
   includeDevTools: boolean
+  includeVscode: boolean
   includeGithub: boolean
   includeAgent: boolean
   includeGitCliff: boolean
@@ -139,6 +140,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
     files.push(...devToolFiles(input))
   }
 
+  if (input.includeVscode) {
+    files.push(...vscodeFiles(input))
+  }
+
   if (input.includeGithub) {
     files.push(...githubFiles(input))
   }
@@ -171,6 +176,20 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     managed('.node-version', '24\n'),
     managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
     once('.prettierignore', template('base/.prettierignore')),
+    managed('tools/validate-schema.mjs', validateSchemaScript()),
+    ...schemaFiles(input.includeAgent),
+    once('package.json', generatedPackageJson(input)),
+    once('pnpm-workspace.yaml', pnpmWorkspaceYaml()),
+  ]
+}
+
+/**
+ * Editor integration for the generated toolchain. Every file here except the extension
+ * recommendations refers to artifacts that `devToolFiles` produces (the Prettier formatter,
+ * `tools/schema/*`, `pnpm install`), which is why the `vscode` add-on requires `dev-tools`.
+ */
+export function vscodeFiles(input: ProjectTemplateInput): ManagedFileInput[] {
+  return [
     once('.vscode/extensions.json', vscodeExtensions(input.includeAgent)),
     once('.vscode/settings.json', vscodeSettings(input.includeAgent)),
     ...(input.includeAgent
@@ -179,10 +198,6 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
         ]
       : []),
     managed('.vscode/tasks.json', vscodeTasks(input.includeAgent)),
-    managed('tools/validate-schema.mjs', validateSchemaScript()),
-    ...schemaFiles(input.includeAgent),
-    once('package.json', generatedPackageJson(input)),
-    once('pnpm-workspace.yaml', pnpmWorkspaceYaml()),
   ]
 }
 

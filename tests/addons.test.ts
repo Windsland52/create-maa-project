@@ -25,6 +25,7 @@ describe('add-on dependency graph', () => {
 
   it('keeps dev-tools as the only root feature and orders dependencies first', () => {
     expect(addonDependencyDepth('dev-tools')).toBe(0)
+    expect(addonDependencyDepth('vscode')).toBe(1)
     expect(addonDependencyDepth('github')).toBe(1)
     expect(addonDependencyDepth('git-cliff')).toBe(2)
     expect(addonDependencyDepth('community')).toBe(2)
@@ -32,7 +33,19 @@ describe('add-on dependency graph', () => {
       'dev-tools',
       'github',
     ])
+    expect(requiredAddonsFor('vscode')).toEqual(['dev-tools'])
     expect(requiredAddonsFor('dev-tools')).toEqual([])
+  })
+
+  it('treats vscode as a dev-tools companion rather than a dev-tools provider', () => {
+    // The add-on writes editor integration for the generated toolchain, so it depends on
+    // dev-tools and must never pull the toolchain in the other direction.
+    expect(resolveAddonDependencies(['vscode'])).toEqual([
+      'dev-tools',
+      'vscode',
+    ])
+    expect(resolveAddonDependencies(['dev-tools'])).toEqual(['dev-tools'])
+    expect(autoEnabledAddons(['vscode'], resolveAddonDependencies(['vscode']))).toEqual(['dev-tools'])
   })
 
   it('never lets an add-on require something outside the canonical order', () => {
@@ -59,7 +72,8 @@ describe('add-on dependency graph', () => {
 
   it('renders the dependency rule from the graph for help and agents', () => {
     expect(addonDependencyGroups()).toEqual([
-      { addon: 'dev-tools', dependents: ['github', 'agent'] },
+      { addon: 'dev-tools', dependents: ['vscode', 'github', 'agent'] },
+      { addon: 'vscode', dependents: ['agent'] },
       {
         addon: 'github',
         dependents: [
@@ -73,11 +87,12 @@ describe('add-on dependency graph', () => {
       },
     ])
     expect(addonDependencyText()).toBe(
-      'Dependencies are enabled automatically: dev-tools is required by github and agent; github is required by git-cliff, auto-format, optimize-images, community, dependabot and schema-sync.',
+      'Dependencies are enabled automatically: dev-tools is required by vscode, github and agent; vscode is required by agent; github is required by git-cliff, auto-format, optimize-images, community, dependabot and schema-sync.',
     )
     expect(addonDependencyLines()).toEqual([
       'Dependencies are enabled automatically:',
-      '  dev-tools: github, agent',
+      '  dev-tools: vscode, github, agent',
+      '  vscode: agent',
       '  github: git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
     ])
   })
@@ -146,6 +161,7 @@ describe('applyIncrementalAddons', () => {
       ]),
     ).toEqual([
       'dev-tools',
+      'vscode',
       'agent',
     ])
   })
@@ -185,7 +201,7 @@ describe('applyIncrementalAddons', () => {
         ]),
       ),
     ).rejects.toThrow(
-      'Supported incremental add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
+      'Supported incremental add-ons: dev-tools, vscode, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
     )
   })
 })

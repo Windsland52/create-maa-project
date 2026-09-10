@@ -54,24 +54,29 @@ create-maa-project --mcp [--root <path>]
 | `--dry-run`                         | Preview `--restore` without changing files                                                                         |
 | `--clean-cache`                     | Remove the local download cache                                                                                    |
 
-Add-ons: `dev-tools`, `github`, `agent`, `resource-pack` (takes a positional slug),
+Add-ons: `dev-tools`, `vscode`, `github`, `agent`, `resource-pack` (takes a positional slug),
 `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 
 Dependencies are resolved automatically for both `create` and `--add`, so no manual ordering is
 needed:
 
-| Add-on                                                                                  | Requires                        |
-| --------------------------------------------------------------------------------------- | ------------------------------- |
-| `github`, `agent`                                                                       | `dev-tools`                     |
-| `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync` | `github` (and thus `dev-tools`) |
+| Add-on                                                                                  | Requires                          |
+| --------------------------------------------------------------------------------------- | --------------------------------- |
+| `vscode`, `github`, `agent`                                                             | `dev-tools`                       |
+| `agent`                                                                                 | `vscode` (ships the debug config) |
+| `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync` | `github` (and thus `dev-tools`)   |
 
 `--add community` therefore enables `dev-tools`, `github`, and `community`. Never assume the
 enabled set equals your arguments: the human output prints `Add-ons required by dependencies:`,
 and the `addons` field of the JSON report carries `requested` / `enabled` / `autoEnabled`.
 
+`vscode` is optional: `--add dev-tools` writes the toolchain without `.vscode/`, so a caller that
+wants editor integration must pass `--add vscode` (or rely on the interactive presets, which enable
+it). `--template agent` implies `dev-tools` and `vscode`.
+
 ### Files written by dev-tools
 
-`--add dev-tools` writes 16 files (an Agent project adds one more, `.vscode/launch.json`):
+`--add dev-tools` writes 13 files:
 
 | File                                                          | Refresh |
 | ------------------------------------------------------------- | ------- |
@@ -80,10 +85,6 @@ and the `addons` field of the JSON report carries `requested` / `enabled` / `aut
 | `.prettierignore`                                             | once    |
 | `package.json` (devDependencies, engines, packageManager)     | once    |
 | `pnpm-workspace.yaml`                                         | once    |
-| `.vscode/settings.json`                                       | once    |
-| `.vscode/extensions.json`                                     | once    |
-| `.vscode/tasks.json`                                          | managed |
-| `.vscode/launch.json` (Agent only)                            | once    |
 | `tools/validate-schema.mjs`                                   | managed |
 | `tools/schema/interface.schema.json` (upstream)               | managed |
 | `tools/schema/interface_config.schema.json` (upstream)        | managed |
@@ -95,6 +96,20 @@ and the `addons` field of the JSON report carries `requested` / `enabled` / `aut
 
 `managed` files are refreshed by `--update` (for example `--update schema`); `once` files are
 written at creation only and then belong to the project, so later commands never overwrite them.
+
+### Files written by vscode
+
+`--add vscode` writes three files under `.vscode/` (an Agent project adds `launch.json`):
+
+| File                      | Refresh           |
+| ------------------------- | ----------------- |
+| `.vscode/settings.json`   | once              |
+| `.vscode/extensions.json` | once              |
+| `.vscode/tasks.json`      | managed           |
+| `.vscode/launch.json`     | once (Agent only) |
+
+A project without this add-on has no `.vscode/`, and `--doctor` reports `vscode-settings` as
+skipped rather than failed.
 
 Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
 `check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,

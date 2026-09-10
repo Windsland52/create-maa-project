@@ -554,7 +554,7 @@ describe('scaffold', () => {
   it('adds agent incrementally', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-agent-test' }))
+    await createProject(defaultOptions({ name: 'maa-agent-test', add: ['dev-tools', 'github', 'vscode'] }))
     process.chdir(join(root, 'maa-agent-test'))
     await addDependabot(
       defaultOptions({
@@ -949,6 +949,7 @@ describe('scaffold', () => {
         name: 'maa-pipeline-devtools',
         add: [
           'dev-tools',
+          'vscode',
         ],
       }),
     )
@@ -1757,7 +1758,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
   it('syncs agent metadata without removing its MaaTools debug configuration', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-pyproject-sync' }))
+    await createProject(defaultOptions({ name: 'maa-pyproject-sync', add: ['dev-tools', 'github', 'vscode'] }))
     process.chdir(join(root, 'maa-pyproject-sync'))
     await addAgent(
       defaultOptions({
@@ -2088,7 +2089,7 @@ jobs:
   it('doctor reports VS Code settings drift with a repair command', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
-    await createProject(defaultOptions({ name: 'maa-vscode-doctor' }))
+    await createProject(defaultOptions({ name: 'maa-vscode-doctor', add: ['dev-tools', 'github', 'vscode'] }))
     const projectRoot = join(root, 'maa-vscode-doctor')
     const settingsPath = join(projectRoot, '.vscode/settings.json')
     const settings = (await readJson(settingsPath)) as Record<string, unknown>
@@ -3676,7 +3677,7 @@ export default defineConfig({
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
 
-    const result = await createProject(defaultOptions({ name: 'Maa Test' }))
+    const result = await createProject(defaultOptions({ name: 'Maa Test', add: ['dev-tools', 'github', 'vscode'] }))
 
     expect(result.config.project.slug).toBe('maa-test')
     expect(result.written).toContain('interface.json')

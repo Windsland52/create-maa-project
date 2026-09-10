@@ -47,7 +47,7 @@ import {
   writeText,
 } from './utils.js'
 import { projectControllerKinds } from './controllers.js'
-import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
+import { enabledResourcePacks, hasDevTools, hasGithubAutomation, hasVscode, isAddonEnabled } from './features.js'
 import { isUpdateTarget, type UpdateTarget } from './update-targets.js'
 import { runCommand } from './command.js'
 
@@ -1243,6 +1243,7 @@ function schemaFilesForConfig(config: MaaProjectConfig): ManagedFileInput[] {
     controllers: projectControllerKinds(config),
     license: config.license.spdx,
     includeDevTools: hasDevTools(config),
+    includeVscode: hasVscode(config),
     includeGithub: hasGithubAutomation(config),
     includeAgent: config.python !== undefined,
     includeGitCliff: isAddonEnabled(config, 'gitCliff'),

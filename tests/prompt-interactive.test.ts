@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { resolveAddonDependencies } from '../src/addons.js'
 import { parseArgs } from '../src/args.js'
 import { runCli } from '../src/index.js'
+import { REPOSITORY_FEATURE_ADDONS } from '../src/prompt.js'
 import type { CliOptions } from '../src/types.js'
 import {
   displayWidth,
@@ -169,6 +170,29 @@ function lastMenuView(rendered: string, label: string): string {
   return rendered.slice(rendered.lastIndexOf(header, end), end)
 }
 
+/**
+ * Key sequence that walks the feature list to each named add-on and toggles it, so the tests
+ * state which features they mean instead of hardcoding cursor offsets.
+ */
+function featureKeys(...addons: string[]): string[] {
+  const keys: string[] = []
+  let index = 0
+  for (const addon of addons) {
+    const target = REPOSITORY_FEATURE_ADDONS.indexOf(addon)
+    if (target < 0) throw new Error(`unknown repository feature: ${addon}`)
+    while (index < target) {
+      keys.push('down')
+      index += 1
+    }
+    while (index > target) {
+      keys.push('up')
+      index -= 1
+    }
+    keys.push('space')
+  }
+  return keys
+}
+
 describe('interactive prompt flow', () => {
   it('asks the core decisions in order and accepts single-key y/n answers', async () => {
     const harness = createHarness(80)
@@ -315,13 +339,12 @@ describe('interactive prompt flow', () => {
   it('checks required features and clears dependents so the checkboxes match the result', async () => {
     const harness = createHarness(80)
     // Start from Custom, clear dev-tools and github, then select git-cliff (which needs both).
-    const options = await runInteractive(harness, { git: 'n' }, 'custom', [
-      'space',
-      'down',
-      'space',
-      'down',
-      'space',
-    ])
+    const options = await runInteractive(
+      harness,
+      { git: 'n' },
+      'custom',
+      featureKeys('dev-tools', 'github', 'git-cliff'),
+    )
 
     // Before the dependency-aware toggling this returned only ['git-cliff'] while creation
     // silently enabled dev-tools and github.
@@ -337,24 +360,24 @@ describe('interactive prompt flow', () => {
     expect(lastView).toContain('[x] dev-tools')
     expect(lastView).toContain('[x] github')
     expect(lastView).toContain('[x] git-cliff')
+    // vscode was enabled by the initial selection and cleared with its dev-tools dependency.
+    expect(lastView).toContain('[ ] vscode')
   })
 
   it('clears features that depend on a feature the user turns off', async () => {
     const harness = createHarness(80)
     // Select git-cliff, then clear github: git-cliff cannot stay enabled without it.
-    const options = await runInteractive(harness, { git: 'n' }, 'custom', [
-      'down',
-      'down',
-      'space',
-      'up',
-      'space',
-    ])
+    const options = await runInteractive(harness, { git: 'n' }, 'custom', featureKeys('git-cliff', 'github'))
 
-    expect(options.add).toEqual(['dev-tools'])
+    expect(options.add).toEqual([
+      'dev-tools',
+      'vscode',
+    ])
     const rendered = harness.output().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
     const lastView = lastMenuView(rendered, 'Repository features')
     expect(lastView).toContain('[ ] git-cliff')
     expect(lastView).toContain('[x] dev-tools')
+    expect(lastView).toContain('[x] vscode')
   })
 
   it('indents the feature list by dependency depth', async () => {
@@ -374,11 +397,14 @@ describe('interactive prompt flow', () => {
     // line up under the feature they depend on.
     expect(checkboxColumn('dev-tools')).toBe(2)
     expect(checkboxColumn('github')).toBe(4)
+    expect(checkboxColumn('vscode')).toBe(4)
     expect(checkboxColumn('git-cliff')).toBe(6)
     expect(lines.find((line) => line.includes('dev-tools'))).toMatch(/^[> ] \[x\] dev-tools$/)
+    // Editor integration stays in the interactive default, matching the previous behaviour.
     expect(options.add).toEqual([
       'dev-tools',
       'github',
+      'vscode',
     ])
   })
 

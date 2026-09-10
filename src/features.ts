@@ -14,12 +14,16 @@ export function enabledResourcePacks(config: MaaProjectConfig): ResourcePackConf
 }
 
 export function hasDevTools(config: MaaProjectConfig): boolean {
-  return (
-    isAddonEnabled(config, 'devTools') ||
-    config.features.quality.enabled ||
-    config.features.vscode.enabled ||
-    config.python !== undefined
-  )
+  return isAddonEnabled(config, 'devTools') || config.features.quality.enabled || config.python !== undefined
+}
+
+/**
+ * Editor integration is its own add-on: `vscode` requires `dev-tools`, so this never implies
+ * dev tools. Check `features.vscode` because it is the field the doctor check and older
+ * projects already carry.
+ */
+export function hasVscode(config: MaaProjectConfig): boolean {
+  return isAddonEnabled(config, 'vscode') || config.features.vscode.enabled
 }
 
 export function hasGithubAutomation(config: MaaProjectConfig): boolean {

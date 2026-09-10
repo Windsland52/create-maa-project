@@ -16,6 +16,7 @@ import {
   addOptimizeImages,
   addResourcePack,
   addSchemaSync,
+  addVscode,
 } from './scaffold.js'
 import type { CliOptions, ScaffoldResult } from './types.js'
 import { withProjectWriteLock } from './project.js'
@@ -50,6 +51,8 @@ export async function applyIncrementalAddons(
         let result: ScaffoldResult | undefined
         if (addon === 'dev-tools') {
           result = await addDevTools(options, root)
+        } else if (addon === 'vscode') {
+          result = await addVscode(options, root)
         } else if (addon === 'github') {
           result = await addGithub(options, root)
         } else if (addon === 'agent') {

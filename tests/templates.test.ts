@@ -1,18 +1,15 @@
 import { check } from 'prettier'
 import { describe, expect, it } from 'vitest'
-import { devToolFiles, releaseWorkflowFile, type ProjectTemplateInput } from '../src/templates.js'
+import { devToolFiles, releaseWorkflowFile, vscodeFiles, type ProjectTemplateInput } from '../src/templates.js'
 
 /**
- * The file list is documented for users in docs/commands.md and the skill reference. Changing
- * the set here means those documents need the same update, so this test fails deliberately.
+ * The file lists are documented for users in docs/commands.md and the skill reference. Changing
+ * a set here means those documents need the same update, so this test fails deliberately.
  */
 const DEV_TOOL_FILES = [
   '.node-version',
   '.prettierignore',
   '.prettierrc.mjs',
-  '.vscode/extensions.json',
-  '.vscode/settings.json',
-  '.vscode/tasks.json',
   'package.json',
   'pnpm-workspace.yaml',
   'tools/schema/custom.action.schema.json',
@@ -25,6 +22,12 @@ const DEV_TOOL_FILES = [
   'tools/validate-schema.mjs',
 ]
 
+const VSCODE_FILES = [
+  '.vscode/extensions.json',
+  '.vscode/settings.json',
+  '.vscode/tasks.json',
+]
+
 function devToolInput(includeAgent: boolean): ProjectTemplateInput {
   return {
     slug: 'maa-example',
@@ -33,6 +36,7 @@ function devToolInput(includeAgent: boolean): ProjectTemplateInput {
     controllers: ['Adb'],
     license: 'AGPL-3.0-or-later',
     includeDevTools: true,
+    includeVscode: true,
     includeGithub: false,
     includeAgent,
     includeGitCliff: false,
@@ -49,16 +53,15 @@ describe('dev-tools templates', () => {
       .sort()
 
     expect(paths).toEqual(DEV_TOOL_FILES)
-    // docs/commands.md states the count for both project kinds.
-    expect(paths).toHaveLength(16)
+    // docs/commands.md states the count.
+    expect(paths).toHaveLength(13)
   })
 
-  it('adds only the launch configuration for an agent project', () => {
-    const paths = devToolFiles(devToolInput(true))
-      .map((file) => file.path)
-      .sort()
+  it('keeps editor integration out of the dev-tools set', () => {
+    // vscode is a separate add-on that requires dev-tools, so devToolFiles never writes .vscode.
+    const paths = devToolFiles(devToolInput(true)).map((file) => file.path)
 
-    expect(paths).toEqual([...DEV_TOOL_FILES, '.vscode/launch.json'].sort())
+    expect(paths.some((path) => path.startsWith('.vscode/'))).toBe(false)
   })
 
   it('keeps project-owned files one-shot and refreshable files managed', () => {
@@ -73,9 +76,6 @@ describe('dev-tools templates', () => {
     // by --update. docs/commands.md documents both columns.
     expect(byMode(false)).toEqual([
       '.prettierignore',
-      '.vscode/extensions.json',
-      '.vscode/launch.json',
-      '.vscode/settings.json',
       'package.json',
       'pnpm-workspace.yaml',
       'tools/schema/custom.action.schema.json',
@@ -84,7 +84,6 @@ describe('dev-tools templates', () => {
     expect(byMode(true)).toEqual([
       '.node-version',
       '.prettierrc.mjs',
-      '.vscode/tasks.json',
       'tools/schema/interface.schema.json',
       'tools/schema/interface_config.schema.json',
       'tools/schema/interface_import.schema.json',
@@ -92,6 +91,33 @@ describe('dev-tools templates', () => {
       'tools/schema/schema-manifest.json',
       'tools/validate-schema.mjs',
     ])
+  })
+})
+
+describe('vscode templates', () => {
+  it('writes exactly the documented file set for a pipeline project', () => {
+    const paths = vscodeFiles(devToolInput(false))
+      .map((file) => file.path)
+      .sort()
+
+    expect(paths).toEqual(VSCODE_FILES)
+    expect(paths).toHaveLength(3)
+  })
+
+  it('adds only the launch configuration for an agent project', () => {
+    const paths = vscodeFiles(devToolInput(true))
+      .map((file) => file.path)
+      .sort()
+
+    expect(paths).toEqual([...VSCODE_FILES, '.vscode/launch.json'].sort())
+  })
+
+  it('refreshes only the tasks file and keeps the rest project-owned', () => {
+    const managed = vscodeFiles(devToolInput(true))
+      .filter((file) => file.managed)
+      .map((file) => file.path)
+
+    expect(managed).toEqual(['.vscode/tasks.json'])
   })
 })
 

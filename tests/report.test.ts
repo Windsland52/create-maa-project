@@ -522,7 +522,7 @@ describe('CLI JSON reports', () => {
   )
 
   it(
-    'reports the implied dev-tools for an agent template as an auto-enabled add-on',
+    'reports the add-ons an agent template implies as auto-enabled',
     async () => {
       const root = await tempRoot()
       const created = await runCli(
@@ -539,10 +539,12 @@ describe('CLI JSON reports', () => {
       const report = parseStdoutReport(created.stdout, created.stderr)
 
       expect(created.exitCode, created.stderr).toBe(0)
+      // The agent template needs dev-tools, and the agent ships a VS Code debug configuration,
+      // so the vscode add-on comes with it.
       expect(report.addons).toEqual({
         requested: [],
-        enabled: ['dev-tools'],
-        autoEnabled: ['dev-tools'],
+        enabled: ['dev-tools', 'vscode'],
+        autoEnabled: ['dev-tools', 'vscode'],
       })
     },
     CLI_TEST_TIMEOUT_MS,

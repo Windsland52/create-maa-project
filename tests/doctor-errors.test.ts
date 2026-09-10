@@ -51,6 +51,7 @@ describe('doctor malformed JSON diagnostics', () => {
   it('reports malformed VS Code settings and continues checking other tooling', async () => {
     const projectRoot = await createTempProject('invalid-vscode-settings', [
       'dev-tools',
+      'vscode',
     ])
     await writeFile(join(projectRoot, '.vscode/settings.json'), '[]', 'utf8')
 

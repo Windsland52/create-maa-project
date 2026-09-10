@@ -72,13 +72,13 @@ npx create-maa-project@latest
 4. **项目类型**：`pipeline` 适合普通任务/资源项目；只有需要 Python 自定义逻辑时才选 `agent`。
 5. **许可证**：默认 AGPL-3.0-or-later。
 6. **控制目标**：可多选，默认 Adb。
-7. **仓库配置**：全部 / 最小 / 自定义；每个预设都会显示一行概括说明（全部＝开发工具、GitHub 自动化与社区文件，最小＝不添加任何仓库功能）。完整的 add-on 清单：全部会装上 `dev-tools`、`github`、`git-cliff`、`auto-format`、`optimize-images`、`schema-sync`、`community`、`dependabot`；选自定义可以逐项查看并勾选。
+7. **仓库配置**：全部 / 最小 / 自定义；每个预设都会显示一行概括说明（全部＝开发工具、GitHub 自动化与社区文件，最小＝不添加任何仓库功能）。完整的 add-on 清单：全部会装上 `dev-tools`、`vscode`、`github`、`git-cliff`、`auto-format`、`optimize-images`、`schema-sync`、`community`、`dependabot`；选自定义可以逐项查看并勾选。
 8. **额外资源包**：默认不添加。
 9. **初始化 Git 仓库**：目标已在 Git 仓库内时默认否，否则默认是。
 
 第 8、9 项按单键 `y`/`n` 回答，回车接受默认值。提示宽度会跟随终端列数折行；随时按 Ctrl+C 可安静退出（退出码 `130`，不会打印 `Error:`）。
 
-自定义仓库功能时，列表按依赖关系缩进，勾选某项会自动勾上它依赖的功能，取消被依赖项也会一并取消依赖它的功能——所以复选框显示的就是最终会启用的集合。依赖规则：`github`、`agent` 依赖 `dev-tools`；`git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`。用 `--add` 传参时同样会自动补全，并由 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段说明。
+自定义仓库功能时，列表按依赖关系缩进，勾选某项会自动勾上它依赖的功能，取消被依赖项也会一并取消依赖它的功能——所以复选框显示的就是最终会启用的集合。依赖规则：`vscode`、`github`、`agent` 依赖 `dev-tools`，`agent` 还依赖 `vscode`；`git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`。用 `--add` 传参时同样会自动补全，并由 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段说明。
 
 项目创建完成后：
 
@@ -210,7 +210,7 @@ create-maa-project --doctor                  # 诊断当前项目（只读）
 
 生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
 
-dev-tools 会写入 16 个文件（Agent 项目再多一个 `.vscode/launch.json`）：`.node-version`、`.prettierrc.mjs`、`.prettierignore`、`package.json`、`pnpm-workspace.yaml`、`.vscode/settings.json`、`.vscode/extensions.json`、`.vscode/tasks.json`、`tools/validate-schema.mjs`，以及 `tools/schema/` 下的 7 个文件（4 个上游 schema、2 个可编辑的自定义 schema、`schema-manifest.json`）；未启用 dev-tools 的 minimal 项目不会产生 `.vscode/` 与 `tools/`。逐项用途与刷新方式（`managed` 可被 `--update` 刷新、`once` 仅首次创建写入）见[命令文档](./docs/commands.md#dev-tools-写入的文件)。
+dev-tools 会写入 13 个文件：`.node-version`、`.prettierrc.mjs`、`.prettierignore`、`package.json`、`pnpm-workspace.yaml`、`tools/validate-schema.mjs`，以及 `tools/schema/` 下的 7 个文件（4 个上游 schema、2 个可编辑的自定义 schema、`schema-manifest.json`）。编辑器集成是独立的 `vscode` add-on（依赖 dev-tools），写入 `.vscode/` 下的 `settings.json`、`extensions.json`、`tasks.json`，Agent 项目再加 `launch.json`；不传 `--add vscode` 就不会有 `.vscode/`。逐项用途与刷新方式（`managed` 可被 `--update` 刷新、`once` 仅首次创建写入）见[命令文档](./docs/commands.md#dev-tools-写入的文件)与 [vscode 一节](./docs/commands.md#vscode-写入的文件)。
 
 ### OCR 模型供应
 

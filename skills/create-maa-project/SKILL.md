@@ -97,12 +97,15 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 - `<path>` creates a subfolder; `.` targets the current directory.
 - `--template` is `pipeline` (default) or `agent` (adds Python agent scaffolding with uv).
 - A normal repository setup is `--add dev-tools --add github`.
-- Add-on dependencies are resolved automatically, in both `create` and `--add`: `github` and
-  `agent` require `dev-tools`; `git-cliff`, `auto-format`, `optimize-images`, `community`,
-  `dependabot`, and `schema-sync` require `github` (and therefore `dev-tools`). So
-  `--add community` alone also enables `dev-tools` and `github`. Do not assume the resolved set
-  equals your arguments: the `Add-ons required by dependencies:` output line and the `addons`
-  field of the report (`requested` / `enabled` / `autoEnabled`) list what was actually enabled.
+- Add-on dependencies are resolved automatically, in both `create` and `--add`: `vscode`,
+  `github`, and `agent` require `dev-tools`; `agent` also requires `vscode`; `git-cliff`,
+  `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync` require `github`
+  (and therefore `dev-tools`). So `--add community` alone also enables `dev-tools` and `github`.
+  Do not assume the resolved set equals your arguments: the `Add-ons required by dependencies:`
+  output line and the `addons` field of the report (`requested` / `enabled` / `autoEnabled`) list
+  what was actually enabled.
+- `.vscode/` is optional: `--add dev-tools` no longer writes it. Pass `--add vscode` when the
+  project should carry editor integration; `--template agent` implies it.
 - `--controller` kinds: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `WlRoots`.
 - `--license` is `AGPL-3.0-or-later`, `MIT`, or `None`.
 - A resource pack takes a positional slug: `--add resource-pack extra --label "Extra Resource"`.
@@ -115,7 +118,7 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 
 ## Maintenance targets
 
-- Add-ons (`--add`): `dev-tools`, `github`, `agent`, `resource-pack`, `git-cliff`,
+- Add-ons (`--add`): `dev-tools`, `vscode`, `github`, `agent`, `resource-pack`, `git-cliff`,
   `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 - Sync (`--sync`): `config`, `metadata`, `display-name`, `version`, `license`,
   `github-url`, `network`.

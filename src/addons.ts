@@ -1,5 +1,6 @@
 const CREATE_ADDONS = new Set([
   'dev-tools',
+  'vscode',
   'github',
   'agent',
   'resource-pack',
@@ -12,6 +13,7 @@ const CREATE_ADDONS = new Set([
 ])
 const INCREMENTAL_ADDONS = new Set([
   'dev-tools',
+  'vscode',
   'github',
   'agent',
   'resource-pack',
@@ -35,6 +37,7 @@ const V1_RESERVED_ADDONS = new Set([
  */
 export const ADDON_ORDER = [
   'dev-tools',
+  'vscode',
   'github',
   'agent',
   'resource-pack',
@@ -53,11 +56,15 @@ export const ADDON_ORDER = [
  */
 export const ADDON_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
   'dev-tools': [],
+  vscode: [
+    'dev-tools',
+  ],
   github: [
     'dev-tools',
   ],
   agent: [
     'dev-tools',
+    'vscode',
   ],
   'resource-pack': [],
   'git-cliff': [
@@ -83,6 +90,7 @@ export const ADDON_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
 /** Add-ons that write a state entry into `maa-project.json`. */
 export const ADDON_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'dev-tools': 'devTools',
+  vscode: 'vscode',
   github: 'github',
   'git-cliff': 'gitCliff',
   'auto-format': 'autoFormat',
@@ -142,8 +150,11 @@ export function resolveAddonDependencies(addons: string[], input: { includeAgent
   for (const addon of requested) {
     for (const dependency of requiredAddonsFor(addon)) resolved.add(dependency)
   }
-  // The agent template needs the developer tooling without listing the add-on itself.
-  if (input.includeAgent) resolved.add('dev-tools')
+  // The agent template needs everything the agent add-on needs - the developer tooling and the
+  // VS Code debug configuration - without the caller listing those add-ons.
+  if (input.includeAgent) {
+    for (const dependency of ADDON_DEPENDENCIES.agent ?? []) resolved.add(dependency)
+  }
   return [
     ...ADDON_ORDER.filter((addon) => resolved.has(addon)),
     ...requested.filter((addon) => !(ADDON_ORDER as readonly string[]).includes(addon)),

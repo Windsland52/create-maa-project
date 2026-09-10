@@ -24,6 +24,7 @@ import {
   projectCustomSchemaFiles,
   releaseWorkflowFile,
   schemaSyncFiles,
+  vscodeFiles,
 } from './templates.js'
 import type {
   CliOptions,
@@ -67,7 +68,7 @@ import {
   type DownloadProgressReporter,
 } from './assets.js'
 import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
-import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
+import { enabledResourcePacks, hasDevTools, hasGithubAutomation, hasVscode, isAddonEnabled } from './features.js'
 import {
   defaultOcrSubmoduleConfig,
   provisionOcrFromSubmodule,
@@ -127,6 +128,7 @@ export async function createProject(
   const includeAgent = options.template === 'agent' || options.add.includes('agent')
   const resolvedAddons = resolveAddonDependencies(options.add, { includeAgent })
   const includeDevTools = resolvedAddons.includes('dev-tools')
+  const includeVscode = resolvedAddons.includes('vscode')
   const includeGithub = resolvedAddons.includes('github')
   const pythonDevCommand = includeAgent ? defaultAgentDevCommand() : undefined
   const config = createConfig({
@@ -158,6 +160,7 @@ export async function createProject(
       controllers: options.controllers ?? DEFAULT_CONTROLLER_KINDS,
       license: options.license ?? 'AGPL-3.0-or-later',
       includeDevTools,
+      includeVscode,
       includeGithub,
       includeAgent,
       includeGitCliff: resolvedAddons.includes('git-cliff'),
@@ -315,7 +318,6 @@ async function addDevToolsLocked(options: CliOptions, root: string): Promise<Sca
     return writeAddonFiles(root, config, managedFiles, options)
   }
 
-  config.features.vscode = { enabled: true }
   config.features.quality = { enabled: true }
   config.addons.devTools = { enabled: true }
   const files = [
@@ -332,6 +334,21 @@ async function addDevToolsLocked(options: CliOptions, root: string): Promise<Sca
       },
     ],
   })
+}
+
+export function addVscode(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addVscodeLocked(options, root))
+}
+
+async function addVscodeLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
+  const config = await readProjectConfig(root)
+  config.features.vscode = { enabled: true }
+  config.addons.vscode = { enabled: true }
+  const files = [
+    ...vscodeFiles(templateInputFromConfig(config)),
+    configFile(config),
+  ]
+  return writeAddonFiles(root, config, files, options, { overwriteUnmanaged: true })
 }
 
 export function addGithub(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
@@ -480,7 +497,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
       content: stableJson(vscodeSettings),
       managed: false,
     },
-    ...devToolFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/tasks.json'),
+    ...vscodeFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/tasks.json'),
     maatoolsConfigFile(
       enabledResourcePacks(config).map((pack) => `./${pack.path}`),
       true,
@@ -488,7 +505,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
     configFile(config),
   ]
   if (config.features.vscode.enabled && !(await exists(join(root, '.vscode/launch.json')))) {
-    files.push(...devToolFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/launch.json'))
+    files.push(...vscodeFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/launch.json'))
   }
   if (hasGithubAutomation(config)) {
     files.push(
@@ -741,6 +758,7 @@ function createConfig(input: {
   resolvedAddons: string[]
 }): MaaProjectConfig {
   const includeDevTools = input.resolvedAddons.includes('dev-tools')
+  const includeVscode = input.resolvedAddons.includes('vscode')
   const includeGithub = input.resolvedAddons.includes('github')
   const config: MaaProjectConfig = {
     schemaVersion: 2,
@@ -753,7 +771,7 @@ function createConfig(input: {
     features: {
       ci: { enabled: includeGithub },
       release: { enabled: includeGithub },
-      vscode: { enabled: includeDevTools },
+      vscode: { enabled: includeVscode },
       quality: { enabled: includeDevTools },
     },
     addons: initialAddons(input.resolvedAddons),
@@ -885,6 +903,7 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
     controllers: projectControllerKinds(config),
     license: config.license.spdx,
     includeDevTools: hasDevTools(config),
+    includeVscode: hasVscode(config),
     includeGithub: hasGithubAutomation(config),
     includeAgent: config.python !== undefined,
     includeGitCliff: isAddonEnabled(config, 'gitCliff'),

@@ -25,6 +25,7 @@ Add-ons:
 
 ```bash
 create-maa-project --add dev-tools
+create-maa-project --add vscode
 create-maa-project --add github
 create-maa-project --add agent
 create-maa-project --add resource-pack extra --label "Extra Resource"
@@ -38,7 +39,8 @@ create-maa-project --add schema-sync
 
 Add-on dependencies are resolved automatically, so no manual ordering is required:
 
-- `github` and `agent` require `dev-tools`;
+- `vscode`, `github`, and `agent` require `dev-tools`;
+- `agent` also requires `vscode`, because Agent projects ship the `Maa Agent: Debug` launch config;
 - `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync`
   require `github` (and therefore `dev-tools`).
 
@@ -46,32 +48,48 @@ For example, `create-maa-project --add community` also enables `dev-tools` and `
 human-readable output prints `Add-ons required by dependencies:`, and the `addons` field of the
 JSON report carries `requested` / `enabled` / `autoEnabled`.
 
+`vscode` is optional: `--add dev-tools` writes only the toolchain and no longer creates `.vscode/`.
+Add `--add vscode` when you want the editor integration. The interactive repository-setup presets
+and the interactive feature list still enable it, so preset and interactive flows are unchanged.
+
 ### Files written by dev-tools
 
-`--add dev-tools` writes 16 files (an Agent project adds one more, `.vscode/launch.json`):
+`--add dev-tools` writes 13 files:
 
-| File                                          | Purpose                                                             | Refresh |
-| --------------------------------------------- | ------------------------------------------------------------------- | ------- |
-| `.node-version`                               | Pins Node 24                                                        | managed |
-| `.prettierrc.mjs`                             | Prettier config (MaaFW sort and multiline-array plugins)            | managed |
-| `.prettierignore`                             | Ignores generated schema baselines and project-owned sources        | once    |
-| `package.json`                                | devDependencies, `engines.node >= 24`, `packageManager`             | once    |
-| `pnpm-workspace.yaml`                         | pnpm workspace config                                               | once    |
-| `.vscode/settings.json`                       | formatOnSave, LF, jsonc associations, schema map, default formatter | once    |
-| `.vscode/extensions.json`                     | Recommended extensions (Prettier, MaaFW; Agent adds Pylance)        | once    |
-| `.vscode/tasks.json`                          | Syncs dependencies when the project is opened                       | managed |
-| `.vscode/launch.json`                         | Agent projects only: the `Maa Agent: Debug` launch config           | once    |
-| `tools/validate-schema.mjs`                   | Validation script used by `check:schema`                            | managed |
-| `tools/schema/interface.schema.json`          | Upstream MaaFW baseline (interface)                                 | managed |
-| `tools/schema/interface_config.schema.json`   | Upstream MaaFW baseline (interface config)                          | managed |
-| `tools/schema/interface_import.schema.json`   | Upstream MaaFW baseline (interface import)                          | managed |
-| `tools/schema/pipeline.schema.json`           | Upstream MaaFW baseline (pipeline)                                  | managed |
-| `tools/schema/schema-manifest.json`           | Schema version manifest                                             | managed |
-| `tools/schema/custom.action.schema.json`      | Custom action schema, meant to be edited by the project             | once    |
-| `tools/schema/custom.recognition.schema.json` | Custom recognition schema, meant to be edited by the project        | once    |
+| File                                          | Purpose                                                      | Refresh |
+| --------------------------------------------- | ------------------------------------------------------------ | ------- |
+| `.node-version`                               | Pins Node 24                                                 | managed |
+| `.prettierrc.mjs`                             | Prettier config (MaaFW sort and multiline-array plugins)     | managed |
+| `.prettierignore`                             | Ignores generated schema baselines and project-owned sources | once    |
+| `package.json`                                | devDependencies, `engines.node >= 24`, `packageManager`      | once    |
+| `pnpm-workspace.yaml`                         | pnpm workspace config                                        | once    |
+| `tools/validate-schema.mjs`                   | Validation script used by `check:schema`                     | managed |
+| `tools/schema/interface.schema.json`          | Upstream MaaFW baseline (interface)                          | managed |
+| `tools/schema/interface_config.schema.json`   | Upstream MaaFW baseline (interface config)                   | managed |
+| `tools/schema/interface_import.schema.json`   | Upstream MaaFW baseline (interface import)                   | managed |
+| `tools/schema/pipeline.schema.json`           | Upstream MaaFW baseline (pipeline)                           | managed |
+| `tools/schema/schema-manifest.json`           | Schema version manifest                                      | managed |
+| `tools/schema/custom.action.schema.json`      | Custom action schema, meant to be edited by the project      | once    |
+| `tools/schema/custom.recognition.schema.json` | Custom recognition schema, meant to be edited by the project | once    |
 
 `managed` files are refreshed by `--update` (for example `--update schema`); `once` files are
 written at creation only and then belong to the project, so later commands never overwrite them.
+
+### Files written by vscode
+
+`--add vscode` writes three files under `.vscode/` (an Agent project adds `launch.json`). They
+refer to dev-tools artifacts (the Prettier formatter, `tools/schema/*`, `pnpm install`), which is
+why the add-on requires dev-tools:
+
+| File                      | Purpose                                                             | Refresh |
+| ------------------------- | ------------------------------------------------------------------- | ------- |
+| `.vscode/settings.json`   | formatOnSave, LF, jsonc associations, schema map, default formatter | once    |
+| `.vscode/extensions.json` | Recommended extensions (Prettier, MaaFW; Agent adds Pylance)        | once    |
+| `.vscode/tasks.json`      | Syncs dependencies when the project is opened                       | managed |
+| `.vscode/launch.json`     | Agent projects only: the `Maa Agent: Debug` launch config           | once    |
+
+A project without this add-on has no `.vscode/`, and `--doctor` reports `vscode-settings` as
+skipped rather than failed.
 
 Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
 `check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,

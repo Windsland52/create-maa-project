@@ -311,6 +311,7 @@ async function controllerMultiChoice(
 
 const SETUP_ALL_ADDONS = [
   'dev-tools',
+  'vscode',
   'github',
   'git-cliff',
   'auto-format',
@@ -357,9 +358,10 @@ export function setupChoices(language: PromptLanguage): Choice<SetupPreset>[] {
  * and clearing a required feature clears everything that depends on it. The checkboxes
  * therefore always show exactly what creation will enable.
  */
-const REPOSITORY_FEATURE_ADDONS = [
+export const REPOSITORY_FEATURE_ADDONS = [
   'dev-tools',
   'github',
+  'vscode',
   'git-cliff',
   'auto-format',
   'optimize-images',
@@ -384,6 +386,7 @@ async function customRepositoryFeatures(
     [
       'dev-tools',
       'github',
+      'vscode',
     ],
     {
       note: labelText(language, TEXT.featureDependencies),

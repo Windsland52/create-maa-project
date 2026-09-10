@@ -271,16 +271,16 @@ additionally run `uv sync`.
 
 ### Environment variables
 
-| Variable                                            | Description                                                                                                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Selects the creation-time OCR source.                                                                                                                 |
-| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Seeds OCR assets from a local zip (download fallback).                                                                                                |
-| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Uses a verified OCR manifest (download fallback).                                                                                                     |
-| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Changes download retry attempts.                                                                                                                      |
-| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap, default 1 GiB; assets that declare a manifest size use the stricter declared value.                                            |
-| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry count cap, default 100000.                                                                                                          |
-| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Syncs all desktop MaaFramework and MFAAvalonia runtime platforms.                                                                                     |
-| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Controls interactive prompt language. `auto` only enables bilingual prompts for Chinese interactive terminals; machine-readable output stays English. |
+| Variable                                            | Description                                                                                                                                         |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Selects the creation-time OCR source.                                                                                                               |
+| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Seeds OCR assets from a local zip (download fallback).                                                                                              |
+| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Uses a verified OCR manifest (download fallback).                                                                                                   |
+| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Changes download retry attempts.                                                                                                                    |
+| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap, default 1 GiB; assets that declare a manifest size use the stricter declared value.                                          |
+| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry count cap, default 100000.                                                                                                        |
+| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Syncs all desktop MaaFramework and MFAAvalonia runtime platforms.                                                                                   |
+| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Controls interactive prompt language. `auto` only enables Chinese prompts for Chinese interactive terminals; machine-readable output stays English. |
 
 ## Agent Projects
 

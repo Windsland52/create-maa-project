@@ -17,107 +17,103 @@ type LocalizedText = {
 const TEXT = {
   addExtraResourcePack: {
     en: 'Add extra resource pack',
-    zhCN: '添加额外资源包 Add extra resource pack',
+    zhCN: '添加额外资源包',
   },
   atLeastOneRequired: {
-    en: 'At least one required.',
-    zhCN: '至少选择一项。 At least one required.',
+    en: ' (At least one required.)',
+    zhCN: '（至少选择一项）',
   },
   controlTargets: {
     en: 'Control targets',
-    zhCN: '控制目标 Control targets',
+    zhCN: '控制目标',
   },
   custom: {
     en: 'Custom',
-    zhCN: '自定义 Custom',
+    zhCN: '自定义',
   },
   displayName: {
     en: 'Display name',
-    zhCN: '显示名称 Display name',
+    zhCN: '显示名称',
   },
   initializeGitRepository: {
     en: 'Initialize Git repository',
-    zhCN: '初始化 Git 仓库 Initialize Git repository',
+    zhCN: '初始化 Git 仓库',
   },
   license: {
     en: 'License',
-    zhCN: '许可证 License',
+    zhCN: '许可证',
   },
   minimal: {
     en: 'Minimal',
-    zhCN: '最小 Minimal',
+    zhCN: '最小',
   },
   no: {
     en: 'No',
-    zhCN: '否 No',
+    zhCN: '否',
   },
   noLicense: {
     en: 'No license',
-    zhCN: '无许可证 No license',
+    zhCN: '无许可证',
   },
   none: {
     en: 'none',
-    zhCN: '无 none',
+    zhCN: '无',
   },
   promptCancelled: {
     en: 'Prompt cancelled.',
-    zhCN: '已取消交互。 Prompt cancelled.',
+    zhCN: '已取消交互。',
   },
   projectFolder: {
     en: 'Project folder',
-    zhCN: '项目目录 Project folder',
+    zhCN: '项目目录',
   },
   projectId: {
     en: 'Project ID',
-    zhCN: '项目 ID Project ID',
+    zhCN: '项目 ID',
   },
   projectIdAsciiOnly: {
     en: 'Project ID must contain ASCII letters, numbers, or hyphens.',
-    zhCN: '项目 ID 只能包含 ASCII 字母、数字或连字符。 Project ID must contain ASCII letters, numbers, or hyphens.',
+    zhCN: '项目 ID 只能包含 ASCII 字母、数字或连字符。',
   },
   projectType: {
     en: 'Project type',
-    zhCN: '项目类型 Project type',
-  },
-  recommended: {
-    en: 'Recommended',
-    zhCN: '推荐 Recommended',
+    zhCN: '项目类型',
   },
   repositoryFeatures: {
     en: 'Repository features',
-    zhCN: '仓库功能 Repository features',
+    zhCN: '仓库功能',
   },
   resourcePackDisplayName: {
     en: 'Resource pack display name',
-    zhCN: '资源包显示名称 Resource pack display name',
+    zhCN: '资源包显示名称',
   },
   resourcePackFolder: {
     en: 'Resource pack folder',
-    zhCN: '资源包目录 Resource pack folder',
+    zhCN: '资源包目录',
   },
   resourcePackFolderAsciiOnly: {
     en: 'Resource pack folder must contain ASCII letters, numbers, or hyphens.',
-    zhCN: '资源包目录只能包含 ASCII 字母、数字或连字符。 Resource pack folder must contain ASCII letters, numbers, or hyphens.',
+    zhCN: '资源包目录只能包含 ASCII 字母、数字或连字符。',
   },
   selectAtLeastOneItem: {
     en: 'Select at least one item.',
-    zhCN: '请至少选择一项。 Select at least one item.',
+    zhCN: '请至少选择一项。',
   },
   setup: {
     en: 'Setup',
-    zhCN: '仓库配置 Setup',
+    zhCN: '仓库配置',
   },
   setupAll: {
     en: 'All',
-    zhCN: '全部 All',
+    zhCN: '全部',
   },
   usingProjectId: {
     en: 'Using project ID',
-    zhCN: '使用项目 ID Using project ID',
+    zhCN: '使用项目 ID',
   },
   yes: {
     en: 'Yes',
-    zhCN: '是 Yes',
+    zhCN: '是',
   },
 } satisfies Record<string, LocalizedText>
 
@@ -179,7 +175,7 @@ export async function promptForCreateOptions(options: CliOptions): Promise<CliOp
         language,
         label(language, TEXT.projectType),
         [
-          { value: 'pipeline', label: choice(language, 'Pipeline', '流水线 Pipeline') },
+          { value: 'pipeline', label: choice(language, 'Pipeline', '流水线（pipeline）') },
           {
             value: 'agent',
             label: choice(language, 'Pipeline + Python Agent', '流水线 + Python Agent'),
@@ -516,7 +512,7 @@ function linesForSelectMany<T extends string>(
       const checked = selected.has(choice.value) ? '[x]' : '[ ]'
       return `${choiceIndex === index ? '>' : ' '} ${checked} ${choice.label}`
     }),
-    `  ${selectManyInstruction(language)}${options.requireOne ? ` ${labelText(language, TEXT.atLeastOneRequired)}` : ''}`,
+    `  ${selectManyInstruction(language)}${options.requireOne ? labelText(language, TEXT.atLeastOneRequired) : ''}`,
     ...(message
       ? [
           `  ${message}`,
@@ -538,7 +534,7 @@ function choice(language: PromptLanguage, english: string, zhCN: string): string
 }
 
 function recommendedLabel(language: PromptLanguage, value: string): string {
-  return `${value} (${labelText(language, TEXT.recommended)})`
+  return language === 'zh-CN' ? `${value}（推荐）` : `${value} (Recommended)`
 }
 
 function question(label: string, fallback: string): string {
@@ -546,15 +542,11 @@ function question(label: string, fallback: string): string {
 }
 
 function selectOneInstruction(language: PromptLanguage): string {
-  return choice(language, 'Up/Down to move, Enter to select.', '上/下移动 Up/Down，回车选择 Enter to select.')
+  return choice(language, 'Up/Down to move, Enter to select.', '↑/↓ 移动，回车选择')
 }
 
 function selectManyInstruction(language: PromptLanguage): string {
-  return choice(
-    language,
-    'Up/Down to move, Space to toggle, Enter to confirm.',
-    '上/下移动 Up/Down，空格切换 Space，回车确认 Enter to confirm.',
-  )
+  return choice(language, 'Up/Down to move, Space to toggle, Enter to confirm.', '↑/↓ 移动，空格勾选，回车确认')
 }
 
 function withSelectablePrompt<T>(
@@ -616,17 +608,17 @@ function isCancelKey(key: Keypress): boolean {
 function controllerChoiceLabel(kind: ControllerKind, language: PromptLanguage): string {
   switch (kind) {
     case 'Adb':
-      return choice(language, 'Android / Emulator (Adb)', 'Android / 模拟器 Android / Emulator (Adb)')
+      return choice(language, 'Android / Emulator (Adb)', 'Android / 模拟器（Adb）')
     case 'Win32':
-      return choice(language, 'Windows app (Win32)', 'Windows 应用 Windows app (Win32)')
+      return choice(language, 'Windows app (Win32)', 'Windows 应用（Win32）')
     case 'MacOS':
-      return choice(language, 'macOS app (MacOS)', 'macOS 应用 macOS app (MacOS)')
+      return choice(language, 'macOS app (MacOS)', 'macOS 应用（MacOS）')
     case 'PlayCover':
-      return choice(language, 'PlayCover iOS app', 'PlayCover iOS 应用 PlayCover iOS app')
+      return choice(language, 'PlayCover iOS app', 'PlayCover iOS 应用')
     case 'Gamepad':
-      return choice(language, 'Gamepad (Windows)', '手柄 Gamepad (Windows)')
+      return choice(language, 'Gamepad (Windows)', 'Windows 手柄（Gamepad）')
     case 'WlRoots':
-      return choice(language, 'wlroots app (Linux)', 'wlroots 应用 wlroots app (Linux)')
+      return choice(language, 'wlroots app (Linux)', 'wlroots 应用（Linux）')
   }
 }
 

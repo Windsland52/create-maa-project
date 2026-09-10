@@ -227,7 +227,7 @@ create-maa-project --doctor                  # 诊断当前项目（只读）
 | `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值  |
 | `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | 调整单个归档的条目数上限，默认 100000                                             |
 | `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | 同步全部桌面 MaaFramework 和 MFAAvalonia runtime 平台                             |
-| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | 控制交互式提示语言。`auto` 只会在中文交互终端启用中英提示；机器可读输出仍保持英文 |
+| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | 控制交互式提示语言。`auto` 只会在中文交互终端启用中文提示；机器可读输出仍保持英文 |
 
 ## Agent 项目
 

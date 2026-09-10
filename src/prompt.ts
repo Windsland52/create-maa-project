@@ -267,6 +267,7 @@ export function setupAddons(setup: SetupPreset, current: string[]): string[] {
       'optimize-images',
       'schema-sync',
       'community',
+      'dependabot',
     ])
   return current
 }
@@ -287,6 +288,7 @@ async function customRepositoryFeatures(
       { value: 'optimize-images', label: '    optimize-images' },
       { value: 'schema-sync', label: '    schema-sync' },
       { value: 'community', label: '    community' },
+      { value: 'dependabot', label: '    dependabot' },
     ],
     [
       'dev-tools',

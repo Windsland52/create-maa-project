@@ -13,6 +13,7 @@ describe('prompt setup presets', () => {
       'optimize-images',
       'schema-sync',
       'community',
+      'dependabot',
     ])
   })
 
@@ -31,6 +32,7 @@ describe('prompt setup presets', () => {
       'optimize-images',
       'schema-sync',
       'community',
+      'dependabot',
     ])
   })
 })

@@ -373,6 +373,15 @@ const REPOSITORY_FEATURE_SET = [
 
 export const REPOSITORY_FEATURE_ADDONS = addonTreeOrder(REPOSITORY_FEATURE_SET)
 
+/**
+ * `vscode` is deliberately not preselected here: it is an optional add-on for people who use
+ * VS Code, so Custom starts from the dependency roots only. The All preset still enables it.
+ */
+const CUSTOM_DEFAULT_ADDONS = [
+  'dev-tools',
+  'github',
+]
+
 async function customRepositoryFeatures(
   rl: ReturnType<typeof createInterface>,
   language: PromptLanguage,
@@ -386,11 +395,7 @@ async function customRepositoryFeatures(
       label: addon,
       indent: addonDependencyDepth(addon),
     })),
-    [
-      'dev-tools',
-      'github',
-      'vscode',
-    ],
+    CUSTOM_DEFAULT_ADDONS,
     {
       note: labelText(language, TEXT.featureDependencies),
       requires: requiredAddonsFor,

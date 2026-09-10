@@ -47,7 +47,7 @@ add-on 依赖会被自动补全，无需手动按顺序添加：
 `requested` / `enabled` / `autoEnabled`。
 
 `vscode` 是可选的：`--add dev-tools` 只写工具链，不再写 `.vscode/`；需要编辑器集成时显式加
-`--add vscode`。交互式「仓库配置」预设与自定义列表默认都会启用它，所以走预设或交互流程时行为不变。
+`--add vscode`。交互式流程中「全部」预设会包含它，而「自定义」的仓库功能列表默认不勾选它。
 
 ### dev-tools 写入的文件
 

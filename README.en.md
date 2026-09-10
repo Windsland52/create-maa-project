@@ -99,9 +99,10 @@ terminal width, and Ctrl+C always exits quietly with code `130` instead of print
 
 Custom repository features are indented by dependency: selecting a feature also selects the
 features it requires, and clearing a required feature clears everything that depends on it, so
-the checkboxes always show the final set. The rule is `vscode`, `github`, and `agent` require
-`dev-tools` (and `agent` also requires `vscode`), while `git-cliff`, `auto-format`,
-`optimize-images`, `community`, `dependabot`, and `schema-sync` require `github`. The same resolution applies to `--add`, and both the
+the checkboxes always show the final set. Editor integration (`vscode`) starts unchecked; press
+Space to add it. The rule is `vscode`, `github`, and `agent` require `dev-tools` (and `agent` also
+requires `vscode`), while `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`,
+and `schema-sync` require `github`. The same resolution applies to `--add`, and both the
 `Add-ons required by dependencies:` line and the `addons` field of the JSON report spell out the
 difference between what you asked for and what was enabled.
 

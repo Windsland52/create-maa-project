@@ -78,7 +78,7 @@ npx create-maa-project@latest
 
 第 8、9 项按单键 `y`/`n` 回答，回车接受默认值。提示宽度会跟随终端列数折行；随时按 Ctrl+C 可安静退出（退出码 `130`，不会打印 `Error:`）。
 
-自定义仓库功能时，列表按依赖关系缩进，勾选某项会自动勾上它依赖的功能，取消被依赖项也会一并取消依赖它的功能——所以复选框显示的就是最终会启用的集合。依赖规则：`vscode`、`github`、`agent` 依赖 `dev-tools`，`agent` 还依赖 `vscode`；`git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`。用 `--add` 传参时同样会自动补全，并由 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段说明。
+自定义仓库功能时，列表按依赖关系缩进，勾选某项会自动勾上它依赖的功能，取消被依赖项也会一并取消依赖它的功能——所以复选框显示的就是最终会启用的集合。编辑器集成（`vscode`）默认不勾选，需要时按空格选中。依赖规则：`vscode`、`github`、`agent` 依赖 `dev-tools`，`agent` 还依赖 `vscode`；`git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`。用 `--add` 传参时同样会自动补全，并由 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段说明。
 
 项目创建完成后：
 

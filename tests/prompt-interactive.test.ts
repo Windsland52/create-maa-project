@@ -360,7 +360,7 @@ describe('interactive prompt flow', () => {
     expect(lastView).toContain('[x] dev-tools')
     expect(lastView).toContain('[x] github')
     expect(lastView).toContain('[x] git-cliff')
-    // vscode was enabled by the initial selection and cleared with its dev-tools dependency.
+    // vscode is optional and not preselected in Custom, so it stays cleared throughout.
     expect(lastView).toContain('[ ] vscode')
   })
 
@@ -369,15 +369,12 @@ describe('interactive prompt flow', () => {
     // Select git-cliff, then clear github: git-cliff cannot stay enabled without it.
     const options = await runInteractive(harness, { git: 'n' }, 'custom', featureKeys('git-cliff', 'github'))
 
-    expect(options.add).toEqual([
-      'dev-tools',
-      'vscode',
-    ])
+    expect(options.add).toEqual(['dev-tools'])
     const rendered = harness.output().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
     const lastView = lastMenuView(rendered, 'Repository features')
     expect(lastView).toContain('[ ] git-cliff')
     expect(lastView).toContain('[x] dev-tools')
-    expect(lastView).toContain('[x] vscode')
+    expect(lastView).toContain('[ ] vscode')
   })
 
   it('indents the feature list by dependency depth', async () => {
@@ -400,13 +397,25 @@ describe('interactive prompt flow', () => {
     expect(checkboxColumn('vscode')).toBe(4)
     expect(checkboxColumn('git-cliff')).toBe(6)
     expect(lines.find((line) => line.includes('dev-tools'))).toMatch(/^[> ] \[x\] dev-tools$/)
-    // Editor integration stays in the interactive default, matching the previous behaviour.
-    // The result follows the rendered list order, so the sibling vscode precedes github.
+    // Custom starts from the dependency roots only: editor integration stays optional, and the
+    // result follows the rendered order.
+    expect(options.add).toEqual([
+      'dev-tools',
+      'github',
+    ])
+    expect(view).toContain('[ ] vscode')
+  })
+
+  it('enables editor integration when the user selects vscode in Custom', async () => {
+    const harness = createHarness(80)
+    const options = await runInteractive(harness, { git: 'n' }, 'custom', featureKeys('vscode'))
+
     expect(options.add).toEqual([
       'dev-tools',
       'vscode',
       'github',
     ])
+    expect(resolveAddonDependencies(options.add)).toEqual(options.add)
   })
 
   it('exits with 130 and prints no error line when the whole CLI run is cancelled', async () => {

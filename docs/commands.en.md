@@ -49,8 +49,8 @@ human-readable output prints `Add-ons required by dependencies:`, and the `addon
 JSON report carries `requested` / `enabled` / `autoEnabled`.
 
 `vscode` is optional: `--add dev-tools` writes only the toolchain and no longer creates `.vscode/`.
-Add `--add vscode` when you want the editor integration. The interactive repository-setup presets
-and the interactive feature list still enable it, so preset and interactive flows are unchanged.
+Add `--add vscode` when you want the editor integration. The interactive `All` preset includes it,
+while the Custom repository-feature list leaves it unchecked by default.
 
 ### Files written by dev-tools
 

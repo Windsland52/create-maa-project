@@ -71,8 +71,9 @@ enabled set equals your arguments: the human output prints `Add-ons required by 
 and the `addons` field of the JSON report carries `requested` / `enabled` / `autoEnabled`.
 
 `vscode` is optional: `--add dev-tools` writes the toolchain without `.vscode/`, so a caller that
-wants editor integration must pass `--add vscode` (or rely on the interactive presets, which enable
-it). `--template agent` implies `dev-tools` and `vscode`.
+wants editor integration must pass `--add vscode`. The interactive `All` preset enables it and the
+Custom feature list leaves it unchecked, so do not assume an interactive project has `.vscode/`.
+`--template agent` implies `dev-tools` and `vscode`.
 
 ### Files written by dev-tools
 

@@ -114,20 +114,40 @@ describe('repository feature checkbox indentation', () => {
 })
 
 describe('setup preset descriptions', () => {
-  it('lists every add-on the All preset installs, without drifting from setupAddons', () => {
-    const expected = setupAddons('all', [])
+  it('summarizes the All preset instead of listing add-on slugs', () => {
+    // The exhaustive list is pinned by the setupAddons tests above; the prompt should
+    // convey what the preset is for without enumerating implementation-level names.
+    expect(setupAddons('all', [])).toHaveLength(8)
+
+    // "community" is also a plain English word, so only the distinctive slug forms are
+    // meaningful evidence that the description stopped enumerating add-ons.
+    const distinctiveSlugs = setupAddons('all', []).filter((addon) => addon.includes('-'))
 
     for (const language of ['en', 'zh-CN'] as const) {
       const all = setupChoices(language)[0]
       expect(all?.value).toBe('all')
       const description = all?.description ?? ''
 
-      for (const addon of expected) expect(description).toContain(addon)
-      expect(description.match(/dev-tools|github|git-cliff/g)).toHaveLength(3)
-      expect(expected).toContain('dependabot')
-      expect(description).toContain('dependabot')
+      for (const slug of distinctiveSlugs) expect(description.toLowerCase()).not.toContain(slug)
+      expect(description).not.toContain('github')
+      expect(description.length).toBeLessThan(70)
+
+      const categories =
+        language === 'zh-CN' ? ['开发工具', 'GitHub', '社区文件'] : ['dev tools', 'GitHub', 'community']
+      for (const category of categories) expect(description).toContain(category)
     }
-    expect(expected).toHaveLength(8)
+  })
+
+  it('keeps every preset description on a single row at 80 columns', () => {
+    for (const language of ['en', 'zh-CN'] as const) {
+      for (const choice of setupChoices(language)) {
+        const rendered = linesForSelectOne(language, 'Setup', [choice], 0).find((line) =>
+          line.trimStart().startsWith(choice.description ?? '\u0000'),
+        )
+        expect(rendered, `${language} ${choice.value} description row`).toBeDefined()
+        expect(wrapToColumns(rendered ?? '', 80)).toHaveLength(1)
+      }
+    }
   })
 
   it('explains the minimal and custom presets', () => {
@@ -136,7 +156,7 @@ describe('setup preset descriptions', () => {
       expect(all?.description?.length ?? 0).toBeGreaterThan(0)
       expect(minimal?.value).toBe('minimal')
       expect(minimal?.description).toMatch(language === 'zh-CN' ? /不添加/ : /no repository features/i)
-      expect(custom?.description?.length ?? 0).toBeGreaterThan(0)
+      expect(custom?.description).toMatch(language === 'zh-CN' ? /逐项选择/ : /one by one/i)
     }
   })
 
@@ -145,9 +165,10 @@ describe('setup preset descriptions', () => {
 
     expect(lines[0]).toBe('Setup:')
     expect(lines[1]).toBe('> All (Recommended)')
-    expect(lines[2]).toMatch(/^ {4}Add every repository feature: dev-tools/)
+    expect(lines[2]).toBe('    Add dev tools, GitHub automation, and community files.')
+    expect(lines).toContain('    Add no repository features.')
+    expect(lines).toContain('    Choose repository features one by one.')
     expect(lines.at(-1)).toBe('  Up/Down to move, Enter to select.')
-    expect(lines.some((line) => line.startsWith('    ') && line.includes('github'))).toBe(true)
   })
 })
 
@@ -231,16 +252,15 @@ describe('width aware rendering', () => {
   })
 
   it('breaks CJK text after punctuation instead of splitting add-on names', () => {
-    const description = linesForSelectOne('zh-CN', '仓库配置', setupChoices('zh-CN'), 0).find((line) =>
-      line.includes('添加全部仓库功能'),
-    )
-    expect(description).toBeDefined()
-    const rows = wrapToColumns(description ?? '', 80)
+    // The setup summary deliberately no longer enumerates add-ons, so this exercises the
+    // wrapping rules directly on the CJK enumeration that motivated them.
+    const description = `    添加全部仓库功能：${setupAddons('all', []).join('、')}`
+    const rows = wrapToColumns(description, 80)
 
     expect(rows.length).toBeGreaterThan(1)
     for (const row of rows) {
       expect(displayWidth(row)).toBeLessThanOrEqual(80)
-      // A row must never begin with the separator, and no add-on name may be split.
+      // A row must never begin with the separator.
       expect(row.trimStart().startsWith('、')).toBe(false)
     }
     for (const addon of setupAddons('all', [])) {

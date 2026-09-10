@@ -172,7 +172,7 @@ describe('interactive prompt flow', () => {
     expect(options.label).toBe('Extra')
   })
 
-  it('shows what each setup preset does, including the add-ons All installs', async () => {
+  it('shows a one-line description for every setup preset', async () => {
     const harness = createHarness(80)
     const flow = runInteractive(harness, { git: 'n' })
     await harness.waitFor('Setup:')
@@ -181,7 +181,7 @@ describe('interactive prompt flow', () => {
     await flow
     const output = harness.output()
 
-    expect(output).toContain('Add every repository feature: dev-tools, github, git-cliff')
+    expect(output).toContain('Add dev tools, GitHub automation, and community files.')
     expect(output).toContain('Add no repository features.')
     expect(output).toContain('Choose repository features one by one.')
   })
@@ -227,7 +227,9 @@ describe('interactive prompt flow', () => {
   })
 
   it('keeps every rendered row inside a narrow terminal and counts physical rows', async () => {
-    const columns = 60
+    // Narrow enough that the multi-select instruction and the preset summary must wrap;
+    // at 60 columns every prompt now fits on its logical lines.
+    const columns = 40
     const harness = createHarness(columns)
     await runInteractive(harness, { git: 'n' })
 
@@ -243,14 +245,33 @@ describe('interactive prompt flow', () => {
     const clears = [...output.matchAll(/\x1b\[(\d+)F\x1b\[0J/g)].map((match) => Number(match[1]))
     expect(clears).toHaveLength(6)
 
-    // The setup block is the only one whose logical lines exceed the terminal width,
-    // so its count proves the cleanup moved by physical rows instead of logical lines.
+    // The control targets and setup blocks wrap, so their counts prove the cleanup moved
+    // by physical rows instead of logical lines.
+    const rowsFor = (lines: string[]): number => lines.flatMap((line) => wrapToColumns(line, columns)).length
+    const targetLines = linesForSelectMany(
+      'en',
+      'Control targets',
+      [
+        { value: 'Adb', label: 'Android / Emulator (Adb)' },
+        { value: 'Win32', label: 'Windows app (Win32)' },
+        { value: 'MacOS', label: 'macOS app (MacOS)' },
+        { value: 'PlayCover', label: 'PlayCover iOS app' },
+        { value: 'Gamepad', label: 'Gamepad (Windows)' },
+        { value: 'WlRoots', label: 'wlroots app (Linux)' },
+      ],
+      0,
+      new Set(['Adb']),
+      { requireOne: true },
+    )
     const setupLines = linesForSelectOne('en', 'Setup', setupChoices('en'), 0)
-    const setupRows = setupLines.flatMap((line) => wrapToColumns(line, columns))
-    expect(setupRows.length).toBeGreaterThan(setupLines.length)
-    expect(clears[3]).toBe(setupRows.length)
 
-    // The short prompts wrap to nothing, so their counts match their logical lines.
+    expect(rowsFor(targetLines)).toBeGreaterThan(targetLines.length)
+    expect(rowsFor(setupLines)).toBeGreaterThan(setupLines.length)
+    expect(clears[2]).toBe(rowsFor(targetLines))
+    expect(clears[3]).toBe(rowsFor(setupLines))
+
+    // The confirmation prompts fit on one row, so their counts match their logical lines.
+    expect(clears[4]).toBe(1)
     expect(clears[5]).toBe(1)
   })
 

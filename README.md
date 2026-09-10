@@ -72,7 +72,7 @@ npx create-maa-project@latest
 4. **项目类型**：`pipeline` 适合普通任务/资源项目；只有需要 Python 自定义逻辑时才选 `agent`。
 5. **许可证**：默认 AGPL-3.0-or-later。
 6. **控制目标**：可多选，默认 Adb。
-7. **仓库配置**：全部 / 最小 / 自定义；每个预设都会显示一行说明，全部会装上 `dev-tools`、`github`、`git-cliff`、`auto-format`、`optimize-images`、`schema-sync`、`community`、`dependabot`，最小则不添加任何仓库功能。
+7. **仓库配置**：全部 / 最小 / 自定义；每个预设都会显示一行概括说明（全部＝开发工具、GitHub 自动化与社区文件，最小＝不添加任何仓库功能）。完整的 add-on 清单：全部会装上 `dev-tools`、`github`、`git-cliff`、`auto-format`、`optimize-images`、`schema-sync`、`community`、`dependabot`；选自定义可以逐项查看并勾选。
 8. **额外资源包**：默认不添加。
 9. **初始化 Git 仓库**：目标已在 Git 仓库内时默认否，否则默认是。
 

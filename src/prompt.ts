@@ -112,8 +112,8 @@ const TEXT = {
     zhCN: '全部',
   },
   setupAllDescription: {
-    en: 'Add every repository feature: ',
-    zhCN: '添加全部仓库功能：',
+    en: 'Add dev tools, GitHub automation, and community files.',
+    zhCN: '添加开发工具、GitHub 自动化与社区文件。',
   },
   setupCustomDescription: {
     en: 'Choose repository features one by one.',
@@ -325,13 +325,17 @@ export function setupAddons(setup: SetupPreset, current: string[]): string[] {
   return current
 }
 
+/**
+ * Preset descriptions stay deliberately summary-level: the individual add-on slugs are
+ * implementation detail a new user cannot act on, and the exhaustive list would wrap the
+ * choice onto two rows. Pick Custom to see every feature by name.
+ */
 export function setupChoices(language: PromptLanguage): Choice<SetupPreset>[] {
-  const separator = language === 'zh-CN' ? '、' : ', '
   return [
     {
       value: 'all',
       label: recommendedLabel(language, label(language, TEXT.setupAll)),
-      description: `${label(language, TEXT.setupAllDescription)}${SETUP_ALL_ADDONS.join(separator)}`,
+      description: label(language, TEXT.setupAllDescription),
     },
     {
       value: 'minimal',

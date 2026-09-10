@@ -85,9 +85,11 @@ The interactive flow asks the following questions in order; press Enter to accep
    you need Python custom logic.
 5. **License**: defaults to AGPL-3.0-or-later.
 6. **Control targets**: multi-select, defaults to Adb.
-7. **Repository setup**: all / minimal / custom; every preset prints a one-line explanation.
-   All installs `dev-tools`, `github`, `git-cliff`, `auto-format`, `optimize-images`,
-   `schema-sync`, `community`, and `dependabot`; minimal adds no repository features.
+7. **Repository setup**: all / minimal / custom; every preset prints a one-line summary
+   (all = dev tools, GitHub automation, and community files; minimal = no repository
+   features). The add-ons All installs are `dev-tools`, `github`, `git-cliff`,
+   `auto-format`, `optimize-images`, `schema-sync`, `community`, and `dependabot`; pick
+   custom to review and toggle each one by name.
 8. **Extra resource pack**: not added by default.
 9. **Git repository initialization**: defaults to no inside an existing Git repository,
    yes otherwise.

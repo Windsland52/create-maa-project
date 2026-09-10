@@ -190,13 +190,16 @@ jobs:
         with:
           name: npm-package
           path: dist/npm
+      # No registry-url and no NODE_AUTH_TOKEN on purpose: publishing authenticates through npm
+      # trusted publishing (OIDC). setup-node would otherwise write an .npmrc whose placeholder
+      # token takes precedence over the OIDC exchange, which fails as a masked E404 on PUT.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
       - name: Publish npm package if needed
         shell: bash
         run: |
+          npm --version
           package="$(find dist/npm -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           if [[ -z "$package" ]]; then
             echo "npm package artifact is missing" >&2
@@ -209,11 +212,13 @@ jobs:
           package_version="$(node -e 'const value = require(process.argv[1]); process.stdout.write(value.version)' "$metadata_root/package/package.json")"
           if npm view "$package_name@$package_version" version --json >/dev/null 2>&1; then
             echo "$package_name@$package_version is already published; skipping npm publish."
-          else
-            npm publish "$package" --access public --provenance
+            exit 0
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # A stale token in any npmrc would shadow trusted publishing, so drop it explicitly.
+          npm config delete "//registry.npmjs.org/:_authToken" >/dev/null 2>&1 || true
+          # Provenance is kept explicit: it is generated from the same OIDC identity, and losing it
+          # silently would be a supply-chain regression.
+          npm publish "$package" --access public --provenance
 
   pypi:
     needs: npm

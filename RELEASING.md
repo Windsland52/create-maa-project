@@ -83,7 +83,12 @@ tag 推送后触发 `.github/workflows/release.yml`，任务链如下（`needs` 
 | `npm`              | `github-release`                    | 发布 npm 包（已存在同版本则跳过），带 provenance                                              |
 | `pypi`             | `npm`                               | 构建并发布 Python wheel，安装后 smoke                                                         |
 
-**必要的 secret**：`NPM_TOKEN`（npm 发布）。PyPI 走 Trusted Publishing，用 `id-token`，无需 token。
+**凭据（Trusted Publishing，无需 secret）**：npm 与 PyPI 都通过 OIDC 发布，不使用长期 token。npm 侧需先在
+npmjs.com 的包设置中配置 trusted publisher：**Repository** `Windsland52/create-maa-project`、
+**Workflow filename** `release.yml`、**Environment** 留空。PyPI 侧已配置完成。
+
+CI 不需要 `NPM_TOKEN`。若 `.npmrc` 中存在 `_authToken`，它会**优先于** OIDC 交换并导致发布失败，因此发布
+步骤会显式删除该键；`setup-node` 也不再传 `registry-url`（它会写入带占位 token 的 `.npmrc`）。
 
 重复执行安全：npm 与 PyPI 都会跳过已发布的同版本（`skip-existing`），因此 tag 推送失败后重跑不会
 产生重复发布。
@@ -94,10 +99,24 @@ tag 推送后触发 `.github/workflows/release.yml`，任务链如下（`needs` 
   （`v3.3.1`）而不是撤销。
 - GitHub Release 可以删除并重建；SEA 二进制与 manifest 随 Release 一起替换。
 - PyPI 同样不支持覆盖，只能发新版本。
-- **不要移动或重建已推送的 tag**：已发布的版本号必须保持指向同一份内容。
+- **不要移动或重建已推送的 tag**：已发布的版本号必须保持指向同一份内容。若某个 tag 只完成了部分发布
+  （例如 npm/PyPI 失败），正确做法是打**新版本**并前向修复，而不是把旧 tag 指到别处。
 
 ## 已知隐患
 
+- **发布失败后无法就地把同一个 tag 重新发出去**：GitHub 使用 **tag 指向的那份 workflow 文件**执行，
+  因此修好 `release.yml` 之后，`gh run rerun`（重跑原运行）与 `gh workflow run --ref <tag>`（按 tag 触发）
+  都仍会执行**旧版** workflow，再次失败。要么打一个新版本 tag（推荐，例如 `v3.3.1`），要么删除 Release
+  与 tag 后重建——但后者违反下方「不要移动 tag」的规则，需自行权衡。
+- **失败是「部分发布」**：`check` → `sea` → `release-manifest` → `release_notes` → `github-release` 会先成功，
+  只有 `npm`/`pypi` 失败。此时 GitHub Release 与 6 个二进制已经对用户可见，而 npm/PyPI 上仍是旧版本。
+  修复后重跑时，已完成的任务不会重做（`github-release` 会更新同一 Release），npm/PyPI 会跳过已存在版本，
+  因此重跑是安全的。
+- **npm 把鉴权失败报成 `E404`**：`npm error 404 Not Found - PUT https://registry.npmjs.org/<pkg>` 几乎总是
+  凭据问题，而不是包不存在。判断方法：若日志里出现
+  `publish Signed provenance statement ...` 说明 OIDC/provenance 正常，问题只在发布凭据本身。
+  历史案例：2026-09-10 的 `v3.3.0` 因 `NPM_TOKEN`（更新于 06-11，恰在 90 天有效期内）失效而失败，
+  随后改用 Trusted Publishing 消除该类问题。
 - **`npm publish` 未带 `--tag`**，而 npm 对预发布版本号默认打 `latest`。因此打
   `v3.3.0-beta.1` 这类预发布 tag，会让 `npm install create-maa-project` 直接拿到 beta，
   而 GitHub Release 却标记为 prerelease，两处语义不一致。**在此修复前，预发布 tag 不适合用来试水**；

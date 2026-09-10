@@ -58,10 +58,10 @@ while the Custom repository-feature list leaves it unchecked by default.
 
 | File                                          | Purpose                                                      | Refresh |
 | --------------------------------------------- | ------------------------------------------------------------ | ------- |
-| `.node-version`                               | Pins Node 24                                                 | managed |
+| `.node-version`                               | Pins Node 22                                                 | managed |
 | `.prettierrc.mjs`                             | Prettier config (MaaFW sort and multiline-array plugins)     | managed |
 | `.prettierignore`                             | Ignores generated schema baselines and project-owned sources | once    |
-| `package.json`                                | devDependencies, `engines.node >= 24`, `packageManager`      | once    |
+| `package.json`                                | devDependencies, `engines.node >= 22.13`, `packageManager`   | once    |
 | `pnpm-workspace.yaml`                         | pnpm workspace config                                        | once    |
 | `tools/validate-schema.mjs`                   | Validation script used by `check:schema`                     | managed |
 | `tools/schema/interface.schema.json`          | Upstream MaaFW baseline (interface)                          | managed |

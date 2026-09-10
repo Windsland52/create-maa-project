@@ -16,7 +16,9 @@ await build({
     outfile: "dist/sea/index.js",
     bundle: true,
     platform: "node",
-    target: "node24",
+    // Downlevel to the oldest supported line so the bundle parses there too. The SEA binary itself
+    // embeds whichever Node builds it (CI uses the newest LTS), so this only widens compatibility.
+    target: "node22",
     format: "cjs",
     logOverride: {
         "empty-import-meta": "silent",

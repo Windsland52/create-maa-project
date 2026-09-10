@@ -2054,7 +2054,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     await createProject(defaultOptions({ name: 'maa-node-tooling-test' }))
     const projectRoot = join(root, 'maa-node-tooling-test')
     await clearPending(projectRoot)
-    await writeFile(join(projectRoot, '.node-version'), '22\n', 'utf8')
+    await writeFile(join(projectRoot, '.node-version'), '20\n', 'utf8')
     await writeFile(
       join(projectRoot, '.github/workflows/check.yml'),
       `name: Check
@@ -2063,7 +2063,7 @@ jobs:
     steps:
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 20
 `,
       'utf8',
     )
@@ -2072,8 +2072,8 @@ jobs:
     const output = report.lines.join('\n')
 
     expect(report.ok).toBe(false)
-    expect(output).toContain('.node-version must pin Node 24')
-    expect(output).toContain('.github/workflows/check.yml must use Node 24')
+    expect(output).toContain('.node-version must pin Node 22')
+    expect(output).toContain('.github/workflows/check.yml must use Node 22')
     expect(output).toContain('To fix: create-maa-project --add dev-tools')
     expect(output).toContain('To fix: create-maa-project --add github')
 

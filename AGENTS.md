@@ -93,6 +93,17 @@ Coverage and the Python wrapper tests are part of `pnpm test`. Fix the cause of 
 failure rather than reformatting unrelated files; the Prettier config uses a MaaFW sort plugin and
 `multilineArraysWrapThreshold: -1` for TypeScript, so array and key order are deliberate.
 
+## Node Support Floor
+
+`src/node-support.ts` is the single source of truth: `SUPPORTED_NODE_MAJOR` drives `.node-version`
+and every generated workflow, `SUPPORTED_NODE_RANGE` drives `engines.node`. The floor is set by the
+pnpm major the generated projects pin (pnpm 11 needs Node >=22.13 for the `node:sqlite` builtin),
+not by anything in the CLI's own code, so raising or lowering it is a pnpm decision.
+
+Never write the version literally in a template, in `doctor.ts`, or in generated output; that is
+how it drifted before. `tests/node-support.test.ts` fails if a hardcoded `24` reappears, and CI runs
+the full suite on both the floor and the current LTS so the floor cannot drift upward unnoticed.
+
 ## Testing the CLI
 
 - Tests import `src/` directly; the child-process suites run `dist/index.js`, so **rebuild

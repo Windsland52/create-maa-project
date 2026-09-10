@@ -4,7 +4,12 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 > 维护方式：条目由人工精炼（合并同类项、以用户视角描述），可用 `pnpm run changelog:draft` 生成 git-cliff 草稿作为参考；完整逐提交历史见 `git log`。
 
-## [3.3.1] - 2026-09-10
+## [3.4.0] - 2026-09-10
+
+### 变更
+
+- **支持的 Node.js 下限从 24 降到 22.13**：本 CLI 与生成的项目都改为要求 `>=22.13`，`.node-version` 与生成的 GitHub Actions 均固定 Node 22。此前要求 24 并无技术依据——CLI 自身未使用任何 Node 24 独有 API，真正的约束来自生成项目所固定的 `pnpm@11.5.1`（其要求为 `>=22.13`）。已在 Node 22 上实测：完整测试套件、项目创建、`pnpm install`、`check:schema`、`check:maa` 全部通过
+- Node 下限现在由 `src/node-support.ts` 单点定义，`.node-version`、生成的 workflow 与 `engines.node` 全部由它派生；`--doctor` 的版本检查同样改用该常量，不再硬编码
 
 ### 修复
 
@@ -12,7 +17,7 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 > **从 npm / PyPI 安装的用户请读这里**：`v3.3.0` 只发布了 GitHub Release（含 6 个平台二进制），它的 npm 与 PyPI 发布因发布凭据失效而失败。因此本版本是 3.3 系列在 npm / PyPI 上的**首个版本**，其用户可见变更与下方的 [3.3.0] 完全相同（包括两处不兼容变更），升级前请一并阅读。
 
-[3.3.1]: https://github.com/Windsland52/create-maa-project/compare/v3.3.0...v3.3.1
+[3.4.0]: https://github.com/Windsland52/create-maa-project/compare/v3.3.0...v3.4.0
 
 ## [3.3.0] - 2026-09-10
 

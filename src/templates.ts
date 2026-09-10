@@ -4,6 +4,7 @@ import { getAsset, isSea } from 'node:sea'
 import { fileURLToPath } from 'node:url'
 import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
 import { DEFAULT_OCR_SUBMODULE_PATH, DEFAULT_OCR_SUBMODULE_URL } from './assets.js'
+import { SUPPORTED_NODE_MAJOR, SUPPORTED_NODE_RANGE } from './node-support.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
 const TEMPLATE_ROOT = resolveTemplateRoot()
@@ -173,7 +174,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
 
 export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   return [
-    managed('.node-version', '24\n'),
+    managed('.node-version', `${SUPPORTED_NODE_MAJOR}\n`),
     managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
     once('.prettierignore', template('base/.prettierignore')),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
@@ -275,7 +276,10 @@ export function releaseWorkflowFile(
 
 export function schemaSyncFiles(): ManagedFileInput[] {
   return [
-    managed('.github/workflows/schema-sync.yml', template('addons/schema-sync/.github/workflows/schema-sync.yml')),
+    managed(
+      '.github/workflows/schema-sync.yml',
+      template('addons/schema-sync/.github/workflows/schema-sync.yml', { nodeMajor: SUPPORTED_NODE_MAJOR }),
+    ),
     managed('tools/sync-schema.mjs', template('addons/schema-sync/tools/sync-schema.mjs')),
   ]
 }
@@ -443,6 +447,7 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
     name: jsonStringContent(input.slug),
     version: jsonStringContent(input.version),
     license: jsonStringContent(packageLicense(input.license)),
+    nodeRange: jsonStringContent(SUPPORTED_NODE_RANGE),
     scripts: indentContinuation(stableJson(packageScripts(input)).trimEnd(), 4),
   })
 }
@@ -489,12 +494,13 @@ function maatoolsConfig(_resources: string[], includeAgent = false): string {
 }
 
 function checkWorkflow(): string {
-  return template('addons/github/.github/workflows/check.yml')
+  return template('addons/github/.github/workflows/check.yml', { nodeMajor: SUPPORTED_NODE_MAJOR })
 }
 
 function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>): string {
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/release.yml', {
+      nodeMajor: SUPPORTED_NODE_MAJOR,
       slug: input.slug,
       releaseArtifactName: releaseArtifactName(input),
       releaseTargetMatrix: releaseTargetMatrixYaml(),
@@ -647,11 +653,11 @@ function gitCliffConfig(): string {
 }
 
 function autoFormatWorkflow(): string {
-  return template('addons/auto-format/.github/workflows/format.yml')
+  return template('addons/auto-format/.github/workflows/format.yml', { nodeMajor: SUPPORTED_NODE_MAJOR })
 }
 
 function optimizeImagesWorkflow(): string {
-  return template('addons/optimize-images/.github/workflows/optimize-images.yml')
+  return template('addons/optimize-images/.github/workflows/optimize-images.yml', { nodeMajor: SUPPORTED_NODE_MAJOR })
 }
 
 function optimizeImagesScript(): string {

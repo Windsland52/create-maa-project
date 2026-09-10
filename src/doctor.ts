@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises'
 import { readProjectConfig } from './project.js'
 import type { MaaProjectConfig } from './types.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
+import { pinsSupportedNode, SUPPORTED_NODE_MAJOR } from './node-support.js'
 import { exists, readText } from './utils.js'
 
 export type DoctorReport = {
@@ -290,8 +291,8 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
     lines.push('[ERR] .node-version is missing.')
     lines.push('      To fix: create-maa-project --add dev-tools')
     ok = false
-  } else if ((await readText(nodeVersionPath)).trim() !== '24') {
-    lines.push('[ERR] .node-version must pin Node 24.')
+  } else if (!pinsSupportedNode(await readText(nodeVersionPath))) {
+    lines.push(`[ERR] .node-version must pin Node ${SUPPORTED_NODE_MAJOR}.`)
     lines.push('      To fix: create-maa-project --add dev-tools')
     ok = false
   }
@@ -312,14 +313,14 @@ async function checkNodeToolingFiles(root: string, config: MaaProjectConfig, lin
       ok = false
       continue
     }
-    if (!workflowPinsNode24(await readText(workflowPath))) {
-      lines.push(`[ERR] ${workflow} must use Node 24 in actions/setup-node.`)
+    if (!workflowPinsSupportedNode(await readText(workflowPath))) {
+      lines.push(`[ERR] ${workflow} must use Node ${SUPPORTED_NODE_MAJOR} in actions/setup-node.`)
       lines.push(`      To fix: ${workflowRepairCommand(workflow)}`)
       ok = false
     }
   }
 
-  if (ok) lines.push('[OK] Node tooling files pin Node 24.')
+  if (ok) lines.push(`[OK] Node tooling files pin Node ${SUPPORTED_NODE_MAJOR}.`)
   return ok
 }
 
@@ -574,8 +575,9 @@ function isProjectRelativePath(path: string): boolean {
   )
 }
 
-function workflowPinsNode24(content: string): boolean {
-  return /node-version:\s*['"]?24['"]?/.test(content)
+function workflowPinsSupportedNode(content: string): boolean {
+  const match = /node-version:\s*['"]?([^'"\s]+)['"]?/.exec(content)
+  return match?.[1] !== undefined && pinsSupportedNode(match[1])
 }
 
 function editorDefaultFormatter(value: unknown): string | undefined {

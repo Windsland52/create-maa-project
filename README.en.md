@@ -40,7 +40,7 @@ paths share the same write paths, keeping behavior and rollback mechanisms consi
 
 ## Install The CLI
 
-The simplest setup is the npm CLI. Install Node.js (>= 24) first, then install
+The simplest setup is the npm CLI. Install Node.js (>= 22.13) first, then install
 `create-maa-project` globally:
 
 ```bash
@@ -253,7 +253,7 @@ For the full creation options (`--slug`, `--controller`, `--license`, `--git`, .
 
 ## Tooling
 
-Generated repository tooling targets Node 24 and pnpm 11.5.1. Dev-tool projects include
+Generated repository tooling targets Node 22 (>= 22.13) and pnpm 11.5.1. Dev-tool projects include
 project-local scripts for formatting, schema validation, MaaFW checks, project state
 linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python checks.
 When a generated project is opened in VS Code, `.vscode/tasks.json` syncs dependencies

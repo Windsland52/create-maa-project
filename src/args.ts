@@ -394,6 +394,7 @@ Creation options:
   --template <pipeline|agent>       Select the initial template.
   --slug <project-id>               Set the ASCII project identifier.
   --name <display-name>             Set the human-readable project name.
+  --version <semver>                Set the project version (not the CLI version).
   --controller <kind[,kind...]>     Select MaaFW controllers.
   --license <AGPL-3.0-or-later|MIT|None>
                                     Set the project license.
@@ -435,9 +436,6 @@ Common options:
   --log-file <path>                 Write logs to a specific file.
   -h, --help                        Show this help and exit.
   -V, --cli-version                 Print the CLI version and exit.
-
-Project version:
-  --version <semver>                Set the project version; this is not the CLI version.
 
 Examples:
   create-maa-project my-project --template agent --license MIT

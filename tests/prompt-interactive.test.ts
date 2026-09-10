@@ -1,0 +1,293 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { parseArgs } from '../src/args.js'
+import { runCli } from '../src/index.js'
+import type { CliOptions } from '../src/types.js'
+import {
+  displayWidth,
+  isPromptCancelled,
+  linesForSelectMany,
+  linesForSelectOne,
+  PromptCancelledError,
+  promptForCreateOptions,
+  setupChoices,
+  wrapToColumns,
+} from '../src/prompt.js'
+
+const ESCAPE = /\x1b\[[0-9;?]*[A-Za-z]/g
+
+type Harness = {
+  output: () => string
+  rows: () => string[]
+  send: (name: string, sequence: string, ctrl?: boolean) => void
+  enter: () => void
+  ctrlC: () => void
+  type: (text: string) => void
+  waitFor: (marker: string) => Promise<void>
+  restore: () => void
+}
+
+const active: Harness[] = []
+
+/**
+ * Minimal TTY stand-in: readline keys off `isTTY`, and the prompt code writes the
+ * redraw blocks to `process.stdout`, so patching those three properties is enough to
+ * drive the real interactive code in-process.
+ */
+function createHarness(columns: number): Harness {
+  const stdin = process.stdin as unknown as Record<string, unknown>
+  const original = {
+    stdinTTY: Object.getOwnPropertyDescriptor(process.stdin, 'isTTY'),
+    stdoutTTY: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'),
+    columns: Object.getOwnPropertyDescriptor(process.stdout, 'columns'),
+    write: process.stdout.write,
+    setRawMode: stdin.setRawMode,
+    isRaw: stdin.isRaw,
+  }
+  const chunks: string[] = []
+
+  Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
+  Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true })
+  Object.defineProperty(process.stdout, 'columns', { value: columns, configurable: true })
+  stdin.setRawMode = () => {}
+  stdin.isRaw = false
+  process.stdout.write = ((chunk: string) => {
+    chunks.push(String(chunk))
+    return true
+  }) as typeof process.stdout.write
+
+  const harness: Harness = {
+    output: () => chunks.join(''),
+    rows: () =>
+      chunks
+        .join('')
+        .replace(ESCAPE, '')
+        .split('\n')
+        .filter((line) => line !== ''),
+    send: (name, sequence, ctrl = false) => {
+      process.stdin.emit('keypress', sequence, { name, sequence, ctrl })
+    },
+    enter: () => harness.send('return', '\r'),
+    ctrlC: () => harness.send('c', '\u0003', true),
+    type: (text) => {
+      for (const char of text) harness.send(char, char)
+    },
+    waitFor: async (marker) => {
+      const deadline = Date.now() + 3000
+      while (!harness.output().includes(marker)) {
+        if (Date.now() > deadline) {
+          throw new Error(`timed out waiting for ${JSON.stringify(marker)} in:\n${harness.output()}`)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5))
+      }
+    },
+    restore: () => {
+      process.stdout.write = original.write
+      if (original.stdinTTY) Object.defineProperty(process.stdin, 'isTTY', original.stdinTTY)
+      if (original.stdoutTTY) Object.defineProperty(process.stdout, 'isTTY', original.stdoutTTY)
+      if (original.columns) Object.defineProperty(process.stdout, 'columns', original.columns)
+      stdin.setRawMode = original.setRawMode
+      stdin.isRaw = original.isRaw
+    },
+  }
+  active.push(harness)
+  return harness
+}
+
+afterEach(() => {
+  while (active.length > 0) active.pop()?.restore()
+  process.exitCode = 0
+})
+
+function promptOptions(): CliOptions {
+  return parseArgs([
+    '--lang',
+    'en',
+  ])
+}
+
+/** Answers every prompt in the default order and returns the resulting options. */
+async function runInteractive(
+  harness: Harness,
+  answer: Partial<Record<'resource-pack' | 'git', string>> = {},
+): Promise<CliOptions> {
+  const options = promptOptions()
+  const flow = promptForCreateOptions(options)
+
+  await harness.waitFor('Project folder [')
+  harness.enter()
+  await harness.waitFor('Display name [')
+  harness.enter()
+  await harness.waitFor('Project type:')
+  harness.enter()
+  await harness.waitFor('License:')
+  harness.enter()
+  await harness.waitFor('Control targets:')
+  harness.enter()
+  await harness.waitFor('Setup:')
+  harness.enter()
+  await harness.waitFor('Add extra resource pack (')
+  harness.send(answer['resource-pack'] === 'y' ? 'y' : 'n', answer['resource-pack'] === 'y' ? 'y' : 'n')
+  if (answer['resource-pack'] === 'y') {
+    await harness.waitFor('Resource pack folder [')
+    harness.enter()
+    await harness.waitFor('Resource pack display name [')
+    harness.enter()
+  }
+  await harness.waitFor('Initialize Git repository (')
+  harness.send(answer.git === 'y' ? 'y' : 'n', answer.git === 'y' ? 'y' : 'n')
+
+  return flow
+}
+
+describe('interactive prompt flow', () => {
+  it('asks the core decisions in order and accepts single-key y/n answers', async () => {
+    const harness = createHarness(80)
+    const options = await runInteractive(harness, { 'resource-pack': 'y', git: 'n' })
+    const output = harness.output()
+
+    const order = [
+      'Project folder [',
+      'Display name [',
+      'Project type:',
+      'License:',
+      'Control targets:',
+      'Setup:',
+      'Add extra resource pack (',
+      'Initialize Git repository (',
+    ]
+    const positions = order.map((marker) => output.indexOf(marker))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+
+    // A single "y" adds the resource pack; a single "n" leaves Git disabled.
+    expect(options.add).toContain('resource-pack')
+    expect(options.initializeGit).toBe(false)
+    expect(output).toContain('Add extra resource pack: Yes')
+    expect(output).toContain('Initialize Git repository: No')
+
+    // The typed key must not be echoed onto the screen, and must not stay in readline's
+    // line buffer where the following text questions would consume it as their answer.
+    expect(harness.rows()).not.toContain('y')
+    expect(options.resourcePackSlug).toBe('extra')
+    expect(options.label).toBe('Extra')
+  })
+
+  it('shows what each setup preset does, including the add-ons All installs', async () => {
+    const harness = createHarness(80)
+    const flow = runInteractive(harness, { git: 'n' })
+    await harness.waitFor('Setup:')
+    harness.enter()
+
+    await flow
+    const output = harness.output()
+
+    expect(output).toContain('Add every repository feature: dev-tools, github, git-cliff')
+    expect(output).toContain('Add no repository features.')
+    expect(output).toContain('Choose repository features one by one.')
+  })
+
+  it('cancels quietly when Ctrl+C interrupts a free-text question', async () => {
+    const harness = createHarness(80)
+    const options = promptOptions()
+    const flow = promptForCreateOptions(options)
+
+    await harness.waitFor('Project folder [')
+    harness.ctrlC()
+
+    const error = await flow.then(
+      () => null,
+      (reason: unknown) => reason,
+    )
+    expect(isPromptCancelled(error)).toBe(true)
+    expect(error).toBeInstanceOf(PromptCancelledError)
+    // readline's own "Aborted with Ctrl+C" must not leak to the user.
+    expect((error as Error).message).not.toContain('Aborted')
+  })
+
+  it('cancels quietly when Ctrl+C interrupts a select prompt', async () => {
+    const harness = createHarness(80)
+    const options = promptOptions()
+    const flow = promptForCreateOptions(options)
+
+    await harness.waitFor('Project folder [')
+    harness.enter()
+    await harness.waitFor('Display name [')
+    harness.enter()
+    await harness.waitFor('Project type:')
+    harness.ctrlC()
+
+    const error = await flow.then(
+      () => null,
+      (reason: unknown) => reason,
+    )
+    expect(isPromptCancelled(error)).toBe(true)
+    // Before the SIGINT listener existed this threw ERR_USE_AFTER_CLOSE from the
+    // redraw cleanup and crashed the process instead of cancelling.
+    expect(harness.output()).not.toContain('ERR_USE_AFTER_CLOSE')
+  })
+
+  it('keeps every rendered row inside a narrow terminal and counts physical rows', async () => {
+    const columns = 60
+    const harness = createHarness(columns)
+    await runInteractive(harness, { git: 'n' })
+
+    const output = harness.output()
+    for (const row of harness.rows()) {
+      expect(displayWidth(row), `row wider than ${columns} columns: ${JSON.stringify(row)}`).toBeLessThanOrEqual(
+        columns,
+      )
+    }
+
+    // Every selectable prompt clears the screen once, so the cursor-up counts come in
+    // prompt order: project type, license, control targets, setup, resource pack, git.
+    const clears = [...output.matchAll(/\x1b\[(\d+)F\x1b\[0J/g)].map((match) => Number(match[1]))
+    expect(clears).toHaveLength(6)
+
+    // The setup block is the only one whose logical lines exceed the terminal width,
+    // so its count proves the cleanup moved by physical rows instead of logical lines.
+    const setupLines = linesForSelectOne('en', 'Setup', setupChoices('en'), 0)
+    const setupRows = setupLines.flatMap((line) => wrapToColumns(line, columns))
+    expect(setupRows.length).toBeGreaterThan(setupLines.length)
+    expect(clears[3]).toBe(setupRows.length)
+
+    // The short prompts wrap to nothing, so their counts match their logical lines.
+    expect(clears[5]).toBe(1)
+  })
+
+  it('keeps long multi-select lines narrow by moving the required hint to its own row', () => {
+    const lines = linesForSelectMany<string>('en', 'Control targets', [], 0, new Set<string>(), { requireOne: true })
+
+    expect(lines.at(-1)).toBe('  At least one required.')
+    expect(lines.some((line) => line.includes('(At least one required.)'))).toBe(false)
+  })
+
+  it('exits with 130 and prints no error line when the whole CLI run is cancelled', async () => {
+    const harness = createHarness(80)
+    const previousAutoUpdate = process.env.CREATE_MAA_PROJECT_AUTO_UPDATE
+    const originalError = process.stderr.write
+    const errors: string[] = []
+    process.env.CREATE_MAA_PROJECT_AUTO_UPDATE = '0'
+    process.stderr.write = ((chunk: string) => {
+      errors.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write
+
+    try {
+      const exitCode = runCli(['--lang', 'en'])
+      await harness.waitFor('Project folder [')
+      harness.ctrlC()
+
+      // Interrupt convention: quiet 130 instead of "Error: 已取消交互。" on exit code 1.
+      expect(await exitCode).toBe(130)
+    } finally {
+      process.stderr.write = originalError
+      if (previousAutoUpdate === undefined) delete process.env.CREATE_MAA_PROJECT_AUTO_UPDATE
+      else process.env.CREATE_MAA_PROJECT_AUTO_UPDATE = previousAutoUpdate
+    }
+
+    const stderr = errors.join('')
+    expect(stderr).not.toContain('Error:')
+    expect(stderr).not.toContain('Aborted')
+    expect(harness.output()).not.toContain('Error:')
+  })
+})

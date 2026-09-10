@@ -81,14 +81,19 @@ The interactive flow asks the following questions in order; press Enter to accep
 2. **Project ID**: only asked when the folder name cannot be converted into a valid ID
    automatically; otherwise the ID is derived and shown.
 3. **Display name**: defaults to the folder name.
-4. **License**: defaults to AGPL-3.0-or-later.
-5. **Control targets**: multi-select, defaults to Adb.
-6. **Project type**: `pipeline` for a normal task/resource project; choose `agent` only when
+4. **Project type**: `pipeline` for a normal task/resource project; choose `agent` only when
    you need Python custom logic.
-7. **Repository setup**: all / minimal / custom presets.
+5. **License**: defaults to AGPL-3.0-or-later.
+6. **Control targets**: multi-select, defaults to Adb.
+7. **Repository setup**: all / minimal / custom; every preset prints a one-line explanation.
+   All installs `dev-tools`, `github`, `git-cliff`, `auto-format`, `optimize-images`,
+   `schema-sync`, `community`, and `dependabot`; minimal adds no repository features.
 8. **Extra resource pack**: not added by default.
 9. **Git repository initialization**: defaults to no inside an existing Git repository,
    yes otherwise.
+
+Questions 8 and 9 take a single `y`/`n` key; Enter accepts the default. Prompt rows wrap to the
+terminal width, and Ctrl+C always exits quietly with code `130` instead of printing `Error:`.
 
 After the project is created:
 

@@ -23,7 +23,7 @@ import {
   withProjectLock,
   type BackupInspection,
 } from './project.js'
-import { promptForCreateOptions } from './prompt.js'
+import { isPromptCancelled, PROMPT_CANCELLED_EXIT_CODE, promptForCreateOptions } from './prompt.js'
 import {
   createBackupJsonReport,
   createCleanCacheJsonReport,
@@ -271,6 +271,14 @@ async function main(): Promise<void> {
     printLogPath(projectLogger)
   } catch (error) {
     clearActiveProgress()
+    // An interrupted interactive prompt is not a command failure: leave the terminal
+    // clean and exit with the conventional interrupt status instead of printing
+    // "Error: ..." for a Ctrl+C the user pressed on purpose. Report mode forces
+    // non-interactive execution, so this branch cannot swallow a JSON report.
+    if (isPromptCancelled(error)) {
+      process.exitCode = PROMPT_CANCELLED_EXIT_CODE
+      return
+    }
     logger = logger ?? (await tryCreateLogger(process.cwd(), logFile, wantsReport ? executionId : undefined))
     if (verboseRequested && !argvLogged) {
       await safeLogInfo(logger, `argv=${JSON.stringify(process.argv.slice(2))}`)

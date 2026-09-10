@@ -1,11 +1,21 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  confirmHint,
+  confirmKeyResult,
+  confirmLines,
+  displayWidth,
   inferPromptProjectIdentity,
+  isPromptCancelled,
   labelText,
   linesForSelectMany,
+  linesForSelectOne,
+  PROMPT_CANCELLED_EXIT_CODE,
+  PromptCancelledError,
   promptForCreateOptions,
   setupAddons,
+  setupChoices,
+  wrapToColumns,
 } from '../src/prompt.js'
 import { parseArgs } from '../src/args.js'
 
@@ -100,6 +110,172 @@ describe('repository feature checkbox indentation', () => {
 
     expect(note).toBe('缩进的功能会一并启用其上级功能。')
     expect(linesForSelectMany('zh-CN', '仓库功能', choices, 0, new Set(), { note })[1]).toBe(`  ${note}`)
+  })
+})
+
+describe('setup preset descriptions', () => {
+  it('lists every add-on the All preset installs, without drifting from setupAddons', () => {
+    const expected = setupAddons('all', [])
+
+    for (const language of ['en', 'zh-CN'] as const) {
+      const all = setupChoices(language)[0]
+      expect(all?.value).toBe('all')
+      const description = all?.description ?? ''
+
+      for (const addon of expected) expect(description).toContain(addon)
+      expect(description.match(/dev-tools|github|git-cliff/g)).toHaveLength(3)
+      expect(expected).toContain('dependabot')
+      expect(description).toContain('dependabot')
+    }
+    expect(expected).toHaveLength(8)
+  })
+
+  it('explains the minimal and custom presets', () => {
+    for (const language of ['en', 'zh-CN'] as const) {
+      const [all, minimal, custom] = setupChoices(language)
+      expect(all?.description?.length ?? 0).toBeGreaterThan(0)
+      expect(minimal?.value).toBe('minimal')
+      expect(minimal?.description).toMatch(language === 'zh-CN' ? /不添加/ : /no repository features/i)
+      expect(custom?.description?.length ?? 0).toBeGreaterThan(0)
+    }
+  })
+
+  it('renders each preset description under its label', () => {
+    const lines = linesForSelectOne('en', 'Setup', setupChoices('en'), 0)
+
+    expect(lines[0]).toBe('Setup:')
+    expect(lines[1]).toBe('> All (Recommended)')
+    expect(lines[2]).toMatch(/^ {4}Add every repository feature: dev-tools/)
+    expect(lines.at(-1)).toBe('  Up/Down to move, Enter to select.')
+    expect(lines.some((line) => line.startsWith('    ') && line.includes('github'))).toBe(true)
+  })
+})
+
+describe('confirmation prompts', () => {
+  it('uses single-key y/n answers', () => {
+    expect(confirmKeyResult({ name: 'y' }, false)).toBe(true)
+    expect(confirmKeyResult({ name: 'Y' }, false)).toBe(true)
+    expect(confirmKeyResult({ name: 'n' }, true)).toBe(false)
+    expect(confirmKeyResult({ name: 'N' }, true)).toBe(false)
+    expect(confirmKeyResult({ name: 'return' }, true)).toBe(true)
+    expect(confirmKeyResult({ name: 'enter' }, false)).toBe(false)
+  })
+
+  it('ignores unrelated keys so the answer stays pending', () => {
+    for (const name of ['up', 'down', 'k', 'j', 'space', 'a', undefined]) {
+      expect(confirmKeyResult({ name }, true)).toBeUndefined()
+    }
+  })
+
+  it('advertises the default with a capitalised key hint', () => {
+    expect(confirmHint(true)).toBe('Y/n')
+    expect(confirmHint(false)).toBe('y/N')
+    expect(confirmLines('Initialize Git repository', true)).toEqual(['Initialize Git repository (Y/n):'])
+    expect(confirmLines('Add extra resource pack', false)).toEqual(['Add extra resource pack (y/N):'])
+  })
+})
+
+describe('prompt cancellation', () => {
+  it('classifies interrupts so the CLI can exit quietly with 130', () => {
+    const error = new PromptCancelledError('已取消交互。')
+
+    expect(error.code).toBe('CMP_CANCELLED')
+    expect(error.name).toBe('PromptCancelledError')
+    expect(isPromptCancelled(error)).toBe(true)
+    expect(isPromptCancelled(Object.assign(new Error('readline was closed'), { code: 'CMP_CANCELLED' }))).toBe(true)
+    expect(isPromptCancelled(new Error('Aborted with Ctrl+C'))).toBe(false)
+    expect(isPromptCancelled(undefined)).toBe(false)
+    expect(PROMPT_CANCELLED_EXIT_CODE).toBe(130)
+  })
+})
+
+describe('width aware rendering', () => {
+  it('counts CJK and fullwidth characters as two columns', () => {
+    expect(displayWidth('abc')).toBe(3)
+    expect(displayWidth('仓库功能')).toBe(8)
+    // Arrows are East Asian ambiguous width; terminals render them as one column.
+    expect(displayWidth('↑/↓ 移动')).toBe(8)
+    expect(displayWidth('（推荐）')).toBe(8)
+    expect(displayWidth('')).toBe(0)
+  })
+
+  it('leaves lines that already fit untouched', () => {
+    expect(wrapToColumns('  Up/Down to move', 20)).toEqual(['  Up/Down to move'])
+    expect(wrapToColumns('仓库功能', 8)).toEqual(['仓库功能'])
+  })
+
+  it('wraps long ASCII lines on word boundaries and keeps the indentation', () => {
+    const rows = wrapToColumns('  Up/Down to move, Space to toggle, Enter to confirm. (At least one required.)', 40)
+
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) {
+      expect(displayWidth(row)).toBeLessThanOrEqual(40)
+      expect(row.startsWith('  ')).toBe(true)
+      expect(row.startsWith('   ')).toBe(false)
+      expect(row.endsWith(' ')).toBe(false)
+    }
+    expect(rows.map((row) => row.trim()).join(' ')).toBe(
+      'Up/Down to move, Space to toggle, Enter to confirm. (At least one required.)',
+    )
+  })
+
+  it('hard-breaks long CJK runs that have no spaces', () => {
+    const description = `    ${'添加全部仓库功能：'.repeat(6)}`
+    const rows = wrapToColumns(description, 30)
+
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) {
+      expect(displayWidth(row)).toBeLessThanOrEqual(30)
+      expect(row.startsWith('    ')).toBe(true)
+    }
+  })
+
+  it('breaks CJK text after punctuation instead of splitting add-on names', () => {
+    const description = linesForSelectOne('zh-CN', '仓库配置', setupChoices('zh-CN'), 0).find((line) =>
+      line.includes('添加全部仓库功能'),
+    )
+    expect(description).toBeDefined()
+    const rows = wrapToColumns(description ?? '', 80)
+
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) {
+      expect(displayWidth(row)).toBeLessThanOrEqual(80)
+      // A row must never begin with the separator, and no add-on name may be split.
+      expect(row.trimStart().startsWith('、')).toBe(false)
+    }
+    for (const addon of setupAddons('all', [])) {
+      expect(
+        rows.some((row) => row.includes(addon)),
+        `${addon} was split across rows`,
+      ).toBe(true)
+    }
+    expect(rows.join('')).not.toContain('\u200b')
+  })
+
+  it('keeps every rendered prompt row inside a narrow terminal', () => {
+    const lines = [
+      ...linesForSelectOne('en', 'Setup', setupChoices('en'), 0),
+      ...linesForSelectOne('zh-CN', '仓库配置', setupChoices('zh-CN'), 0),
+      ...linesForSelectMany(
+        'en',
+        'Control targets',
+        [
+          { value: 'Adb', label: 'Android / Emulator (Adb)' },
+          { value: 'Gamepad', label: 'Gamepad (Windows)' },
+        ],
+        0,
+        new Set(['Adb']),
+        { requireOne: true },
+      ),
+    ]
+
+    for (const columns of [40, 60, 80]) {
+      for (const line of lines) {
+        for (const row of wrapToColumns(line, columns)) {
+          expect(displayWidth(row), `${JSON.stringify(row)} at ${columns} columns`).toBeLessThanOrEqual(columns)
+        }
+      }
+    }
   })
 })
 

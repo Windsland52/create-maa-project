@@ -199,7 +199,18 @@ jobs:
       - name: Publish npm package if needed
         shell: bash
         run: |
-          npm --version
+          npm_version="$(npm --version)"
+          echo "npm ${npm_version}"
+          # Trusted publishing requires npm >= 11.5.1. Fail loudly here rather than letting it
+          # surface later as the masked E404 that npm returns for any auth failure.
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const supported = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!supported) {
+              console.error(`npm ${process.argv[1]} does not support trusted publishing (need >= 11.5.1)`);
+              process.exit(1);
+            }
+          ' "$npm_version"
           package="$(find dist/npm -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           if [[ -z "$package" ]]; then
             echo "npm package artifact is missing" >&2

@@ -129,6 +129,31 @@ export function addonDependencyDepth(addon: string): number {
   return required.length === 0 ? 0 : Math.max(...required.map((name) => addonDependencyDepth(name))) + 1
 }
 
+/**
+ * Depth-first order for an indented list: each add-on is immediately followed by the add-ons
+ * that require it, so the indentation renders a coherent tree. Without this, an add-on that
+ * merely sits at the same level would split a parent from its own children.
+ */
+export function addonTreeOrder(addons: readonly string[]): string[] {
+  const included = new Set(addons)
+  const dependents = new Map(addonDependencyGroups().map((group) => [group.addon, group.dependents]))
+  const ordered: string[] = []
+  const visited = new Set<string>()
+  const visit = (addon: string): void => {
+    if (visited.has(addon) || !included.has(addon)) return
+    visited.add(addon)
+    ordered.push(addon)
+    for (const dependent of dependents.get(addon) ?? []) visit(dependent)
+  }
+
+  const hasIncludedRequirement = (addon: string): boolean =>
+    requiredAddonsFor(addon).some((dependency) => included.has(dependency))
+
+  for (const addon of ADDON_ORDER) if (!hasIncludedRequirement(addon)) visit(addon)
+  for (const addon of ADDON_ORDER) visit(addon)
+  return ordered
+}
+
 export function assertSupportedCreateAddons(addons: string[]): void {
   for (const addon of addons) {
     if (CREATE_ADDONS.has(addon)) continue

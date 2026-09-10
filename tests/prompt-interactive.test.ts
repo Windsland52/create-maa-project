@@ -401,10 +401,11 @@ describe('interactive prompt flow', () => {
     expect(checkboxColumn('git-cliff')).toBe(6)
     expect(lines.find((line) => line.includes('dev-tools'))).toMatch(/^[> ] \[x\] dev-tools$/)
     // Editor integration stays in the interactive default, matching the previous behaviour.
+    // The result follows the rendered list order, so the sibling vscode precedes github.
     expect(options.add).toEqual([
       'dev-tools',
-      'github',
       'vscode',
+      'github',
     ])
   })
 

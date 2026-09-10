@@ -3,7 +3,7 @@ import { emitKeypressEvents } from 'node:readline'
 import { stdin as input, stdout as output } from 'node:process'
 import { basename, join, resolve } from 'node:path'
 import type { CliOptions, ControllerKind, LicenseKind, TemplateName } from './types.js'
-import { addonDependencyDepth, requiredAddonsFor } from './addons.js'
+import { addonDependencyDepth, addonTreeOrder, requiredAddonsFor } from './addons.js'
 import { exists, normalizeSlug } from './utils.js'
 import { CONTROLLER_KINDS, DEFAULT_CONTROLLER_KINDS } from './controllers.js'
 import { resolvePromptLanguage, type PromptLanguage } from './lang.js'
@@ -353,12 +353,13 @@ export function setupChoices(language: PromptLanguage): Choice<SetupPreset>[] {
 }
 
 /**
- * The interactive feature list mirrors the add-on dependency graph: the choices are ordered
- * and indented by dependency depth, selecting a feature turns on the features it requires,
- * and clearing a required feature clears everything that depends on it. The checkboxes
- * therefore always show exactly what creation will enable.
+ * The interactive feature list mirrors the add-on dependency graph: the order is a depth-first
+ * walk of the graph and each entry is indented by its dependency depth, so a feature always
+ * appears directly above the features it requires and directly above its own dependents.
+ * Selecting a feature turns on the features it requires, and clearing a required feature clears
+ * everything that depends on it, so the checkboxes always show exactly what creation will enable.
  */
-export const REPOSITORY_FEATURE_ADDONS = [
+const REPOSITORY_FEATURE_SET = [
   'dev-tools',
   'github',
   'vscode',
@@ -369,6 +370,8 @@ export const REPOSITORY_FEATURE_ADDONS = [
   'community',
   'dependabot',
 ]
+
+export const REPOSITORY_FEATURE_ADDONS = addonTreeOrder(REPOSITORY_FEATURE_SET)
 
 async function customRepositoryFeatures(
   rl: ReturnType<typeof createInterface>,

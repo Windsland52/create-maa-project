@@ -7,12 +7,26 @@ import {
   addonDependencyGroups,
   addonDependencyLines,
   addonDependencyText,
+  addonTreeOrder,
   autoEnabledAddons,
   requiredAddonsFor,
   resolveAddonDependencies,
 } from '../src/addons.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
 import type { CliOptions } from '../src/types.js'
+
+/** The features the interactive prompt offers; agent and resource-pack have their own questions. */
+const INTERACTIVE_FEATURE_SET = [
+  'dev-tools',
+  'vscode',
+  'github',
+  'git-cliff',
+  'auto-format',
+  'optimize-images',
+  'community',
+  'dependabot',
+  'schema-sync',
+]
 
 describe('add-on dependency graph', () => {
   it('derives the same resolution as the declared graph for every add-on', () => {
@@ -56,6 +70,41 @@ describe('add-on dependency graph', () => {
         expect(order.indexOf(dependency)).toBeLessThan(order.indexOf(addon))
       }
     }
+  })
+
+  it('orders an indented list as a tree so a parent is never split from its children', () => {
+    const ordered = addonTreeOrder(INTERACTIVE_FEATURE_SET)
+
+    // vscode shares dev-tools as its parent with github, so it must not sit between github and
+    // the six features that depend on github.
+    expect(ordered).toEqual([
+      'dev-tools',
+      'vscode',
+      'github',
+      'git-cliff',
+      'auto-format',
+      'optimize-images',
+      'community',
+      'dependabot',
+      'schema-sync',
+    ])
+
+    // Every add-on's dependents form one unbroken run directly after it.
+    for (const addon of ordered) {
+      const dependents = addonDependencyGroups().find((group) => group.addon === addon)?.dependents ?? []
+      const present = dependents.filter((name) => ordered.includes(name))
+      if (present.length === 0) continue
+      const positions = present.map((name) => ordered.indexOf(name)).sort((a, b) => a - b)
+      const start = positions[0] as number
+      expect(positions).toEqual(positions.map((_, offset) => start + offset))
+      expect(start).toBe(ordered.indexOf(addon) + 1)
+    }
+  })
+
+  it('keeps every requested add-on and adds none', () => {
+    const ordered = addonTreeOrder(INTERACTIVE_FEATURE_SET)
+
+    expect([...ordered].sort()).toEqual([...INTERACTIVE_FEATURE_SET].sort())
   })
 
   it('describes auto-enabled add-ons as the difference between asked and resolved', () => {

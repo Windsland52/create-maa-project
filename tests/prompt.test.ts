@@ -13,10 +13,12 @@ import {
   PROMPT_CANCELLED_EXIT_CODE,
   PromptCancelledError,
   promptForCreateOptions,
+  REPOSITORY_FEATURE_ADDONS,
   setupAddons,
   setupChoices,
   wrapToColumns,
 } from '../src/prompt.js'
+import { requiredAddonsFor } from '../src/addons.js'
 import { parseArgs } from '../src/args.js'
 
 describe('prompt setup presets', () => {
@@ -118,6 +120,32 @@ describe('repository feature checkbox indentation', () => {
 
     expect(note).toBe('缩进的功能会一并启用其上级功能。')
     expect(linesForSelectMany('zh-CN', '仓库功能', choices, 0, new Set(), { note })[1]).toBe(`  ${note}`)
+  })
+})
+
+describe('interactive feature list order', () => {
+  it('places sibling features before a parent, so a parent is followed by its own children', () => {
+    // vscode and github both require dev-tools. vscode must come first, otherwise it splits
+    // github from the six features indented beneath it.
+    expect(REPOSITORY_FEATURE_ADDONS).toEqual([
+      'dev-tools',
+      'vscode',
+      'github',
+      'git-cliff',
+      'auto-format',
+      'optimize-images',
+      'community',
+      'dependabot',
+      'schema-sync',
+    ])
+  })
+
+  it('renders every dependent directly under the feature it requires', () => {
+    for (const [index, addon] of REPOSITORY_FEATURE_ADDONS.entries()) {
+      const dependents = REPOSITORY_FEATURE_ADDONS.filter((other) => requiredAddonsFor(other).includes(addon))
+      if (dependents.length === 0) continue
+      expect(REPOSITORY_FEATURE_ADDONS.slice(index + 1, index + 1 + dependents.length)).toEqual(dependents)
+    }
   })
 })
 

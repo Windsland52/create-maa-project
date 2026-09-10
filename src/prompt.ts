@@ -35,6 +35,10 @@ const TEXT = {
     en: 'Display name',
     zhCN: '显示名称',
   },
+  featureDependencies: {
+    en: 'Indented features also enable their parent features.',
+    zhCN: '缩进的功能会一并启用其上级功能。',
+  },
   initializeGitRepository: {
     en: 'Initialize Git repository',
     zhCN: '初始化 Git 仓库',
@@ -282,18 +286,21 @@ async function customRepositoryFeatures(
     label(language, TEXT.repositoryFeatures),
     [
       { value: 'dev-tools', label: 'dev-tools' },
-      { value: 'github', label: '  github' },
-      { value: 'git-cliff', label: '    git-cliff' },
-      { value: 'auto-format', label: '    auto-format' },
-      { value: 'optimize-images', label: '    optimize-images' },
-      { value: 'schema-sync', label: '    schema-sync' },
-      { value: 'community', label: '    community' },
-      { value: 'dependabot', label: '    dependabot' },
+      { value: 'github', label: 'github', indent: 1 },
+      { value: 'git-cliff', label: 'git-cliff', indent: 2 },
+      { value: 'auto-format', label: 'auto-format', indent: 2 },
+      { value: 'optimize-images', label: 'optimize-images', indent: 2 },
+      { value: 'schema-sync', label: 'schema-sync', indent: 2 },
+      { value: 'community', label: 'community', indent: 2 },
+      { value: 'dependabot', label: 'dependabot', indent: 2 },
     ],
     [
       'dev-tools',
       'github',
     ],
+    {
+      note: labelText(language, TEXT.featureDependencies),
+    },
   )
 }
 
@@ -356,9 +363,10 @@ async function yesNo(
   return confirm(rl, language, label, fallback)
 }
 
-type Choice<T extends string> = {
+export type Choice<T extends string> = {
   value: T
   label: string
+  indent?: number
 }
 
 type Keypress = {
@@ -432,7 +440,7 @@ async function selectMany<T extends string>(
   label: string,
   choices: Choice<T>[],
   fallback: T[],
-  options: { requireOne?: boolean } = {},
+  options: { requireOne?: boolean; note?: string } = {},
 ): Promise<T[]> {
   if (choices.length === 0) throw new Error(`${label} has no choices.`)
   let index = 0
@@ -499,20 +507,25 @@ function linesForSelectOne<T extends string>(
   ]
 }
 
-function linesForSelectMany<T extends string>(
+export function linesForSelectMany<T extends string>(
   language: PromptLanguage,
   label: string,
   choices: Choice<T>[],
   index: number,
   selected: Set<T>,
-  options: { requireOne?: boolean },
+  options: { requireOne?: boolean; note?: string },
   message?: string,
 ): string[] {
   return [
     `${label}:`,
+    ...(options.note
+      ? [
+          `  ${options.note}`,
+        ]
+      : []),
     ...choices.map((choice, choiceIndex) => {
       const checked = selected.has(choice.value) ? '[x]' : '[ ]'
-      return `${choiceIndex === index ? '>' : ' '} ${checked} ${choice.label}`
+      return `${choiceIndex === index ? '>' : ' '} ${'  '.repeat(choice.indent ?? 0)}${checked} ${choice.label}`
     }),
     `  ${selectManyInstruction(language)}${options.requireOne ? labelText(language, TEXT.atLeastOneRequired) : ''}`,
     ...(message
@@ -527,7 +540,7 @@ function label(language: PromptLanguage, text: LocalizedText): string {
   return labelText(language, text)
 }
 
-function labelText(language: PromptLanguage, text: LocalizedText): string {
+export function labelText(language: PromptLanguage, text: LocalizedText): string {
   return language === 'zh-CN' ? text.zhCN : text.en
 }
 

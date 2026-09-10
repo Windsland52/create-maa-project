@@ -1,6 +1,12 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { inferPromptProjectIdentity, promptForCreateOptions, setupAddons } from '../src/prompt.js'
+import {
+  inferPromptProjectIdentity,
+  labelText,
+  linesForSelectMany,
+  promptForCreateOptions,
+  setupAddons,
+} from '../src/prompt.js'
 import { parseArgs } from '../src/args.js'
 
 describe('prompt setup presets', () => {
@@ -34,6 +40,66 @@ describe('prompt setup presets', () => {
       'community',
       'dependabot',
     ])
+  })
+})
+
+describe('repository feature checkbox indentation', () => {
+  const choices = [
+    { value: 'dev-tools', label: 'dev-tools' },
+    { value: 'github', label: 'github', indent: 1 },
+    { value: 'git-cliff', label: 'git-cliff', indent: 2 },
+  ]
+
+  it('indents the checkbox instead of the choice label', () => {
+    const lines = linesForSelectMany('en', 'Repository features', choices, 0, new Set(['dev-tools', 'github']), {})
+
+    expect(lines.slice(1, 4)).toEqual([
+      '> [x] dev-tools',
+      '    [x] github',
+      '      [ ] git-cliff',
+    ])
+    for (const line of lines.slice(1, 4)) {
+      expect(line).toMatch(/^[> ] (?: {2})*\[[ x]\] \S/)
+    }
+  })
+
+  it('renders indentation before the checkbox for every prompt language', () => {
+    for (const language of ['en', 'zh-CN'] as const) {
+      const lines = linesForSelectMany(language, 'Repository features', choices, 0, new Set(), {})
+
+      expect(lines.slice(1, 4)).toEqual(
+        choices.map((choice, index) => {
+          const marker = index === 0 ? '>' : ' '
+          return `${marker} ${'  '.repeat(choice.indent ?? 0)}[ ] ${choice.label}`
+        }),
+      )
+    }
+  })
+
+  it('keeps the note above the choices and the message below the instruction', () => {
+    const lines = linesForSelectMany(
+      'en',
+      'Repository features',
+      choices,
+      0,
+      new Set(),
+      { note: 'Indented features also enable their parent features.' },
+      'Select at least one item.',
+    )
+
+    expect(lines[1]).toBe('  Indented features also enable their parent features.')
+    expect(lines[2]).toBe('> [ ] dev-tools')
+    expect(lines.at(-1)).toBe('  Select at least one item.')
+  })
+
+  it('localizes the repository feature note for zh-CN', () => {
+    const note = labelText('zh-CN', {
+      en: 'Indented features also enable their parent features.',
+      zhCN: '缩进的功能会一并启用其上级功能。',
+    })
+
+    expect(note).toBe('缩进的功能会一并启用其上级功能。')
+    expect(linesForSelectMany('zh-CN', '仓库功能', choices, 0, new Set(), { note })[1]).toBe(`  ${note}`)
   })
 })
 

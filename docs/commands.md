@@ -44,6 +44,38 @@ add-on 依赖会被自动补全，无需手动按顺序添加：
 人类可读输出会打印 `Add-ons required by dependencies:`，JSON report 的 `addons` 字段给出
 `requested` / `enabled` / `autoEnabled`。
 
+### dev-tools 写入的文件
+
+`--add dev-tools` 会写入 16 个文件（Agent 项目再多 1 个 `.vscode/launch.json`）：
+
+| 文件                                          | 用途                                                      | 刷新方式 |
+| --------------------------------------------- | --------------------------------------------------------- | -------- |
+| `.node-version`                               | 固定 Node 24                                              | managed  |
+| `.prettierrc.mjs`                             | Prettier 配置（含 MaaFW 排序与多行数组插件）              | managed  |
+| `.prettierignore`                             | 忽略生成的 schema baseline 等                             | once     |
+| `package.json`                                | devDependencies、`engines.node >= 24`、`packageManager`   | once     |
+| `pnpm-workspace.yaml`                         | pnpm workspace 配置                                       | once     |
+| `.vscode/settings.json`                       | formatOnSave、LF、jsonc 关联、schema 映射与默认 formatter | once     |
+| `.vscode/extensions.json`                     | 推荐扩展（Prettier、MaaFW 等；Agent 追加 Pylance）        | once     |
+| `.vscode/tasks.json`                          | 打开项目时自动同步依赖                                    | managed  |
+| `.vscode/launch.json`                         | 仅 Agent 项目：`Maa Agent: Debug` 调试配置                | once     |
+| `tools/validate-schema.mjs`                   | `check:schema` 使用的校验脚本                             | managed  |
+| `tools/schema/interface.schema.json`          | 上游 MaaFW baseline（interface）                          | managed  |
+| `tools/schema/interface_config.schema.json`   | 上游 MaaFW baseline（interface config）                   | managed  |
+| `tools/schema/interface_import.schema.json`   | 上游 MaaFW baseline（interface import）                   | managed  |
+| `tools/schema/pipeline.schema.json`           | 上游 MaaFW baseline（pipeline）                           | managed  |
+| `tools/schema/schema-manifest.json`           | schema 版本清单                                           | managed  |
+| `tools/schema/custom.action.schema.json`      | 自定义动作 schema，供项目自行编辑                         | once     |
+| `tools/schema/custom.recognition.schema.json` | 自定义识别 schema，供项目自行编辑                         | once     |
+
+`managed` 文件会被 `--update`（如 `--update schema`）刷新；`once` 文件只在首次创建时写入，
+之后归项目所有，不会被后续命令覆盖。
+
+`package.json` 中的脚本按启用的 add-on 组合：`check` 始终包含 `format:check`、`check:schema`、
+`check:maa`；`github` 追加 `release:dry-run`、`sync:runtime`，`schema-sync` 追加 `sync:schema`，
+`optimize-images` 追加 `optimize:images`，Agent 项目追加 `format:py`、`lint:py`、`typecheck:py`、
+`check:py`。
+
 元数据同步：
 
 ```bash

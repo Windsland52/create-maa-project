@@ -69,6 +69,38 @@ needed:
 enabled set equals your arguments: the human output prints `Add-ons required by dependencies:`,
 and the `addons` field of the JSON report carries `requested` / `enabled` / `autoEnabled`.
 
+### Files written by dev-tools
+
+`--add dev-tools` writes 16 files (an Agent project adds one more, `.vscode/launch.json`):
+
+| File                                                          | Refresh |
+| ------------------------------------------------------------- | ------- |
+| `.node-version` (pins Node 24)                                | managed |
+| `.prettierrc.mjs`                                             | managed |
+| `.prettierignore`                                             | once    |
+| `package.json` (devDependencies, engines, packageManager)     | once    |
+| `pnpm-workspace.yaml`                                         | once    |
+| `.vscode/settings.json`                                       | once    |
+| `.vscode/extensions.json`                                     | once    |
+| `.vscode/tasks.json`                                          | managed |
+| `.vscode/launch.json` (Agent only)                            | once    |
+| `tools/validate-schema.mjs`                                   | managed |
+| `tools/schema/interface.schema.json` (upstream)               | managed |
+| `tools/schema/interface_config.schema.json` (upstream)        | managed |
+| `tools/schema/interface_import.schema.json` (upstream)        | managed |
+| `tools/schema/pipeline.schema.json` (upstream)                | managed |
+| `tools/schema/schema-manifest.json`                           | managed |
+| `tools/schema/custom.action.schema.json` (edit this one)      | once    |
+| `tools/schema/custom.recognition.schema.json` (edit this one) | once    |
+
+`managed` files are refreshed by `--update` (for example `--update schema`); `once` files are
+written at creation only and then belong to the project, so later commands never overwrite them.
+
+Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
+`check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
+`schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
+add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
+
 ## Common options
 
 Command modes are mutually exclusive: one mode per invocation. Options below list the modes

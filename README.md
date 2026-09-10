@@ -210,6 +210,8 @@ create-maa-project --doctor                  # 诊断当前项目（只读）
 
 生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
 
+dev-tools 会写入 16 个文件（Agent 项目再多一个 `.vscode/launch.json`）：`.node-version`、`.prettierrc.mjs`、`.prettierignore`、`package.json`、`pnpm-workspace.yaml`、`.vscode/settings.json`、`.vscode/extensions.json`、`.vscode/tasks.json`、`tools/validate-schema.mjs`，以及 `tools/schema/` 下的 7 个文件（4 个上游 schema、2 个可编辑的自定义 schema、`schema-manifest.json`）；未启用 dev-tools 的 minimal 项目不会产生 `.vscode/` 与 `tools/`。逐项用途与刷新方式（`managed` 可被 `--update` 刷新、`once` 仅首次创建写入）见[命令文档](./docs/commands.md#dev-tools-写入的文件)。
+
 ### OCR 模型供应
 
 - 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成或合并 `.gitmodules`，保留已有子模块映射，版本由提交中的 gitlink 钉死。

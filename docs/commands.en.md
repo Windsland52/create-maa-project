@@ -46,6 +46,38 @@ For example, `create-maa-project --add community` also enables `dev-tools` and `
 human-readable output prints `Add-ons required by dependencies:`, and the `addons` field of the
 JSON report carries `requested` / `enabled` / `autoEnabled`.
 
+### Files written by dev-tools
+
+`--add dev-tools` writes 16 files (an Agent project adds one more, `.vscode/launch.json`):
+
+| File                                          | Purpose                                                             | Refresh |
+| --------------------------------------------- | ------------------------------------------------------------------- | ------- |
+| `.node-version`                               | Pins Node 24                                                        | managed |
+| `.prettierrc.mjs`                             | Prettier config (MaaFW sort and multiline-array plugins)            | managed |
+| `.prettierignore`                             | Ignores generated schema baselines and project-owned sources        | once    |
+| `package.json`                                | devDependencies, `engines.node >= 24`, `packageManager`             | once    |
+| `pnpm-workspace.yaml`                         | pnpm workspace config                                               | once    |
+| `.vscode/settings.json`                       | formatOnSave, LF, jsonc associations, schema map, default formatter | once    |
+| `.vscode/extensions.json`                     | Recommended extensions (Prettier, MaaFW; Agent adds Pylance)        | once    |
+| `.vscode/tasks.json`                          | Syncs dependencies when the project is opened                       | managed |
+| `.vscode/launch.json`                         | Agent projects only: the `Maa Agent: Debug` launch config           | once    |
+| `tools/validate-schema.mjs`                   | Validation script used by `check:schema`                            | managed |
+| `tools/schema/interface.schema.json`          | Upstream MaaFW baseline (interface)                                 | managed |
+| `tools/schema/interface_config.schema.json`   | Upstream MaaFW baseline (interface config)                          | managed |
+| `tools/schema/interface_import.schema.json`   | Upstream MaaFW baseline (interface import)                          | managed |
+| `tools/schema/pipeline.schema.json`           | Upstream MaaFW baseline (pipeline)                                  | managed |
+| `tools/schema/schema-manifest.json`           | Schema version manifest                                             | managed |
+| `tools/schema/custom.action.schema.json`      | Custom action schema, meant to be edited by the project             | once    |
+| `tools/schema/custom.recognition.schema.json` | Custom recognition schema, meant to be edited by the project        | once    |
+
+`managed` files are refreshed by `--update` (for example `--update schema`); `once` files are
+written at creation only and then belong to the project, so later commands never overwrite them.
+
+Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
+`check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
+`schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
+add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
+
 Metadata sync:
 
 ```bash

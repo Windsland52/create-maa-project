@@ -259,6 +259,16 @@ When a generated project is opened in VS Code, `.vscode/tasks.json` syncs depend
 automatically: pipeline projects run `pnpm install --frozen-lockfile`, agent projects
 additionally run `uv sync`.
 
+dev-tools writes 16 files (an agent project adds `.vscode/launch.json`): `.node-version`,
+`.prettierrc.mjs`, `.prettierignore`, `package.json`, `pnpm-workspace.yaml`,
+`.vscode/settings.json`, `.vscode/extensions.json`, `.vscode/tasks.json`,
+`tools/validate-schema.mjs`, and seven files under `tools/schema/` (four upstream schemas, two
+editable custom schemas, and `schema-manifest.json`). A minimal project without dev-tools has no
+`.vscode/` and no `tools/` directory. See the
+[commands reference](./docs/commands.en.md#files-written-by-dev-tools) for what each file does
+and how it is refreshed (`managed` files follow `--update`, `once` files are written at creation
+only).
+
 ### OCR model provisioning
 
 - Project creation clones `MaaXYZ/MaaCommonAssets` as a `--depth 1` submodule by default

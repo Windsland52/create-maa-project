@@ -6,3 +6,6 @@ coverage/
 .uv-cache/
 *.log
 __pycache__/
+
+# Scratch output of `pnpm changelog:draft`; the curated CHANGELOG.md is the tracked source.
+CHANGELOG.draft.md

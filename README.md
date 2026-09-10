@@ -296,6 +296,10 @@ requirements.txt
 
 完整的 report schema（含 `doctor.checks` 与备份操作结果）、稳定 `CMP_*` 错误码和失败示例，见 [JSON Report 文档](./docs/json-report.md)。
 
+## 变更记录
+
+各版本的用户可见变更、修复与升级注意事项见 [CHANGELOG.md](./CHANGELOG.md)；每个版本的 GitHub Release 说明取自该文件的对应段落。
+
 ## License
 
 [AGPL-3.0-or-later](./LICENSE)

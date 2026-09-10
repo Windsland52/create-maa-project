@@ -382,6 +382,10 @@ Pass `--report` to `create`, `sync`, `update`, `doctor`, and the backup inspecti
 
 For the full report schema (including `doctor.checks` and backup operation results), the stable `CMP_*` error codes, and a failure example, see the [JSON Report documentation](./docs/json-report.en.md).
 
+## Changelog
+
+User-visible changes, fixes, and upgrade notes for each release are in [CHANGELOG.md](./CHANGELOG.md); each GitHub Release body is taken from that file's section for the version.
+
 ## License
 
 [AGPL-3.0-or-later](./LICENSE)

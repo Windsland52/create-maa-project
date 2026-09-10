@@ -16,6 +16,11 @@ body = """
                 {%- endif -%}
             {%- endfor -%}
         {%- endif %}
+        {%- for footer in commit.footers -%}
+            {%- if footer.token == "BREAKING CHANGE" -%}
+                {{ "\n" }}        > {{ footer.value | split(pat="\n") | join(sep=" ") | trim }}
+            {%- endif -%}
+        {%- endfor -%}
 {% endmacro -%}
 
 {% if version %}\

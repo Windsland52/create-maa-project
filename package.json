@@ -22,7 +22,9 @@
         "!templates/**/__pycache__",
         "!templates/**/*.pyc",
         "skills",
+        "docs",
         "README.md",
+        "README.en.md",
         "LICENSE"
     ],
     "scripts": {

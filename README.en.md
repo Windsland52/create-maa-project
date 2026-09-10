@@ -133,94 +133,9 @@ See the [Skills Documentation](./skills/README.md) for further details and local
 
 ## Use With An MCP Client
 
-MCP is the alternative to the Agent Skill, for environments where the agent has no shell access
-or where permissions must be controlled per tool inside the client. It is not interactive by
-itself: the agent should ask you for your requirements first and then call the matching tools
-(see the calling conventions below). MCP tools share the same write paths as the CLI commands,
-keeping behavior and rollback mechanisms consistent; new capabilities land in the CLI and the
-Agent Skill first, and the MCP tool surface stays lean and stable.
+MCP is the alternative to the Agent Skill, for environments where the agent has no shell access or where permissions must be controlled per tool inside the client. Always prefer an explicit `--root` for the workspace the MCP server may access.
 
-Always prefer an explicit `--root` for the workspace the MCP server may access. A relative
-root is resolved from the server process's startup directory; omitting it uses that directory.
-
-If the CLI is installed globally, configure the MCP server like this:
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "create-maa-project",
-            "args": [
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-If you do not want a global install, let the MCP client run it through `npx`:
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "create-maa-project@latest",
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-For a Python-centric toolchain, let the MCP client launch it through `uvx`:
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "uvx",
-            "args": [
-                "create-maa-project",
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-Typical agent request:
-
-```text
-Create a MaaFW project in ./MaaExample. Use a Pipeline project, Android controller,
-and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
-```
-
-Calling conventions:
-
-- Before `create_project`, the agent should confirm with you: the project name, Pipeline or
-  Python Agent, the controllers, the add-ons, and the resource pack folder name. The folder
-  name is passed as `resourcePackSlug` (for example `extra` or `cn`) and is required when
-  adding a resource pack; otherwise the tool rejects the call.
-- The `add` tool takes either `addon` for a single add-on or an `addons` array for several
-  add-ons in one call; pass exactly one of the two.
-- The agent can call the read-only `get_project_context` tool first to confirm the server
-  root and the project directory resolved from `projectPath`.
-- After creating a child project, `doctor`, `sync`, `update`, `add`, `list_backups`,
-  `show_backup`, `restore`, and `clean_cache` accept a relative `projectPath`. The path must
-  resolve to a real directory under the MCP server root; absolute paths, `..`, and escaping
-  symlinks are rejected.
-- Before restoring, use `list_backups` to find a backup and `show_backup` to inspect it, then
-  preview with `restore { backupId, dryRun: true }`; a preview never modifies project files.
-  Backups and rollback are described under [State and Safety](#state-and-safety).
+For JSON configuration examples (global install / `npx` / `uvx`), tool calling conventions, and the `projectPath` rules, see the [MCP documentation](./docs/mcp.en.md).
 
 ## Automatic Updates
 
@@ -307,98 +222,18 @@ Safety rules:
 
 ## Commands
 
-Common create options:
+Quick reference:
 
 ```bash
-create-maa-project [name]
-create-maa-project .
-create-maa-project [name] --template pipeline
-create-maa-project [name] --template agent
-create-maa-project [name] --slug maa-helper --name "明日方舟助手"
-create-maa-project [name] --controller Adb,Win32,MacOS
-create-maa-project [name] --license MIT
-create-maa-project [name] --git
-create-maa-project [name] --no-git
-```
-
-Supported `--controller` targets: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`,
-`WlRoots`. Comma-separated for multiple targets. Default is `Adb`.
-
-Git initialization is enabled by default: when the target is outside an existing Git repository, project creation (including non-interactive paths like `--yes`/`--no-interactive` and MCP without `git`) automatically runs `git init` and creates the initial commit; pass `--no-git` to disable it. If Git is not installed or `git init` fails, creation still succeeds and the reason is recorded in the `git` field of the JSON report.
-
-Add-ons:
-
-```bash
-create-maa-project --add dev-tools
-create-maa-project --add github
-create-maa-project --add agent
-create-maa-project --add resource-pack extra --label "Extra Resource"
-create-maa-project --add git-cliff
-create-maa-project --add auto-format
-create-maa-project --add optimize-images
-create-maa-project --add community
-create-maa-project --add dependabot
-create-maa-project --add schema-sync
-```
-
-Metadata sync:
-
-```bash
-create-maa-project --sync config
-create-maa-project --sync metadata
-create-maa-project --sync display-name --name "New Display Name"
+create-maa-project [name]                    # interactive project creation
+create-maa-project [name] --template agent   # Python Agent project
+create-maa-project --add dev-tools           # add an add-on to the current project
 create-maa-project --sync version --version 0.2.0
-create-maa-project --sync license --license MIT
-create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
-create-maa-project --sync network --network official
+create-maa-project --update ocr-models       # provision / update OCR models
+create-maa-project --doctor                  # read-only project diagnostics
 ```
 
-Other maintenance commands never rewrite a legacy `maa-project.json` implicitly. For schema v1,
-run `create-maa-project --sync config` explicitly; the migration creates a project backup that can
-be rolled back with `--restore`.
-
-Updates:
-
-```bash
-create-maa-project --update schema
-create-maa-project --update maafw
-create-maa-project --update runtime:mfa
-create-maa-project --update runtime:mxu
-create-maa-project --update ocr-models
-create-maa-project --update node-deps
-create-maa-project --update python-deps
-create-maa-project --update python-runtime
-```
-
-`--update all` is intentionally unsupported. Run explicit updates so pending actions and
-logs stay clear.
-
-Diagnostics and maintenance:
-
-```bash
-create-maa-project --doctor
-create-maa-project --doctor --report
-create-maa-project --list-backups
-create-maa-project --show-backup <backup-id>
-create-maa-project --restore <backup-id> --dry-run
-create-maa-project --restore <backup-id>
-create-maa-project --clean-cache
-```
-
-Useful execution flags:
-
-```bash
---yes
---no-interactive
---force
---clear-stale-lock
---allow-non-git-dir
---allow-pending-commit
---skip-download
---log-file <path>
---lang auto|en|zh-CN
---no-color
-```
+For the full creation options (`--slug`, `--controller`, `--license`, `--git`, ...), the add-on / sync / update target lists, execution flags, and the Git initialization and schema v1 migration behavior, see the [Commands documentation](./docs/commands.en.md).
 
 ## Tooling
 
@@ -517,117 +352,9 @@ For other failures, start with the `--doctor` output and the logs under the proj
 
 ## JSON Report Mode
 
-Pass `--report` to make `create`, `sync`, `update`, `doctor`, and backup inspection/restore
-commands emit a single machine-readable JSON document on stdout. In report mode,
-`--report` forces non-interactive execution. Progress, `Log:`, and human `Error:` text are
-not written to stdout; wrappers may ignore stderr unless they want diagnostics.
+Pass `--report` to `create`, `sync`, `update`, `doctor`, and the backup inspection/restore commands to receive a single machine-readable JSON document on stdout. Report mode forces non-interactive execution; progress, `Log:`, and human `Error:` text are not written to stdout. Exit code `0` means success; `1` means failure or `doctor` findings; the JSON `exitCode` matches the process exit code.
 
-Exit code `0` means the command completed successfully. Exit code `1` means the command
-failed, or `doctor` found project problems. The JSON `exitCode` field matches the process
-exit code.
-
-```ts
-type BackupInspection = {
-    id: string;
-    format: "managed-files" | "legacy";
-    createdAt: string;
-    command: string | null;
-    status: "in-progress" | "complete" | "rolled-back" | "rollback-failed" | "legacy";
-    entries: Array<{path: string; action: "restore" | "remove"}>;
-};
-
-type BackupSummary = {
-    id: string;
-    format: "managed-files" | "legacy" | "invalid";
-    createdAt: string;
-    command: string | null;
-    status: BackupInspection["status"] | "invalid";
-    entryCount: number;
-    error?: string;
-};
-
-type CliJsonReport = {
-    schemaVersion: 1;
-    tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "add" | "doctor" | "backup" | "clean-cache";
-    ok: boolean;
-    timestamp: string;
-    durationMs: number;
-    exitCode: 0 | 1;
-    executionId: string;
-    root: string;
-    logPath: string | null;
-    written: string[];
-    removed: string[];
-    skipped: string[];
-    pending: Array<{kind: string; reason: string; command: string}>;
-    suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
-    backupId?: string;
-    backupScope?: "managed-files";
-    git?: {initialized: boolean; committed: boolean; reason?: string};
-    doctor?: {
-        lines: string[];
-        checks: Array<{
-            id: string;
-            status: "pass" | "fail" | "skipped";
-            summary: string;
-            details: string[];
-        }>;
-    };
-    backup?:
-        | {operation: "list"; backups: BackupSummary[]}
-        | {operation: "show" | "restore-preview"; backup: BackupInspection}
-        | {
-              operation: "restore";
-              backupId: string;
-              restored: string[];
-              removed: string[];
-              preRestoreBackupId: string;
-          };
-    error?: {
-        message: string;
-        code:
-            | "CMP_CREATE_FAILED"
-            | "CMP_SYNC_FAILED"
-            | "CMP_UPDATE_FAILED"
-            | "CMP_ADD_FAILED"
-            | "CMP_DOCTOR_FAILED"
-            | "CMP_BACKUP_FAILED"
-            | "CMP_CLEAN_CACHE_FAILED";
-        causeCode?: string;
-    };
-};
-```
-
-Failure reports always carry a stable `CMP_*` command error code. If the underlying system
-provides a native code such as `ENOENT`, it is kept in `causeCode` so callers do not depend
-on OS-specific information.
-
-Example failure report:
-
-```json
-{
-    "schemaVersion": 1,
-    "tool": "create-maa-project",
-    "command": "sync",
-    "ok": false,
-    "timestamp": "2026-06-12T10:31:00.000Z",
-    "durationMs": 6,
-    "exitCode": 1,
-    "executionId": "2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000",
-    "root": "/path/to/project",
-    "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
-    "written": [],
-    "removed": [],
-    "skipped": [],
-    "pending": [],
-    "suggestedCommands": [],
-    "error": {
-        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0.",
-        "code": "CMP_SYNC_FAILED"
-    }
-}
-```
+For the full report schema (including `doctor.checks` and backup operation results), the stable `CMP_*` error codes, and a failure example, see the [JSON Report documentation](./docs/json-report.en.md).
 
 ## License
 

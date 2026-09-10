@@ -113,78 +113,9 @@ npx skills add https://github.com/Windsland52/create-maa-project --skill create-
 
 ## 配合 MCP Client 使用
 
-MCP 是 Agent Skill 之外的替代接入方式，适合 agent 没有 shell 权限、或需要在 client 中按 tool 粒度管控权限的环境。MCP 本身不是交互式的：agent 应先向你问清需求，再调用对应 tool（见下文调用约定）。MCP tools 与 CLI 命令共用同一条写入路径，行为和回滚机制保持一致；新能力优先通过 CLI 与 Agent Skill 提供，MCP tool 面保持精简稳定。
+MCP 是 Agent Skill 之外的替代接入方式，适合 agent 没有 shell 权限、或需要在 client 中按 tool 粒度管控权限的环境。启动 MCP server 时建议始终用 `--root` 显式指定允许 MCP 操作的工作区。
 
-启动 MCP server 时建议始终用 `--root` 显式指定允许 MCP 操作的工作区；相对的 `--root` 按 MCP server 启动时的当前目录解析，省略时默认使用当前目录。
-
-如果已经全局安装 CLI，可以这样配置 MCP server：
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "create-maa-project",
-            "args": [
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-如果不想全局安装，可以让 MCP client 通过 `npx` 启动：
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "create-maa-project@latest",
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-如果更偏 Python 工具链，可以让 MCP client 通过 `uvx` 启动：
-
-```json
-{
-    "mcpServers": {
-        "create-maa-project": {
-            "command": "uvx",
-            "args": [
-                "create-maa-project",
-                "--mcp",
-                "--root",
-                "/absolute/path/to/workspace"
-            ]
-        }
-    }
-}
-```
-
-可以这样要求 agent：
-
-```text
-在 ./MaaExample 创建一个 MaaFW 项目。使用 Pipeline 项目、Android 控制器，并添加 dev-tools 和 GitHub workflows。
-其它可选 add-ons 先问我。
-```
-
-调用约定：
-
-- `create_project` 之前，agent 应向你确认：项目名、Pipeline 还是 Python Agent、控制器、add-ons，以及 resource pack 的文件夹名。resource pack 的文件夹名通过 `resourcePackSlug` 传入（例如 `extra` 或 `cn`）；要添加 resource pack 时必传，否则 tool 会拒绝调用。
-- `add` tool 单次调用传 `addon` 添加单项，或传 `addons` 数组添加多项；两者必须且只能传一个。
-- agent 可先调用只读的 `get_project_context` 确认 server root，以及 `projectPath` 最终解析到的项目目录。
-- 创建子项目后，`doctor`、`sync`、`update`、`add`、`list_backups`、`show_backup`、`restore`、`clean_cache` 都接受相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、`..` 或根外符号链接。
-- 恢复前可先用 `list_backups` 查找备份、`show_backup` 检查内容，再以 `restore { backupId, dryRun: true }` 预演；预演不会修改项目文件。备份与回滚机制见[状态与安全](#状态与安全)。
+JSON 配置示例（全局安装 / `npx` / `uvx`）、tool 调用约定与 `projectPath` 路径规则，见 [MCP 文档](./docs/mcp.md)。
 
 ## 自动更新
 
@@ -258,95 +189,18 @@ CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`
 
 ## 命令
 
-常用创建选项：
+常用命令速查：
 
 ```bash
-create-maa-project [name]
-create-maa-project .
-create-maa-project [name] --template pipeline
-create-maa-project [name] --template agent
-create-maa-project [name] --slug maa-helper --name "明日方舟助手"
-create-maa-project [name] --controller Adb,Win32,MacOS
-create-maa-project [name] --license MIT
-create-maa-project [name] --git
-create-maa-project [name] --no-git
-```
-
-可用的控制目标：`Adb`、`Win32`、`MacOS`、`PlayCover`、`Gamepad`、`WlRoots`。默认为 `Adb`。
-
-Git 初始化默认开启：目标不在已有 Git 仓库内时，创建（含 `--yes`/`--no-interactive` 和 MCP 未传 `git` 的非交互路径）会自动 `git init` 并做首次提交；`--no-git` 可显式关闭。Git 未安装或 `git init` 失败时创建仍然成功，具体原因写入 JSON report 的 `git` 字段。
-
-增量能力：
-
-```bash
-create-maa-project --add dev-tools
-create-maa-project --add github
-create-maa-project --add agent
-create-maa-project --add resource-pack extra --label "额外资源"
-create-maa-project --add git-cliff
-create-maa-project --add auto-format
-create-maa-project --add optimize-images
-create-maa-project --add community
-create-maa-project --add dependabot
-create-maa-project --add schema-sync
-```
-
-元数据同步：
-
-```bash
-create-maa-project --sync config
-create-maa-project --sync metadata
-create-maa-project --sync display-name --name "新显示名"
+create-maa-project [name]                    # 交互式创建项目（回车接受默认值）
+create-maa-project [name] --template agent   # 创建 Python Agent 项目
+create-maa-project --add dev-tools           # 为当前项目添加 add-on
 create-maa-project --sync version --version 0.2.0
-create-maa-project --sync license --license MIT
-create-maa-project --sync github-url https://github.com/MaaXYZ/MaaExample
-create-maa-project --sync network --network official
+create-maa-project --update ocr-models       # 补齐 / 更新 OCR 模型
+create-maa-project --doctor                  # 诊断当前项目（只读）
 ```
 
-旧版 `maa-project.json` 不会在其他维护命令中被静默改写。遇到 schema v1 时，请显式运行
-`create-maa-project --sync config`；迁移会进入项目备份，可用 `--restore` 回退。
-
-更新：
-
-```bash
-create-maa-project --update schema
-create-maa-project --update maafw
-create-maa-project --update runtime:mfa
-create-maa-project --update runtime:mxu
-create-maa-project --update ocr-models
-create-maa-project --update node-deps
-create-maa-project --update python-deps
-create-maa-project --update python-runtime
-```
-
-`--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
-
-诊断和维护：
-
-```bash
-create-maa-project --doctor
-create-maa-project --doctor --report
-create-maa-project --list-backups
-create-maa-project --show-backup <backup-id>
-create-maa-project --restore <backup-id> --dry-run
-create-maa-project --restore <backup-id>
-create-maa-project --clean-cache
-```
-
-常用执行控制：
-
-```bash
---yes
---no-interactive
---force
---clear-stale-lock
---allow-non-git-dir
---allow-pending-commit
---skip-download
---log-file <path>
---lang auto|en|zh-CN
---no-color
-```
+完整的创建选项（`--slug`、`--controller`、`--license`、`--git` 等）、add-on 与 sync/update 目标清单、执行控制 flag，以及 Git 初始化和 schema v1 迁移行为，见[命令文档](./docs/commands.md)。
 
 ## 工具链
 
@@ -432,111 +286,9 @@ requirements.txt
 
 ## JSON Report 模式
 
-给 `create`、`sync`、`update`、`doctor` 和备份检查/恢复命令传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式下 `--report` 强制非交互执行。进度、`Log:` 和人类可读 `Error:` 不会写入 stdout；封装工具可以忽略 stderr，除非需要诊断信息。
+给 `create`、`sync`、`update`、`doctor` 和备份检查/恢复命令传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式强制非交互执行；进度、`Log:` 和人类可读 `Error:` 不会写入 stdout。退出码 `0` 表示成功，`1` 表示失败或 `doctor` 发现问题；JSON 中的 `exitCode` 与进程退出码一致。
 
-退出码 `0` 表示命令成功完成。退出码 `1` 表示命令失败，或 `doctor` 发现项目问题。JSON 中的 `exitCode` 与进程退出码一致。
-
-```ts
-type BackupInspection = {
-    id: string;
-    format: "managed-files" | "legacy";
-    createdAt: string;
-    command: string | null;
-    status: "in-progress" | "complete" | "rolled-back" | "rollback-failed" | "legacy";
-    entries: Array<{path: string; action: "restore" | "remove"}>;
-};
-
-type BackupSummary = {
-    id: string;
-    format: "managed-files" | "legacy" | "invalid";
-    createdAt: string;
-    command: string | null;
-    status: BackupInspection["status"] | "invalid";
-    entryCount: number;
-    error?: string;
-};
-
-type CliJsonReport = {
-    schemaVersion: 1;
-    tool: "create-maa-project";
-    command: "create" | "sync" | "update" | "add" | "doctor" | "backup" | "clean-cache";
-    ok: boolean;
-    timestamp: string;
-    durationMs: number;
-    exitCode: 0 | 1;
-    executionId: string;
-    root: string;
-    logPath: string | null;
-    written: string[];
-    removed: string[];
-    skipped: string[];
-    pending: Array<{kind: string; reason: string; command: string}>;
-    suggestedCommands: Array<{command: string; description: string; autoRun: boolean}>;
-    backupId?: string;
-    backupScope?: "managed-files";
-    git?: {initialized: boolean; committed: boolean; reason?: string};
-    doctor?: {
-        lines: string[];
-        checks: Array<{
-            id: string;
-            status: "pass" | "fail" | "skipped";
-            summary: string;
-            details: string[];
-        }>;
-    };
-    backup?:
-        | {operation: "list"; backups: BackupSummary[]}
-        | {operation: "show" | "restore-preview"; backup: BackupInspection}
-        | {
-              operation: "restore";
-              backupId: string;
-              restored: string[];
-              removed: string[];
-              preRestoreBackupId: string;
-          };
-    error?: {
-        message: string;
-        code:
-            | "CMP_CREATE_FAILED"
-            | "CMP_SYNC_FAILED"
-            | "CMP_UPDATE_FAILED"
-            | "CMP_ADD_FAILED"
-            | "CMP_DOCTOR_FAILED"
-            | "CMP_BACKUP_FAILED"
-            | "CMP_CLEAN_CACHE_FAILED";
-        causeCode?: string;
-    };
-};
-```
-
-失败报告始终包含稳定的 `CMP_*` 命令错误码；如果底层系统还提供了 `ENOENT` 等原生错误码，会另外保存在
-`causeCode`，避免调用方依赖操作系统相关信息。
-
-失败报告示例：
-
-```json
-{
-    "schemaVersion": 1,
-    "tool": "create-maa-project",
-    "command": "sync",
-    "ok": false,
-    "timestamp": "2026-06-12T10:31:00.000Z",
-    "durationMs": 6,
-    "exitCode": 1,
-    "executionId": "2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000",
-    "root": "/path/to/project",
-    "logPath": "/path/to/project/.create-maa-project/logs/2026-06-12T10-31-00-000Z-00000000-0000-4000-8000-000000000000.log",
-    "written": [],
-    "removed": [],
-    "skipped": [],
-    "pending": [],
-    "suggestedCommands": [],
-    "error": {
-        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0.",
-        "code": "CMP_SYNC_FAILED"
-    }
-}
-```
+完整的 report schema（含 `doctor.checks` 与备份操作结果）、稳定 `CMP_*` 错误码和失败示例，见 [JSON Report 文档](./docs/json-report.md)。
 
 ## License
 

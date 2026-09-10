@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { relative } from 'node:path'
+import { autoEnabledAddons } from './addons.js'
 import type { DoctorCheck, DoctorReport } from './doctor.js'
 import type { BackupInspection, BackupSummary } from './project.js'
 import type { CliOptions, GitInitResult, PendingItem, ScaffoldResult } from './types.js'
@@ -45,6 +46,11 @@ export type CliJsonReport = {
   backupId?: string
   backupScope?: 'managed-files'
   git?: GitInitResult
+  addons?: {
+    requested: string[]
+    enabled: string[]
+    autoEnabled: string[]
+  }
   doctor?: {
     lines: string[]
     checks: DoctorCheck[]
@@ -107,7 +113,11 @@ export function createCleanCacheJsonReport(input: {
   })
 }
 
-export function createScaffoldJsonReport(context: ReportContext, result: ScaffoldResult): CliJsonReport {
+export function createScaffoldJsonReport(
+  context: ReportContext,
+  result: ScaffoldResult,
+  addons?: { requested: string[]; enabled: string[] },
+): CliJsonReport {
   const report = createBaseReport({
     context,
     ok: true,
@@ -118,6 +128,13 @@ export function createScaffoldJsonReport(context: ReportContext, result: Scaffol
     pending: result.pending,
     suggestedCommands: suggestedCommandsFromPending(result.pending),
   })
+  if (addons) {
+    report.addons = {
+      requested: addons.requested,
+      enabled: addons.enabled,
+      autoEnabled: autoEnabledAddons(addons.requested, addons.enabled),
+    }
+  }
   if (result.git) report.git = result.git
   if (result.backupId) {
     report.backupId = result.backupId

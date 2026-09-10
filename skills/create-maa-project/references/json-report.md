@@ -29,6 +29,11 @@ type CliJsonReport = {
     backupId?: string;
     backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
+    addons?: {
+        requested: string[];
+        enabled: string[];
+        autoEnabled: string[];
+    };
     doctor?: {
         lines: string[];
         checks: Array<{
@@ -89,6 +94,11 @@ type BackupInspection = {
 - **Failure**: read `error.message` and `error.code` first. `error.causeCode` carries native
   codes such as `ENOENT` when the operating system provided one; do not infer OS details from
   the message text.
+- **`addons`** (create and add only): `requested` is what you passed, `enabled` is the resolved
+  set, and `autoEnabled` lists what dependency resolution added. Read it instead of assuming
+  creation enabled exactly the add-ons you asked for — `--add community` also enables
+  `dev-tools` and `github`. On an existing project, an entry in `autoEnabled` may already have
+  been enabled before this run.
 - **`pending` non-empty**: the command itself succeeded but left unfinished work, usually a
   failed download or install. Each entry's `command` is ready to run; execute those, then
   re-run the original command or the relevant `--doctor` to confirm the project is clean.

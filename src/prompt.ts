@@ -3,6 +3,7 @@ import { emitKeypressEvents } from 'node:readline'
 import { stdin as input, stdout as output } from 'node:process'
 import { basename, join, resolve } from 'node:path'
 import type { CliOptions, ControllerKind, LicenseKind, TemplateName } from './types.js'
+import { addonDependencyDepth, requiredAddonsFor } from './addons.js'
 import { exists, normalizeSlug } from './utils.js'
 import { CONTROLLER_KINDS, DEFAULT_CONTROLLER_KINDS } from './controllers.js'
 import { resolvePromptLanguage, type PromptLanguage } from './lang.js'
@@ -350,6 +351,23 @@ export function setupChoices(language: PromptLanguage): Choice<SetupPreset>[] {
   ]
 }
 
+/**
+ * The interactive feature list mirrors the add-on dependency graph: the choices are ordered
+ * and indented by dependency depth, selecting a feature turns on the features it requires,
+ * and clearing a required feature clears everything that depends on it. The checkboxes
+ * therefore always show exactly what creation will enable.
+ */
+const REPOSITORY_FEATURE_ADDONS = [
+  'dev-tools',
+  'github',
+  'git-cliff',
+  'auto-format',
+  'optimize-images',
+  'schema-sync',
+  'community',
+  'dependabot',
+]
+
 async function customRepositoryFeatures(
   rl: ReturnType<typeof createInterface>,
   language: PromptLanguage,
@@ -358,22 +376,19 @@ async function customRepositoryFeatures(
     rl,
     language,
     label(language, TEXT.repositoryFeatures),
-    [
-      { value: 'dev-tools', label: 'dev-tools' },
-      { value: 'github', label: 'github', indent: 1 },
-      { value: 'git-cliff', label: 'git-cliff', indent: 2 },
-      { value: 'auto-format', label: 'auto-format', indent: 2 },
-      { value: 'optimize-images', label: 'optimize-images', indent: 2 },
-      { value: 'schema-sync', label: 'schema-sync', indent: 2 },
-      { value: 'community', label: 'community', indent: 2 },
-      { value: 'dependabot', label: 'dependabot', indent: 2 },
-    ],
+    REPOSITORY_FEATURE_ADDONS.map((addon) => ({
+      value: addon,
+      label: addon,
+      indent: addonDependencyDepth(addon),
+    })),
     [
       'dev-tools',
       'github',
     ],
     {
       note: labelText(language, TEXT.featureDependencies),
+      requires: requiredAddonsFor,
+      requiredBy: (addon) => REPOSITORY_FEATURE_ADDONS.filter((other) => requiredAddonsFor(other).includes(addon)),
     },
   )
 }
@@ -546,17 +561,48 @@ async function selectOne<T extends string>(
   })
 }
 
+export type SelectManyOptions<T extends string> = {
+  requireOne?: boolean
+  note?: string
+  /** Features that `value` requires; they are selected together with it. */
+  requires?: (value: T) => T[]
+  /** Features that require `value`; they are cleared together with it. */
+  requiredBy?: (value: T) => T[]
+}
+
 async function selectMany<T extends string>(
   rl: ReturnType<typeof createInterface>,
   language: PromptLanguage,
   label: string,
   choices: Choice<T>[],
   fallback: T[],
-  options: { requireOne?: boolean; note?: string } = {},
+  options: SelectManyOptions<T> = {},
 ): Promise<T[]> {
   if (choices.length === 0) throw new Error(`${label} has no choices.`)
   let index = 0
+  const known = new Set(choices.map((choice) => choice.value))
   const selected = new Set<T>(fallback)
+
+  // Keep the visible selection closed under the dependency relation so the checkboxes never
+  // disagree with what the caller will enable.
+  const grant = (value: T): void => {
+    selected.add(value)
+    for (const dependency of options.requires?.(value) ?? []) {
+      if (known.has(dependency) && !selected.has(dependency)) grant(dependency)
+    }
+  }
+  const withdraw = (value: T): void => {
+    selected.delete(value)
+    for (const dependent of options.requiredBy?.(value) ?? []) {
+      if (selected.has(dependent)) withdraw(dependent)
+    }
+  }
+  for (const value of [...selected]) {
+    for (const dependency of options.requires?.(value) ?? []) {
+      if (known.has(dependency)) selected.add(dependency)
+    }
+  }
+
   return withSelectablePrompt(rl, language, (render, done) => {
     const onKeypress = (_value: string, key: Keypress): void => {
       if (isCancelKey(key)) {
@@ -576,8 +622,8 @@ async function selectMany<T extends string>(
       if (key.name === 'space' || key.sequence === ' ') {
         const value = choices[index]?.value
         if (value) {
-          if (selected.has(value)) selected.delete(value)
-          else selected.add(value)
+          if (selected.has(value)) withdraw(value)
+          else grant(value)
         }
         render(linesForSelectMany(language, label, choices, index, selected, options))
         return
@@ -628,7 +674,7 @@ export function linesForSelectMany<T extends string>(
   choices: Choice<T>[],
   index: number,
   selected: Set<T>,
-  options: { requireOne?: boolean; note?: string },
+  options: SelectManyOptions<T>,
   message?: string,
 ): string[] {
   return [

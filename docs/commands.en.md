@@ -36,6 +36,16 @@ create-maa-project --add dependabot
 create-maa-project --add schema-sync
 ```
 
+Add-on dependencies are resolved automatically, so no manual ordering is required:
+
+- `github` and `agent` require `dev-tools`;
+- `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync`
+  require `github` (and therefore `dev-tools`).
+
+For example, `create-maa-project --add community` also enables `dev-tools` and `github`. The
+human-readable output prints `Add-ons required by dependencies:`, and the `addons` field of the
+JSON report carries `requested` / `enabled` / `autoEnabled`.
+
 Metadata sync:
 
 ```bash

@@ -23,6 +23,7 @@ type JsonReport = {
   skipped: string[]
   pending: Array<{ kind: string; reason: string; command: string }>
   suggestedCommands: Array<{ command: string; description: string; autoRun: boolean }>
+  addons?: { requested: string[]; enabled: string[]; autoEnabled: string[] }
   backupId?: string
   backupScope?: 'managed-files'
   backup?: {
@@ -478,6 +479,71 @@ describe('CLI JSON reports', () => {
         createRoot,
       )
       expect(parseStdoutReport(created.stdout, created.stderr).command).toBe('create')
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'reports auto-enabled add-on dependencies for create and add',
+    async () => {
+      const createRoot = await tempRoot()
+      const created = await runCli(
+        [
+          'maa-deps',
+          '--add',
+          'community',
+          '--skip-download',
+          '--no-git',
+          '--report',
+        ],
+        createRoot,
+      )
+      const createReport = parseStdoutReport(created.stdout, created.stderr)
+
+      expect(created.exitCode, created.stderr).toBe(0)
+      // community requires github, which requires dev-tools.
+      expect(createReport.addons).toEqual({
+        requested: ['community'],
+        enabled: ['dev-tools', 'github', 'community'],
+        autoEnabled: ['dev-tools', 'github'],
+      })
+
+      const added = await runCli(['--add', 'schema-sync', '--report'], join(createRoot, 'maa-deps'))
+      const addReport = parseStdoutReport(added.stdout, added.stderr)
+
+      expect(added.exitCode, added.stderr).toBe(0)
+      expect(addReport.addons).toMatchObject({
+        requested: ['schema-sync'],
+        autoEnabled: ['dev-tools', 'github'],
+      })
+      expect(addReport.addons?.enabled).toContain('schema-sync')
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'reports the implied dev-tools for an agent template as an auto-enabled add-on',
+    async () => {
+      const root = await tempRoot()
+      const created = await runCli(
+        [
+          'maa-agent-deps',
+          '--template',
+          'agent',
+          '--skip-download',
+          '--no-git',
+          '--report',
+        ],
+        root,
+      )
+      const report = parseStdoutReport(created.stdout, created.stderr)
+
+      expect(created.exitCode, created.stderr).toBe(0)
+      expect(report.addons).toEqual({
+        requested: [],
+        enabled: ['dev-tools'],
+        autoEnabled: ['dev-tools'],
+      })
     },
     CLI_TEST_TIMEOUT_MS,
   )

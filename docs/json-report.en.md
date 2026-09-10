@@ -50,6 +50,11 @@ type CliJsonReport = {
     backupId?: string;
     backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
+    addons?: {
+        requested: string[];
+        enabled: string[];
+        autoEnabled: string[];
+    };
     doctor?: {
         lines: string[];
         checks: Array<{
@@ -87,6 +92,14 @@ type CliJsonReport = {
 Failure reports always carry a stable `CMP_*` command error code. If the underlying system
 provides a native code such as `ENOENT`, it is kept in `causeCode` so callers do not depend
 on OS-specific information.
+
+The `addons` field appears for `create` and `add` only: `requested` lists the add-ons the caller
+named explicitly, `enabled` is the fully resolved set for the operation, and `autoEnabled` is the
+part dependency resolution added (`enabled` minus `requested`). For example, `--add community`
+produces
+`{"requested":["community"],"enabled":["dev-tools","github","community"],"autoEnabled":["dev-tools","github"]}`.
+When `add` runs against an existing project, an add-on listed in `autoEnabled` may already have
+been enabled; the field means "pulled into this operation by a dependency", not "newly installed".
 
 Example failure report:
 

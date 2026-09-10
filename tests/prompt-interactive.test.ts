@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { resolveAddonDependencies } from '../src/addons.js'
 import { parseArgs } from '../src/args.js'
 import { runCli } from '../src/index.js'
 import type { CliOptions } from '../src/types.js'
@@ -20,6 +21,9 @@ type Harness = {
   rows: () => string[]
   send: (name: string, sequence: string, ctrl?: boolean) => void
   enter: () => void
+  down: () => void
+  up: () => void
+  space: () => void
   ctrlC: () => void
   type: (text: string) => void
   waitFor: (marker: string) => Promise<void>
@@ -67,6 +71,9 @@ function createHarness(columns: number): Harness {
       process.stdin.emit('keypress', sequence, { name, sequence, ctrl })
     },
     enter: () => harness.send('return', '\r'),
+    down: () => harness.send('down', '\u001b[B'),
+    up: () => harness.send('up', '\u001b[A'),
+    space: () => harness.send('space', ' '),
     ctrlC: () => harness.send('c', '\u0003', true),
     type: (text) => {
       for (const char of text) harness.send(char, char)
@@ -109,6 +116,8 @@ function promptOptions(): CliOptions {
 async function runInteractive(
   harness: Harness,
   answer: Partial<Record<'resource-pack' | 'git', string>> = {},
+  setup: 'default' | 'custom' = 'default',
+  featureKeys: string[] = [],
 ): Promise<CliOptions> {
   const options = promptOptions()
   const flow = promptForCreateOptions(options)
@@ -124,7 +133,20 @@ async function runInteractive(
   await harness.waitFor('Control targets:')
   harness.enter()
   await harness.waitFor('Setup:')
-  harness.enter()
+  if (setup === 'custom') {
+    harness.down()
+    harness.down()
+    harness.enter()
+    await harness.waitFor('Repository features:')
+    for (const key of featureKeys) {
+      if (key === 'down') harness.down()
+      else if (key === 'up') harness.up()
+      else harness.space()
+    }
+    harness.enter()
+  } else {
+    harness.enter()
+  }
   await harness.waitFor('Add extra resource pack (')
   harness.send(answer['resource-pack'] === 'y' ? 'y' : 'n', answer['resource-pack'] === 'y' ? 'y' : 'n')
   if (answer['resource-pack'] === 'y') {
@@ -137,6 +159,14 @@ async function runInteractive(
   harness.send(answer.git === 'y' ? 'y' : 'n', answer.git === 'y' ? 'y' : 'n')
 
   return flow
+}
+
+/** The final rendered menu for `label`, excluding the chosen-values summary that follows it. */
+function lastMenuView(rendered: string, label: string): string {
+  const header = `${label}:\n`
+  const summaryIndex = rendered.lastIndexOf(`${label}: `)
+  const end = summaryIndex === -1 ? rendered.length : summaryIndex
+  return rendered.slice(rendered.lastIndexOf(header, end), end)
 }
 
 describe('interactive prompt flow', () => {
@@ -280,6 +310,76 @@ describe('interactive prompt flow', () => {
 
     expect(lines.at(-1)).toBe('  At least one required.')
     expect(lines.some((line) => line.includes('(At least one required.)'))).toBe(false)
+  })
+
+  it('checks required features and clears dependents so the checkboxes match the result', async () => {
+    const harness = createHarness(80)
+    // Start from Custom, clear dev-tools and github, then select git-cliff (which needs both).
+    const options = await runInteractive(harness, { git: 'n' }, 'custom', [
+      'space',
+      'down',
+      'space',
+      'down',
+      'space',
+    ])
+
+    // Before the dependency-aware toggling this returned only ['git-cliff'] while creation
+    // silently enabled dev-tools and github.
+    expect(options.add).toEqual([
+      'dev-tools',
+      'github',
+      'git-cliff',
+    ])
+    expect(resolveAddonDependencies(options.add)).toEqual(options.add)
+
+    const rendered = harness.output().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    const lastView = lastMenuView(rendered, 'Repository features')
+    expect(lastView).toContain('[x] dev-tools')
+    expect(lastView).toContain('[x] github')
+    expect(lastView).toContain('[x] git-cliff')
+  })
+
+  it('clears features that depend on a feature the user turns off', async () => {
+    const harness = createHarness(80)
+    // Select git-cliff, then clear github: git-cliff cannot stay enabled without it.
+    const options = await runInteractive(harness, { git: 'n' }, 'custom', [
+      'down',
+      'down',
+      'space',
+      'up',
+      'space',
+    ])
+
+    expect(options.add).toEqual(['dev-tools'])
+    const rendered = harness.output().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    const lastView = lastMenuView(rendered, 'Repository features')
+    expect(lastView).toContain('[ ] git-cliff')
+    expect(lastView).toContain('[x] dev-tools')
+  })
+
+  it('indents the feature list by dependency depth', async () => {
+    const harness = createHarness(80)
+    const options = await runInteractive(harness, { git: 'n' }, 'custom', [])
+
+    const rendered = harness.output().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    const view = lastMenuView(rendered, 'Repository features')
+    const lines = view.split('\n')
+    const checkboxColumn = (addon: string): number => {
+      const line = lines.find((candidate) => candidate.includes(addon)) ?? ''
+      const marker = line.indexOf('[x]')
+      return marker === -1 ? line.indexOf('[ ]') : marker
+    }
+
+    // One indent level is two columns and applies before the checkbox, so deeper features
+    // line up under the feature they depend on.
+    expect(checkboxColumn('dev-tools')).toBe(2)
+    expect(checkboxColumn('github')).toBe(4)
+    expect(checkboxColumn('git-cliff')).toBe(6)
+    expect(lines.find((line) => line.includes('dev-tools'))).toMatch(/^[> ] \[x\] dev-tools$/)
+    expect(options.add).toEqual([
+      'dev-tools',
+      'github',
+    ])
   })
 
   it('exits with 130 and prints no error line when the whole CLI run is cancelled', async () => {

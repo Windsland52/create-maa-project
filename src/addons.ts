@@ -30,9 +30,96 @@ const V1_RESERVED_ADDONS = new Set([
   'branding',
 ])
 
-const SUPPORTED_INCREMENTAL_LIST =
-  'dev-tools, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync'
+/**
+ * Canonical add-on order. Dependencies always appear before the add-ons that need them.
+ */
+export const ADDON_ORDER = [
+  'dev-tools',
+  'github',
+  'agent',
+  'resource-pack',
+  'git-cliff',
+  'auto-format',
+  'optimize-images',
+  'community',
+  'dependabot',
+  'schema-sync',
+] as const
+
+/**
+ * Declarative add-on dependency graph: each entry lists the add-ons that must be enabled
+ * together with it. This is the single source of truth for `resolveAddonDependencies`,
+ * the interactive feature prompt, and the dependency text in `--help`.
+ */
+export const ADDON_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
+  'dev-tools': [],
+  github: [
+    'dev-tools',
+  ],
+  agent: [
+    'dev-tools',
+  ],
+  'resource-pack': [],
+  'git-cliff': [
+    'github',
+  ],
+  'auto-format': [
+    'github',
+  ],
+  'optimize-images': [
+    'github',
+  ],
+  community: [
+    'github',
+  ],
+  dependabot: [
+    'github',
+  ],
+  'schema-sync': [
+    'github',
+  ],
+}
+
+/** Add-ons that write a state entry into `maa-project.json`. */
+export const ADDON_CONFIG_KEYS: Readonly<Record<string, string>> = {
+  'dev-tools': 'devTools',
+  github: 'github',
+  'git-cliff': 'gitCliff',
+  'auto-format': 'autoFormat',
+  'optimize-images': 'optimizeImages',
+  dependabot: 'dependabot',
+  community: 'community',
+  'schema-sync': 'schemaSync',
+}
+
+const SUPPORTED_INCREMENTAL_LIST = ADDON_ORDER.join(', ')
 const DEFAULT_INCLUDED_LIST = 'none'
+
+/** Every add-on that must be present for `addon`, following dependencies transitively. */
+export function requiredAddonsFor(addon: string): string[] {
+  const required = new Set<string>()
+  const visit = (name: string): void => {
+    for (const dependency of ADDON_DEPENDENCIES[name] ?? []) {
+      if (required.has(dependency)) continue
+      required.add(dependency)
+      visit(dependency)
+    }
+  }
+  visit(addon)
+  return [
+    ...ADDON_ORDER.filter((candidate) => required.has(candidate)),
+    ...[...required].filter((candidate) => !(ADDON_ORDER as readonly string[]).includes(candidate)),
+  ]
+}
+
+/**
+ * Nesting level of an add-on for indented prompts: 0 for a root feature such as
+ * dev-tools, 1 for github, 2 for a feature that requires github.
+ */
+export function addonDependencyDepth(addon: string): number {
+  const required = requiredAddonsFor(addon)
+  return required.length === 0 ? 0 : Math.max(...required.map((name) => addonDependencyDepth(name))) + 1
+}
 
 export function assertSupportedCreateAddons(addons: string[]): void {
   for (const addon of addons) {
@@ -52,44 +139,59 @@ export function isDefaultIncludedAddon(addon: string): boolean {
 export function resolveAddonDependencies(addons: string[], input: { includeAgent?: boolean } = {}): string[] {
   const requested = addons
   const resolved = new Set(requested)
-  if (input.includeAgent || resolved.has('agent')) resolved.add('dev-tools')
-  if (
-    resolved.has('github') ||
-    resolved.has('git-cliff') ||
-    resolved.has('auto-format') ||
-    resolved.has('optimize-images') ||
-    resolved.has('schema-sync') ||
-    resolved.has('community') ||
-    resolved.has('dependabot')
-  ) {
-    resolved.add('dev-tools')
+  for (const addon of requested) {
+    for (const dependency of requiredAddonsFor(addon)) resolved.add(dependency)
   }
-  if (
-    resolved.has('git-cliff') ||
-    resolved.has('auto-format') ||
-    resolved.has('optimize-images') ||
-    resolved.has('schema-sync') ||
-    resolved.has('community') ||
-    resolved.has('dependabot')
-  ) {
-    resolved.add('github')
-  }
-  const order = [
-    'dev-tools',
-    'github',
-    'agent',
-    'resource-pack',
-    'git-cliff',
-    'auto-format',
-    'optimize-images',
-    'community',
-    'dependabot',
-    'schema-sync',
-  ]
+  // The agent template needs the developer tooling without listing the add-on itself.
+  if (input.includeAgent) resolved.add('dev-tools')
   return [
-    ...order.filter((addon) => resolved.has(addon)),
-    ...requested.filter((addon) => !order.includes(addon)),
+    ...ADDON_ORDER.filter((addon) => resolved.has(addon)),
+    ...requested.filter((addon) => !(ADDON_ORDER as readonly string[]).includes(addon)),
   ]
+}
+
+/**
+ * Add-ons that were enabled because another selection requires them, in canonical order.
+ * Used to explain the difference between what a caller asked for and what it received.
+ */
+export function autoEnabledAddons(requested: string[], resolved: string[]): string[] {
+  const asked = new Set(requested)
+  return resolved.filter((addon) => !asked.has(addon))
+}
+
+/** Dependency graph grouped by requirement: which add-ons need each add-on. */
+export function addonDependencyGroups(): { addon: string; dependents: string[] }[] {
+  const groups = new Map<string, string[]>()
+  for (const addon of ADDON_ORDER) {
+    for (const dependency of ADDON_DEPENDENCIES[addon] ?? []) {
+      groups.set(dependency, [
+        ...(groups.get(dependency) ?? []),
+        addon,
+      ])
+    }
+  }
+  return [...groups].map(([addon, dependents]) => ({ addon, dependents }))
+}
+
+/** Human-readable dependency rule, derived from the graph so it cannot drift. */
+export function addonDependencyText(): string {
+  const clauses = addonDependencyGroups().map(
+    ({ addon, dependents }) => `${addon} is required by ${joinList(dependents)}`,
+  )
+  return `Dependencies are enabled automatically: ${clauses.join('; ')}.`
+}
+
+/** The same rule as one indented line per dependency, for `--help`. */
+export function addonDependencyLines(): string[] {
+  return [
+    'Dependencies are enabled automatically:',
+    ...addonDependencyGroups().map(({ addon, dependents }) => `  ${addon}: ${dependents.join(', ')}`),
+  ]
+}
+
+function joinList(values: string[]): string {
+  if (values.length <= 1) return values[0] ?? ''
+  return `${values.slice(0, -1).join(', ')} and ${values.at(-1)}`
 }
 
 export function defaultIncludedAddonMessage(addon: string): string {

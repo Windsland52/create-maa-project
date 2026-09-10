@@ -45,6 +45,11 @@ type CliJsonReport = {
     backupId?: string;
     backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
+    addons?: {
+        requested: string[];
+        enabled: string[];
+        autoEnabled: string[];
+    };
     doctor?: {
         lines: string[];
         checks: Array<{
@@ -81,6 +86,13 @@ type CliJsonReport = {
 
 失败报告始终包含稳定的 `CMP_*` 命令错误码；如果底层系统还提供了 `ENOENT` 等原生错误码，会另外保存在
 `causeCode`，避免调用方依赖操作系统相关信息。
+
+`addons` 字段只在 `create` 与 `add` 命令中出现：`requested` 是命令行显式请求的 add-on，
+`enabled` 是本次操作解析后的完整集合，`autoEnabled` 是其中因依赖关系自动补上的部分
+（`enabled` 减去 `requested`）。例如 `--add community` 会得到
+`{"requested":["community"],"enabled":["dev-tools","github","community"],"autoEnabled":["dev-tools","github"]}`。
+在已有项目上执行 `add` 时，`autoEnabled` 中的 add-on 可能早已启用，该字段表达的是「因依赖而被纳入本次操作」，
+不代表本次新安装。
 
 失败报告示例：
 

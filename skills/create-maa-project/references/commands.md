@@ -57,6 +57,18 @@ create-maa-project --mcp [--root <path>]
 Add-ons: `dev-tools`, `github`, `agent`, `resource-pack` (takes a positional slug),
 `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 
+Dependencies are resolved automatically for both `create` and `--add`, so no manual ordering is
+needed:
+
+| Add-on                                                                                  | Requires                        |
+| --------------------------------------------------------------------------------------- | ------------------------------- |
+| `github`, `agent`                                                                       | `dev-tools`                     |
+| `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync` | `github` (and thus `dev-tools`) |
+
+`--add community` therefore enables `dev-tools`, `github`, and `community`. Never assume the
+enabled set equals your arguments: the human output prints `Add-ons required by dependencies:`,
+and the `addons` field of the JSON report carries `requested` / `enabled` / `autoEnabled`.
+
 ## Common options
 
 Command modes are mutually exclusive: one mode per invocation. Options below list the modes

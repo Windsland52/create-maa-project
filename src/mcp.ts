@@ -10,6 +10,7 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js'
 import packageJson from '../package.json' with { type: 'json' }
+import { ADDON_ORDER, addonDependencyText } from './addons.js'
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
 import { spawnCommand } from './command.js'
 import { CONTROLLER_KINDS } from './controllers.js'
@@ -57,18 +58,7 @@ const SYNC_TARGETS = [
   'github-url',
   'network',
 ] as const
-const ADDONS = [
-  'dev-tools',
-  'github',
-  'agent',
-  'resource-pack',
-  'git-cliff',
-  'auto-format',
-  'optimize-images',
-  'community',
-  'dependabot',
-  'schema-sync',
-] as const
+const ADDONS = ADDON_ORDER
 const CREATE_PROJECT_ARGUMENTS = [
   'name',
   'template',
@@ -325,9 +315,25 @@ const PROJECT_CONTEXT_OUTPUT_SCHEMA: OutputSchema = {
   ],
 }
 
+const ADDON_SELECTION_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    requested: { type: 'array', items: { type: 'string' } },
+    enabled: { type: 'array', items: { type: 'string' } },
+    autoEnabled: { type: 'array', items: { type: 'string' } },
+  },
+  required: [
+    'requested',
+    'enabled',
+    'autoEnabled',
+  ],
+  additionalProperties: false,
+}
+
 const SCAFFOLD_REPORT_PROPERTIES: Record<string, object> = {
   backupId: { type: 'string' },
   backupScope: { type: 'string', const: 'managed-files' },
+  addons: ADDON_SELECTION_OUTPUT_SCHEMA,
 }
 const TOOL_OUTPUT_SCHEMAS: Record<ToolName, OutputSchema> = {
   get_project_context: PROJECT_CONTEXT_OUTPUT_SCHEMA,
@@ -450,7 +456,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
         network: enumSchema(NETWORK_MODES, 'Network asset source mode.'),
         add: arraySchema(
           enumSchema(ADDONS, 'Add-on name.'),
-          'Create-time add-ons. Common repository setup is ["dev-tools","github"]. If this includes "resource-pack", resourcePackSlug is required.',
+          `Create-time add-ons. Common repository setup is ["dev-tools","github"]. Dependencies are enabled automatically (${addonDependencyText()}) and are reported in the addons result field. If this includes "resource-pack", resourcePackSlug is required.`,
         ),
         resourcePackSlug: nonBlankStringSchema(
           'ASCII kebab-case resource pack folder name, such as extra or cn. Required when add includes "resource-pack".',
@@ -551,7 +557,7 @@ const MCP_TOOL_DEFINITIONS: Tool[] = [
   {
     name: 'add',
     description:
-      'Apply one or more incremental add-ons to the selected project in one locked, backed-up operation. Pass exactly one of addon or addons. When the selection includes "resource-pack", ask the user for a resource pack folder name and pass resourcePackSlug.',
+      'Apply one or more incremental add-ons to the selected project in one locked, backed-up operation. Pass exactly one of addon or addons. Dependencies are enabled automatically and are reported in the addons result field. When the selection includes "resource-pack", ask the user for a resource pack folder name and pass resourcePackSlug.',
     inputSchema: objectSchema(
       {
         addon: enumSchema(ADDONS, 'Single add-on to apply. Use addons when applying more than one.'),

@@ -35,6 +35,15 @@ create-maa-project --add dependabot
 create-maa-project --add schema-sync
 ```
 
+add-on 依赖会被自动补全，无需手动按顺序添加：
+
+- `github`、`agent` 依赖 `dev-tools`；
+- `git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`（因而也依赖 `dev-tools`）。
+
+例如 `create-maa-project --add community` 实际会启用 `dev-tools`、`github`、`community`。
+人类可读输出会打印 `Add-ons required by dependencies:`，JSON report 的 `addons` 字段给出
+`requested` / `enabled` / `autoEnabled`。
+
 元数据同步：
 
 ```bash

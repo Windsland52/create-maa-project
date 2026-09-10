@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import packageJson from '../package.json' with { type: 'json' }
 import { applyCliEnvironment, formatCliHelp, parseArgs, validateCommandModes } from './args.js'
+import { autoEnabledAddons, resolveAddonDependencies } from './addons.js'
 import { runWithAutomaticUpdates } from './auto-update.js'
 import { spawnCommand } from './command.js'
 import { runDoctor } from './doctor.js'
@@ -162,7 +163,11 @@ async function main(): Promise<void> {
       if (options.add.length > 0 && !options.name) {
         const result = await applyIncrementalAddons(options)
         if (!result) throw new Error(`No add-on was applied: ${options.add.join(', ')}`)
-        const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
+        const report = createScaffoldJsonReport(
+          createReportContext(command, startTimeMs, executionId, logger),
+          result,
+          resolvedAddonsFor(options),
+        )
         writeJsonReport(report)
         process.exitCode = report.exitCode
         return
@@ -190,7 +195,11 @@ async function main(): Promise<void> {
         argvLogged = true
       }
       await projectLogger.info(`created=${result.root}`)
-      const report = createScaffoldJsonReport(createReportContext(command, startTimeMs, executionId, logger), result)
+      const report = createScaffoldJsonReport(
+        createReportContext(command, startTimeMs, executionId, logger),
+        result,
+        resolvedAddonsFor(createOptions),
+      )
       writeJsonReport(report)
       process.exitCode = report.exitCode
       return
@@ -243,7 +252,7 @@ async function main(): Promise<void> {
 
     if (options.add.length > 0 && !options.name) {
       const lastResult = await applyIncrementalAddons(options)
-      if (lastResult) printScaffoldResult('Updated project', lastResult)
+      if (lastResult) printScaffoldResult('Updated project', lastResult, resolvedAddonsFor(options))
       printLogPath(logger)
       return
     }
@@ -267,7 +276,7 @@ async function main(): Promise<void> {
       argvLogged = true
     }
     await projectLogger.info(`created=${result.root}`)
-    printScaffoldResult('Created project', result)
+    printScaffoldResult('Created project', result, resolvedAddonsFor(createOptions))
     printLogPath(projectLogger)
   } catch (error) {
     clearActiveProgress()
@@ -396,6 +405,21 @@ function printBackupInspection(title: string, backup: BackupInspection): void {
   }
   console.log('Paths:')
   for (const entry of backup.entries) console.log(`- ${entry.action}: ${entry.path}`)
+}
+
+type ResolvedAddons = { requested: string[]; enabled: string[] }
+
+/**
+ * Add-ons the command asked for, plus the ones dependency resolution enables alongside them.
+ * Reported to the user and in `--report` so an automated caller can see the difference
+ * instead of having to diff the generated project config.
+ */
+function resolvedAddonsFor(options: CliOptions): ResolvedAddons {
+  const includeAgent = options.template === 'agent' || options.add.includes('agent')
+  return {
+    requested: options.add,
+    enabled: resolveAddonDependencies(options.add, { includeAgent }),
+  }
 }
 
 function createReportContext(
@@ -576,8 +600,15 @@ function formatBytes(bytes: number): string {
   return unit === 'B' ? `${bytes} B` : `${value.toFixed(1)} ${unit}`
 }
 
-function printScaffoldResult(title: string, result: ScaffoldResult): void {
+function printScaffoldResult(title: string, result: ScaffoldResult, addons?: ResolvedAddons): void {
   console.log(`${title}: ${result.root}`)
+  if (addons && addons.enabled.length > 0) {
+    console.log(`Add-ons: ${addons.enabled.join(', ')}`)
+    const autoEnabled = autoEnabledAddons(addons.requested, addons.enabled)
+    if (autoEnabled.length > 0) {
+      console.log(`Add-ons required by dependencies: ${autoEnabled.join(', ')}`)
+    }
+  }
   console.log(`Written files: ${result.written.length}`)
   if (result.backupId) console.log(`Managed-files backup: ${result.backupId}`)
   if (result.skipped.length > 0) {

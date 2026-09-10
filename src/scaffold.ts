@@ -56,7 +56,7 @@ import {
   writeGeneratedFiles,
   writeProjectState,
 } from './project.js'
-import { assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
+import { ADDON_CONFIG_KEYS, assertSupportedCreateAddons, resolveAddonDependencies } from './addons.js'
 import { runCommand } from './command.js'
 import {
   DEFAULT_OCR_SUBMODULE_PATH,
@@ -341,7 +341,9 @@ export function addGithub(options: CliOptions, root = process.cwd()): Promise<Sc
 async function addGithubLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
   const config = await readProjectConfig(root)
   if (!hasDevTools(config)) {
-    throw new Error('--add github requires --add dev-tools first.')
+    // Every entry point resolves add-on dependencies first (see resolveAddonDependencies),
+    // so dev tools are already enabled here. This guard only protects direct callers.
+    throw new Error('github requires dev-tools; resolve add-on dependencies before calling addGithub().')
   }
   if (hasGithubAutomation(config)) {
     return writeAddonFiles(root, config, githubFiles(templateInputFromConfig(config)), options)
@@ -820,14 +822,10 @@ async function writeAddonFiles(
 
 function initialAddons(addons: string[]): Record<string, unknown> {
   const state: Record<string, unknown> = {}
-  if (addons.includes('dev-tools')) state.devTools = { enabled: true }
-  if (addons.includes('github')) state.github = { enabled: true }
-  if (addons.includes('git-cliff')) state.gitCliff = { enabled: true }
-  if (addons.includes('auto-format')) state.autoFormat = { enabled: true }
-  if (addons.includes('optimize-images')) state.optimizeImages = { enabled: true }
-  if (addons.includes('dependabot')) state.dependabot = { enabled: true }
-  if (addons.includes('community')) state.community = { enabled: true }
-  if (addons.includes('schema-sync')) state.schemaSync = { enabled: true }
+  for (const addon of addons) {
+    const key = ADDON_CONFIG_KEYS[addon]
+    if (key) state[key] = { enabled: true }
+  }
   return state
 }
 

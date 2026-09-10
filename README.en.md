@@ -97,6 +97,14 @@ The interactive flow asks the following questions in order; press Enter to accep
 Questions 8 and 9 take a single `y`/`n` key; Enter accepts the default. Prompt rows wrap to the
 terminal width, and Ctrl+C always exits quietly with code `130` instead of printing `Error:`.
 
+Custom repository features are indented by dependency: selecting a feature also selects the
+features it requires, and clearing a required feature clears everything that depends on it, so
+the checkboxes always show the final set. The rule is `github` and `agent` require `dev-tools`,
+while `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync`
+require `github`. The same resolution applies to `--add`, and both the
+`Add-ons required by dependencies:` line and the `addons` field of the JSON report spell out the
+difference between what you asked for and what was enabled.
+
 After the project is created:
 
 ```bash

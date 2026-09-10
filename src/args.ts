@@ -1,4 +1,5 @@
 import type { CliOptions, ControllerKind, LicenseKind, NetworkMode, TemplateName } from './types.js'
+import { ADDON_ORDER, addonDependencyLines } from './addons.js'
 import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
 import { parseCliLanguage } from './lang.js'
 import { UPDATE_TARGETS } from './update-targets.js'
@@ -399,7 +400,8 @@ Creation options:
   --license <AGPL-3.0-or-later|MIT|None>
                                     Set the project license.
   --network <auto|official>         Select the asset network mode.
-  --add <addon>                     Include an add-on during creation.
+  --add <addon>                     Include an add-on during creation. Dependencies are
+                                    enabled automatically; the result reports them.
   --git | --no-git                  Enable or disable Git initialization. Default: initialize
                                     unless the target is inside an existing Git repository.
   --force                           Permit creation in an existing target.
@@ -411,8 +413,8 @@ Creation options:
 
 Maintenance modes:
   --add <addon>                     Add a capability to the current project.
-    Add-ons: dev-tools, github, agent, resource-pack, git-cliff, auto-format,
-             optimize-images, community, dependabot, schema-sync
+    Add-ons: ${ADDON_ORDER.join(', ')}
+    ${addonDependencyLines().join('\n    ')}
   --label <name>                    Label a resource-pack add-on.
   --sync <target> [value]           Sync metadata into generated files.
     Targets: config, metadata, display-name, version, license, github-url, network

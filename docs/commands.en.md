@@ -128,6 +128,24 @@ create-maa-project --update python-runtime
 `--update all` is intentionally unsupported. Run explicit updates so pending actions and
 logs stay clear.
 
+### The two OCR provisioning modes
+
+Which mode creation uses depends on whether **Git is available on the machine**, not on
+`--git`/`--no-git` (that flag only controls whether the project runs `git init`):
+
+| Git at creation | `.gitmodules` | `ocr` in `maa-project.json` | `resource/base/model/ocr/`             |
+| --------------- | ------------- | --------------------------- | -------------------------------------- |
+| available       | written       | `{"source":"submodule",…}`  | added to `.gitignore` (models derived) |
+| unavailable     | not written   | **no `ocr` key at all**     | `manifest.json` with sha256, committed |
+
+So the same create command can produce structurally different projects on different machines,
+while both report the same exit code and file count. Set `CREATE_MAA_PROJECT_OCR_SOURCE=submodule`
+or `=download` to pin the mode instead of depending on the environment.
+
+Note: when Git is available, `.gitmodules` is written even with `--no-git`, before any `.git`
+directory exists. It is the submodule declaration for a later `git init`, not a defect; delete it
+if you do not want it.
+
 Diagnostics and maintenance:
 
 ```bash

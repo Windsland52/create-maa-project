@@ -217,11 +217,15 @@ export function addonDependencyText(): string {
   return `Dependencies are enabled automatically: ${clauses.join('; ')}.`
 }
 
-/** The same rule as one indented line per dependency, for `--help`. */
+/**
+ * The same rule as one indented line per dependency, for `--help`. The direction is spelled out
+ * because `dev-tools: vscode, github` reads as "dev-tools requires these" when the truth is the
+ * opposite.
+ */
 export function addonDependencyLines(): string[] {
   return [
     'Dependencies are enabled automatically:',
-    ...addonDependencyGroups().map(({ addon, dependents }) => `  ${addon}: ${dependents.join(', ')}`),
+    ...addonDependencyGroups().map(({ addon, dependents }) => `  ${addon} is required by ${dependents.join(', ')}`),
   ]
 }
 

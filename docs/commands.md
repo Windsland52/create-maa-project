@@ -121,6 +121,21 @@ create-maa-project --update python-runtime
 
 `--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
 
+### OCR 模型的两种供应方式
+
+默认供应方式取决于创建时**本机 Git 是否可用**，这与 `--git`/`--no-git` 无关（后者只管项目是否执行 `git init`）：
+
+| 创建时 Git | `.gitmodules` | `maa-project.json` 的 `ocr` | `resource/base/model/ocr/`              |
+| ---------- | ------------- | --------------------------- | --------------------------------------- |
+| 可用       | 写入          | `{"source":"submodule",…}`  | 写入 `.gitignore`（模型为派生文件）     |
+| 不可用     | 不写入        | **完全没有 `ocr` 键**       | 改为提交 `manifest.json`（记录 sha256） |
+
+因此同一个创建命令在不同机器上产出的项目**结构可能不同**，而两者的退出码与文件计数相同。可用
+`CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 或 `=download` 显式指定，避免依赖本机环境。
+
+注意：Git 可用时即使传入 `--no-git`，生成的 `.gitmodules` 也会被写入（此时还没有 `.git` 目录）。
+该文件是为之后的 `git init` 或手动初始化准备的子模块声明，不是错误；不想保留可以删除。
+
 诊断和维护：
 
 ```bash

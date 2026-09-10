@@ -140,10 +140,12 @@ describe('add-on dependency graph', () => {
     )
     expect(addonDependencyLines()).toEqual([
       'Dependencies are enabled automatically:',
-      '  dev-tools: vscode, github, agent',
-      '  vscode: agent',
-      '  github: git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
+      // The direction must be explicit: "dev-tools: vscode" reads as the opposite rule.
+      '  dev-tools is required by vscode, github, agent',
+      '  vscode is required by agent',
+      '  github is required by git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
     ])
+    for (const line of addonDependencyLines().slice(1)) expect(line).toContain(' is required by ')
   })
 
   it('maps every stateful add-on to its config key', () => {

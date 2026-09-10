@@ -48,8 +48,28 @@ describe('release notes extraction', () => {
     expect(result.stdout).toContain('CREATE_MAA_PROJECT_OCR_SOURCE=download')
   })
 
+  it('resolves reference-style version links instead of publishing literal brackets', async () => {
+    const result = await runNotes('v3.4.0')
+
+    expect(result.code, result.stderr).toBe(0)
+    // The heading and cross-references are reference links in CHANGELOG.md; their definitions are
+    // stripped from the notes, so each must be inlined or GitHub renders a bare "[3.4.0]".
+    expect(result.stdout).toContain('## [3.4.0](https://github.com/')
+    expect(result.stdout).not.toMatch(/## \[3\.4\.0\] /)
+    expect(result.stdout).not.toMatch(/\[3\.\d+\.\d+\](?!\()/)
+  })
+
+  it('leaves already-inline links and plain bracket text alone', async () => {
+    const result = await runNotes('v3.4.0')
+
+    // "Keep a Changelog" appears in the file header, not this section; check an inline link that
+    // does exist inside a section instead, plus a bracketed non-link.
+    expect(result.stdout).not.toMatch(/\]\(\(/)
+    expect(result.stdout).not.toMatch(/\[\[/)
+  })
+
   it('accepts a bare version and a v-prefixed one', async () => {
-    const [bare, prefixed] = await Promise.all([runNotes('3.3.0'), runNotes('v3.3.0')])
+    const [bare, prefixed] = await Promise.all([runNotes('3.4.0'), runNotes('v3.4.0')])
 
     expect(bare.code, bare.stderr).toBe(0)
     expect(bare.stdout).toBe(prefixed.stdout)

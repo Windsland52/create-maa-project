@@ -8,16 +8,16 @@
 ![node](https://img.shields.io/badge/node-%3E%3D24-green)
 ![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
 
-`create-maa-project` 是用于创建和维护新 MaaFW 应用项目的脚手架 CLI。它可以生成确定性的 Pipeline 或 Python Agent 项目，把项目意图记录在已提交的配置中，并提供显式 update、sync、doctor 和 JSON report 接口，方便人类用户和工具封装层使用。
+`create-maa-project` 是 [MaaFramework](https://github.com/MaaXYZ/MaaFramework)（MaaFW）应用项目的脚手架 CLI：回答几个问题，它会生成一个可以直接提交、构建的 Pipeline 或 Python Agent 项目。创建时的所有选择都记录在仓库内的 `maa-project.json` 中，之后通过显式的 `--sync`、`--add`、`--update`、`--doctor` 命令维护，人和 AI 工具都能读取并复现同样的结果。
 
-CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套写入路径，因此备份、运行锁、本次操作的 pending action 和 JSON report 都能保持一致。
+AI coding agent 推荐通过 [Agent Skill](#配合-agent-skill-使用) 接入：agent 读取工作流指引后，直接调用与人类用户相同的 CLI 命令。CLI 也内置 MCP stdio server 作为替代接入方式，适合 agent 没有 shell 权限或需要按 tool 粒度管控权限的环境；两条路径共用同一条写入路径，行为和回滚机制保持一致。
 
 ## 目录
 
 - [安装 CLI](#安装-cli)
 - [交互式创建项目](#交互式创建项目)
-- [配合 MCP Client 使用](#配合-mcp-client-使用)
 - [配合 Agent Skill 使用](#配合-agent-skill-使用)
+- [配合 MCP Client 使用](#配合-mcp-client-使用)
 - [自动更新](#自动更新)
 - [项目模型](#项目模型)
 - [状态与安全](#状态与安全)
@@ -25,6 +25,7 @@ CLI 也内置 MCP stdio server。MCP tools 调用的仍是 CLI 内部同一套�
 - [工具链](#工具链)
 - [Agent 项目](#agent-项目)
 - [Release 与 Runtime](#release-与-runtime)
+- [常见问题](#常见问题)
 - [JSON Report 模式](#json-report-模式)
 - [License](#license)
 
@@ -63,7 +64,17 @@ create-maa-project
 npx create-maa-project@latest
 ```
 
-交互流程会询问项目名、项目类型、控制目标和可选 add-ons。普通任务/资源项目选择 `pipeline`；只有需要 Python 自定义逻辑时才选择 `agent`。
+交互流程按顺序询问以下问题，直接回车即可接受默认值：
+
+1. **项目目录**：默认 `maa-project`。
+2. **项目 ID**：仅当目录名无法自动转成合法 ID 时追问；否则自动推导并显示。
+3. **显示名称**：默认取目录名。
+4. **许可证**：默认 AGPL-3.0-or-later。
+5. **控制目标**：可多选，默认 Adb。
+6. **项目类型**：`pipeline` 适合普通任务/资源项目；只有需要 Python 自定义逻辑时才选 `agent`。
+7. **仓库配置**：全部 / 最小 / 自定义预设。
+8. **额外资源包**：默认不添加。
+9. **初始化 Git 仓库**：目标已在 Git 仓库内时默认否，否则默认是。
 
 项目创建完成后：
 
@@ -85,10 +96,26 @@ create-maa-project --lang zh-CN
 create-maa-project --lang en
 ```
 
+## 配合 Agent Skill 使用
+
+这是 AI coding agent 的推荐接入方式。本项目内置了遵循 Agent Skills 规范的技能包 [`skills/create-maa-project`](./skills/create-maa-project)，可为 AI Coding Agent（如 Claude Code、Cursor、Windsurf、GitHub Copilot、Antigravity、Cline 等）提供完整的工作流指引、最佳实践、命令参数规范与故障排查知识；agent 读取指引后直接调用与人类用户相同的 CLI 命令，CLI 的新能力自动可用。
+
+使用 [skills CLI](https://github.com/vercel-labs/skills) 即可一键为本地 Agent 安装该技能：
+
+```bash
+# 全局安装 create-maa-project skill 到所支持的本地 Agent
+npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
+```
+
+省去 `--agent` 参数时，CLI 会交互式探测本地已安装的 AI 工具并供你勾选。安装后，Coding Agent 在面对创建 MaaFramework 项目、添加 add-ons、运行 `--doctor` 诊断或升级依赖等任务时，会自动阅读并遵守该技能指引。
+
+详细信息与本地开发安装说明请参见 [Skills 文档](./skills/README.md)。
+
 ## 配合 MCP Client 使用
 
-MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交互式的：`create_project` 要求 agent 先向你问清项目名、
-要 Pipeline 还是 Python Agent、支持哪些控制器、要启用哪些 add-ons，以及 resource pack 的文件夹名，再调用 MCP tool。
+MCP 是 Agent Skill 之外的替代接入方式，适合 agent 没有 shell 权限、或需要在 client 中按 tool 粒度管控权限的环境。MCP 本身不是交互式的：agent 应先向你问清需求，再调用对应 tool（见下文调用约定）。MCP tools 与 CLI 命令共用同一条写入路径，行为和回滚机制保持一致；新能力优先通过 CLI 与 Agent Skill 提供，MCP tool 面保持精简稳定。
+
+启动 MCP server 时建议始终用 `--root` 显式指定允许 MCP 操作的工作区；相对的 `--root` 按 MCP server 启动时的当前目录解析，省略时默认使用当前目录。
 
 如果已经全局安装 CLI，可以这样配置 MCP server：
 
@@ -151,30 +178,13 @@ MCP 适合让 AI coding agent 帮你创建或维护项目。MCP 本身不是交�
 其它可选 add-ons 先问我。
 ```
 
-如果 agent 要添加 resource pack，必须传 `resourcePackSlug`，例如 `extra` 或 `cn`；否则 MCP tool 会拒绝调用。
-`add` tool 可用 `addon` 添加单项，也可用 `addons` 数组在同一个项目锁和 managed-files 备份事务中添加多项；两者必须且只能传一个。
-建议始终用 `--root` 显式指定允许 MCP 操作的工作区；相对的 `--root` 按 MCP server 启动时的当前目录解析，省略时默认使用当前目录。
-Agent 可先调用只读的 `get_project_context` 确认 server root，以及 `projectPath` 最终解析到的项目目录。
+调用约定：
 
-创建子项目后，agent 可在 `doctor`、`sync`、`update`、`add`、`list_backups`、`show_backup`、`restore`
-和 `clean_cache` 中传相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、
-`..` 或根外符号链接。恢复前可先用 `list_backups` 查找备份、用 `show_backup` 检查内容，再以
-`restore { backupId, dryRun: true }` 预演；预演不会修改项目文件。
-
-## 配合 Agent Skill 使用
-
-本项目内置了遵循 Agent Skills 规范的技能包 [`skills/create-maa-project`](./skills/create-maa-project)，可为 AI Coding Agent（如 Claude Code、Cursor、Windsurf、GitHub Copilot、Antigravity、Cline 等）提供完整的工作流指引、最佳实践、命令参数规范与故障排查知识。
-
-使用 [skills CLI](https://github.com/vercel-labs/skills) 即可一键为本地 Agent 安装该技能：
-
-```bash
-# 全局安装 create-maa-project skill 到所支持的本地 Agent
-npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
-```
-
-省去 `--agent` 参数时，CLI 会交互式探测本地已安装的 AI 工具并供你勾选。安装后，Coding Agent 在面对创建 MaaFramework 项目、添加 add-ons、运行 `--doctor` 诊断或升级依赖等任务时，会自动阅读并遵守该技能指引。
-
-详细信息与本地开发安装说明请参见 [Skills 文档](./skills/README.md)。
+- `create_project` 之前，agent 应向你确认：项目名、Pipeline 还是 Python Agent、控制器、add-ons，以及 resource pack 的文件夹名。resource pack 的文件夹名通过 `resourcePackSlug` 传入（例如 `extra` 或 `cn`）；要添加 resource pack 时必传，否则 tool 会拒绝调用。
+- `add` tool 单次调用传 `addon` 添加单项，或传 `addons` 数组添加多项；两者必须且只能传一个。
+- agent 可先调用只读的 `get_project_context` 确认 server root，以及 `projectPath` 最终解析到的项目目录。
+- 创建子项目后，`doctor`、`sync`、`update`、`add`、`list_backups`、`show_backup`、`restore`、`clean_cache` 都接受相对 `projectPath` 继续维护。路径只能指向 MCP server 根目录内的真实目录，不能用绝对路径、`..` 或根外符号链接。
+- 恢复前可先用 `list_backups` 查找备份、`show_backup` 检查内容，再以 `restore { backupId, dryRun: true }` 预演；预演不会修改项目文件。备份与回滚机制见[状态与安全](#状态与安全)。
 
 ## 自动更新
 
@@ -342,23 +352,28 @@ create-maa-project --clean-cache
 
 生成的仓库工具链面向 Node 24 和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
 
-资产和依赖操作是显式且可恢复的：
+### OCR 模型供应
 
 - 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成或合并 `.gitmodules`，保留已有子模块映射，版本由提交中的 gitlink 钉死。
 - 在已有 Git 仓库的子目录中创建项目时，默认使用 download 模式，模型随子项目提交。显式设置 `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 时需要在 Git 工作树根目录或父仓库之外创建项目；子项目不会改写父仓库的 `.gitmodules`。
 - 本地 Git 不可用（或显式 `CREATE_MAA_PROJECT_OCR_SOURCE=download`）时改为从下载源获取 OCR 模型：写入 `manifest.json` 记录 sha256，模型文件纳入版本控制。
-- 子模块克隆失败会登记 pending action，稍后执行 `create-maa-project --update ocr-models` 补齐；该命令也会自动初始化已注册但尚未拉取的子模块。失败信息自带恢复出口：默认 v6 配置可把 `ocr.source` 切为 `download` 直接走 CDN（仅托管 ppocr_v6 tiny/small/medium）；需要其他版本时给 GitHub 配镜像，例如 `git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"` 后重试。
+- 子模块克隆失败会登记 pending action，稍后执行 `create-maa-project --update ocr-models` 补齐；该命令也会自动初始化已注册但尚未拉取的子模块。
 - `--doctor` 会检查 `resource/base/model/ocr/` 下 `det.onnx`/`rec.onnx`/`keys.txt` 是否存在且非空（新建克隆后未供模型的项目会在此报出 finding）。
-- 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令。
 - Runtime 更新会记录工具安装的文件，后续更新只清理其中已从新版本移除的文件；旧文件和安装记录均可通过本次备份恢复。
-- `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` 调整下载重试次数。
-- `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>` 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值。
-- `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>` 调整单个归档的条目数上限，默认 100000。
-- `CREATE_MAA_PROJECT_OCR_SOURCE=submodule|download` 调整创建时的 OCR 供应方式。
-- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` 从本地 zip 提供 OCR 资产（download 回退路径）。
-- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` 使用经过校验的 OCR manifest（download 回退路径）。
-- `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` 同步全部桌面 MaaFramework 和 MFAAvalonia runtime 平台。
-- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` 控制交互式提示语言。`auto` 只会在中文交互终端启用中英提示；机器可读输出仍保持英文。
+- 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令；常见网络问题的恢复方法见[常见问题](#常见问题)。
+
+### 环境变量
+
+| 环境变量                                            | 说明                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | 调整创建时的 OCR 供应方式                                                         |
+| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | 从本地 zip 提供 OCR 资产（download 回退路径）                                     |
+| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | 使用经过校验的 OCR manifest（download 回退路径）                                  |
+| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | 调整下载重试次数                                                                  |
+| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | 调整单个下载的体积上限，默认 1 GiB；带有 manifest 大小的资产会采用更严格的声明值  |
+| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | 调整单个归档的条目数上限，默认 100000                                             |
+| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | 同步全部桌面 MaaFramework 和 MFAAvalonia runtime 平台                             |
+| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | 控制交互式提示语言。`auto` 只会在中文交互终端启用中英提示；机器可读输出仍保持英文 |
 
 ## Agent 项目
 
@@ -382,7 +397,7 @@ requirements.txt
 
 带 GitHub add-on 的项目会包含 check 和 release workflows。发布打包以 Git tag 为准：源码元数据可以保持 `0.1.0`，release staging 会把 Git tag 版本注入包内的 `interface.json`。
 
-默认 runtime profile 面向 MFAAvalonia：
+默认 runtime profile 面向 [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia)：
 
 - `create-maa-project --update maafw` 同步 MaaFramework 资产。
 - `create-maa-project --update runtime:mfa` 同步 MFAAvalonia GUI runtime 资产。
@@ -390,6 +405,30 @@ requirements.txt
 - Release job 通过 `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` 选择目标 runtime 资产。
 
 默认 release artifact 覆盖 Windows、Linux、macOS 的 `x86_64` 和 `aarch64`。Windows 使用 `.zip`，Linux 和 macOS 使用 `.tar.gz`。
+
+## 常见问题
+
+**OCR 模型或资源下载失败（网络受限、代理环境）**
+
+- 默认 v6 配置可把 `maa-project.json` 中的 `ocr.source` 切为 `download`，直接从 CDN 获取（CDN 仅托管 ppocr_v6 tiny/small/medium）；需要其它版本时给 GitHub 配镜像后重试：
+
+    ```bash
+    git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"
+    ```
+
+    然后运行 `create-maa-project --update ocr-models`。
+
+- 完全离线的机器可用 `CREATE_MAA_PROJECT_OCR_ZIP_PATH` 从本地 zip 提供 OCR 资产。
+
+**提示 Stale write lock（项目运行锁被残留占用）**
+
+- 确认没有其它 create-maa-project 进程正在运行后，执行 `create-maa-project --clear-stale-lock`。
+
+**想撤销某次写入**
+
+- 用 `--list-backups` 找到备份，先 `--restore <backup-id> --dry-run` 预演，确认后去掉 `--dry-run` 执行恢复。
+
+其它失败场景先看 `--doctor` 的输出，以及项目 `.create-maa-project/logs/` 下的日志。
 
 ## JSON Report 模式
 

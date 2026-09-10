@@ -8,20 +8,25 @@ English | [简体中文](https://github.com/Windsland52/create-maa-project/blob/
 ![node](https://img.shields.io/badge/node-%3E%3D24-green)
 ![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
 
-`create-maa-project` is the scaffold and maintenance CLI for new MaaFW application
-projects. It creates deterministic Pipeline or Python Agent projects, records project
-intent in committed configuration, and provides explicit update, sync, doctor, and JSON report
-interfaces for humans and tool wrappers.
+`create-maa-project` is the scaffold CLI for [MaaFramework](https://github.com/MaaXYZ/MaaFramework)
+(MaaFW) application projects: answer a few questions and it generates a Pipeline or Python Agent
+project that is ready to commit and build. Every choice made at creation time is recorded in the
+committed `maa-project.json`; afterwards the project is maintained through explicit `--sync`,
+`--add`, `--update`, and `--doctor` commands, so humans and AI tools can read and reproduce the
+same result.
 
-The CLI also ships an MCP stdio server. MCP tools call the same internal write paths as
-the CLI, so backups, run locks, per-command pending actions, and JSON reports stay consistent.
+The recommended way for AI coding agents to use this tool is the
+[Agent Skill](#use-with-agent-skills): the agent reads the workflow guidance and calls the same
+CLI commands a human would. The CLI also ships an MCP stdio server as an alternative for
+environments without shell access or where tool-level permission control is required. Both
+paths share the same write paths, keeping behavior and rollback mechanisms consistent.
 
 ## Table of Contents
 
 - [Install The CLI](#install-the-cli)
 - [Create A Project Interactively](#create-a-project-interactively)
-- [Use With An MCP Client](#use-with-an-mcp-client)
 - [Use With Agent Skills](#use-with-agent-skills)
+- [Use With An MCP Client](#use-with-an-mcp-client)
 - [Automatic Updates](#automatic-updates)
 - [Project Model](#project-model)
 - [State and Safety](#state-and-safety)
@@ -29,6 +34,7 @@ the CLI, so backups, run locks, per-command pending actions, and JSON reports st
 - [Tooling](#tooling)
 - [Agent Projects](#agent-projects)
 - [Release and Runtime](#release-and-runtime)
+- [Troubleshooting](#troubleshooting)
 - [JSON Report Mode](#json-report-mode)
 - [License](#license)
 
@@ -69,9 +75,20 @@ If you used `npx`, run:
 npx create-maa-project@latest
 ```
 
-The interactive flow asks for the project name, project type, controller targets, and
-optional add-ons. Choose `pipeline` for a normal task/resource project. Choose `agent`
-only when you need Python custom logic.
+The interactive flow asks the following questions in order; press Enter to accept the default:
+
+1. **Project folder**: defaults to `maa-project`.
+2. **Project ID**: only asked when the folder name cannot be converted into a valid ID
+   automatically; otherwise the ID is derived and shown.
+3. **Display name**: defaults to the folder name.
+4. **License**: defaults to AGPL-3.0-or-later.
+5. **Control targets**: multi-select, defaults to Adb.
+6. **Project type**: `pipeline` for a normal task/resource project; choose `agent` only when
+   you need Python custom logic.
+7. **Repository setup**: all / minimal / custom presets.
+8. **Extra resource pack**: not added by default.
+9. **Git repository initialization**: defaults to no inside an existing Git repository,
+   yes otherwise.
 
 After the project is created:
 
@@ -94,12 +111,37 @@ create-maa-project --lang zh-CN
 create-maa-project --lang en
 ```
 
+## Use With Agent Skills
+
+This is the recommended way for AI coding agents to work with `create-maa-project`. The
+repository bundles an agent skill in [`skills/create-maa-project`](./skills/create-maa-project)
+adhering to the Agent Skills standard. It provides AI coding agents (such as Claude Code, Cursor,
+Windsurf, GitHub Copilot, Antigravity, Cline, etc.) with structured workflows, parameter
+constraints, diagnostic steps, and JSON report analysis; the agent reads the guidance and calls
+the same CLI commands a human would, so new CLI capabilities are available immediately.
+
+Install the skill using the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# Install the create-maa-project skill globally across detected local agents
+npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
+```
+
+Omit `--agent` for interactive detection of your installed AI tools. Once installed, your agent will automatically leverage the skill when scaffolding new MaaFramework projects, configuring add-ons, running doctor diagnostics, or performing backups and upgrades.
+
+See the [Skills Documentation](./skills/README.md) for further details and local development workflows.
+
 ## Use With An MCP Client
 
-MCP is useful when an AI coding agent should create or maintain the project for you. It is
-not interactive by itself: the agent should ask you for the project name, whether you want
-a Pipeline or Python Agent project, which add-ons to include, and any resource pack folder
-name before it calls the MCP tool.
+MCP is the alternative to the Agent Skill, for environments where the agent has no shell access
+or where permissions must be controlled per tool inside the client. It is not interactive by
+itself: the agent should ask you for your requirements first and then call the matching tools
+(see the calling conventions below). MCP tools share the same write paths as the CLI commands,
+keeping behavior and rollback mechanisms consistent; new capabilities land in the CLI and the
+Agent Skill first, and the MCP tool surface stays lean and stable.
+
+Always prefer an explicit `--root` for the workspace the MCP server may access. A relative
+root is resolved from the server process's startup directory; omitting it uses that directory.
 
 If the CLI is installed globally, configure the MCP server like this:
 
@@ -162,32 +204,23 @@ Create a MaaFW project in ./MaaExample. Use a Pipeline project, Android controll
 and add dev-tools and GitHub workflows. Ask me before choosing optional add-ons.
 ```
 
-If the agent adds a resource pack, it must pass a `resourcePackSlug` such as `extra` or
-`cn`; otherwise the MCP tool will reject the call.
-Always prefer an explicit `--root` for the workspace the MCP server may access. A relative
-root is resolved from the server process's startup directory; omitting it uses that directory.
-The agent can call the read-only `get_project_context` tool first to confirm the server root
-and the project directory resolved from `projectPath`.
+Calling conventions:
 
-After creating a child project, the agent can pass a relative `projectPath` to `doctor`,
-`sync`, `update`, `add`, `list_backups`, `show_backup`, `restore`, and `clean_cache`. The path
-must resolve to a real directory under the MCP server root; absolute paths, `..`, and escaping
-symlinks are rejected.
-
-## Use With Agent Skills
-
-This repository bundles an agent skill in [`skills/create-maa-project`](./skills/create-maa-project) adhering to the Agent Skills standard. It provides AI coding agents (such as Claude Code, Cursor, Windsurf, GitHub Copilot, Antigravity, Cline, etc.) with structured workflows, parameter constraints, diagnostic steps, and JSON report analysis.
-
-Install the skill using the [skills CLI](https://github.com/vercel-labs/skills):
-
-```bash
-# Install the create-maa-project skill globally across detected local agents
-npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
-```
-
-Omit `--agent` for interactive detection of your installed AI tools. Once installed, your agent will automatically leverage the skill when scaffolding new MaaFramework projects, configuring add-ons, running doctor diagnostics, or performing backups and upgrades.
-
-See the [Skills Documentation](./skills/README.md) for further details and local development workflows.
+- Before `create_project`, the agent should confirm with you: the project name, Pipeline or
+  Python Agent, the controllers, the add-ons, and the resource pack folder name. The folder
+  name is passed as `resourcePackSlug` (for example `extra` or `cn`) and is required when
+  adding a resource pack; otherwise the tool rejects the call.
+- The `add` tool takes either `addon` for a single add-on or an `addons` array for several
+  add-ons in one call; pass exactly one of the two.
+- The agent can call the read-only `get_project_context` tool first to confirm the server
+  root and the project directory resolved from `projectPath`.
+- After creating a child project, `doctor`, `sync`, `update`, `add`, `list_backups`,
+  `show_backup`, `restore`, and `clean_cache` accept a relative `projectPath`. The path must
+  resolve to a real directory under the MCP server root; absolute paths, `..`, and escaping
+  symlinks are rejected.
+- Before restoring, use `list_backups` to find a backup and `show_backup` to inspect it, then
+  preview with `restore { backupId, dryRun: true }`; a preview never modifies project files.
+  Backups and rollback are described under [State and Safety](#state-and-safety).
 
 ## Automatic Updates
 
@@ -376,7 +409,7 @@ When a generated project is opened in VS Code, `.vscode/tasks.json` syncs depend
 automatically: pipeline projects run `pnpm install --frozen-lockfile`, agent projects
 additionally run `uv sync`.
 
-Asset and dependency operations are explicit and recoverable:
+### OCR model provisioning
 
 - Project creation clones `MaaXYZ/MaaCommonAssets` as a `--depth 1` submodule by default
   and copies the `ppocr_v6/small` OCR models into `resource/base/model/ocr/`. In submodule
@@ -391,22 +424,28 @@ Asset and dependency operations are explicit and recoverable:
   `manifest.json` with sha256 checksums, with model files tracked in version control.
 - When the submodule clone fails, a pending action is recorded; run
   `create-maa-project --update ocr-models` later to recover. That command also initializes
-  a registered but not-yet-fetched submodule automatically. The failure message lists the
-  recovery exits: with the default v6 setup, switch `ocr.source` to `download` to use the
-  CDN (hosts ppocr_v6 tiny/small/medium only); for other model versions configure a GitHub
-  mirror, e.g. `git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"`, and retry.
+  a registered but not-yet-fetched submodule automatically.
 - `--doctor` checks that `det.onnx`/`rec.onnx`/`keys.txt` exist and are non-empty under
   `resource/base/model/ocr/` (fresh clones without provisioned models surface here).
-- Network or tool failures return pending actions for the current command with repair commands.
-- `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>` changes download retry attempts.
-- `CREATE_MAA_PROJECT_OCR_SOURCE=submodule|download` selects the creation-time OCR source.
-- `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>` seeds OCR assets from a local zip (download fallback).
-- `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` uses a verified OCR manifest (download fallback).
-- `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all` syncs all desktop MaaFramework and
-  MFAAvalonia runtime platforms.
-- `CREATE_MAA_PROJECT_LANG=auto|en|zh-CN` controls interactive prompt language.
-  `auto` only enables Chinese prompts for Chinese interactive terminals; machine-readable
-  output stays English.
+- Runtime updates record the files installed by the tool; later updates only clean up files
+  that the new version removed. Old files and the install record can both be restored through
+  the operation's backup.
+- Network or tool failures return pending actions for the current command with repair
+  commands; recovery for common network problems is described under
+  [Troubleshooting](#troubleshooting).
+
+### Environment variables
+
+| Variable                                            | Description                                                                                                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CREATE_MAA_PROJECT_OCR_SOURCE=submodule\|download` | Selects the creation-time OCR source.                                                                                                                 |
+| `CREATE_MAA_PROJECT_OCR_ZIP_PATH=<path>`            | Seeds OCR assets from a local zip (download fallback).                                                                                                |
+| `CREATE_MAA_PROJECT_OCR_MANIFEST_URL=<url-or-path>` | Uses a verified OCR manifest (download fallback).                                                                                                     |
+| `CREATE_MAA_PROJECT_DOWNLOAD_ATTEMPTS=<n>`          | Changes download retry attempts.                                                                                                                      |
+| `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES=<n>`         | Per-download size cap, default 1 GiB; assets that declare a manifest size use the stricter declared value.                                            |
+| `CREATE_MAA_PROJECT_MAX_ARCHIVE_ENTRIES=<n>`        | Per-archive entry count cap, default 100000.                                                                                                          |
+| `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=all`           | Syncs all desktop MaaFramework and MFAAvalonia runtime platforms.                                                                                     |
+| `CREATE_MAA_PROJECT_LANG=auto\|en\|zh-CN`           | Controls interactive prompt language. `auto` only enables bilingual prompts for Chinese interactive terminals; machine-readable output stays English. |
 
 ## Agent Projects
 
@@ -435,7 +474,7 @@ Projects with the GitHub add-on include check and release workflows. Release pac
 tag-driven: source metadata can stay at `0.1.0`, while the release package injects the Git
 tag version into the staged `interface.json`.
 
-The default runtime profile targets MFAAvalonia:
+The default runtime profile targets [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia):
 
 - `create-maa-project --update maafw` syncs MaaFramework assets.
 - `create-maa-project --update runtime:mfa` syncs MFAAvalonia GUI runtime assets.
@@ -445,6 +484,36 @@ The default runtime profile targets MFAAvalonia:
 
 Default release artifacts cover Windows, Linux, and macOS on `x86_64` and `aarch64`.
 Windows artifacts are `.zip`; Linux and macOS artifacts are `.tar.gz`.
+
+## Troubleshooting
+
+**OCR model or asset downloads fail (restricted networks, proxies)**
+
+- With the default v6 setup, switch `ocr.source` in `maa-project.json` to `download` to use
+  the CDN (hosts ppocr_v6 tiny/small/medium only). For other model versions, configure a
+  GitHub mirror and retry:
+
+    ```bash
+    git config --global url."https://gh-proxy.com/https://github.com/MaaXYZ/MaaCommonAssets.git".insteadOf "https://github.com/MaaXYZ/MaaCommonAssets.git"
+    ```
+
+    Then run `create-maa-project --update ocr-models`.
+
+- On fully offline machines, use `CREATE_MAA_PROJECT_OCR_ZIP_PATH` to seed OCR assets from a
+  local zip.
+
+**Stale write lock (a leftover project run lock blocks commands)**
+
+- After confirming that no other create-maa-project process is running, run
+  `create-maa-project --clear-stale-lock`.
+
+**Undoing a write**
+
+- Use `--list-backups` to find a backup, preview with
+  `--restore <backup-id> --dry-run`, then rerun without `--dry-run` to restore.
+
+For other failures, start with the `--doctor` output and the logs under the project's
+`.create-maa-project/logs/`.
 
 ## JSON Report Mode
 
@@ -496,7 +565,15 @@ type CliJsonReport = {
     backupId?: string;
     backupScope?: "managed-files";
     git?: {initialized: boolean; committed: boolean; reason?: string};
-    doctor?: {lines: string[]};
+    doctor?: {
+        lines: string[];
+        checks: Array<{
+            id: string;
+            status: "pass" | "fail" | "skipped";
+            summary: string;
+            details: string[];
+        }>;
+    };
     backup?:
         | {operation: "list"; backups: BackupSummary[]}
         | {operation: "show" | "restore-preview"; backup: BackupInspection}
@@ -507,9 +584,24 @@ type CliJsonReport = {
               removed: string[];
               preRestoreBackupId: string;
           };
-    error?: {message: string; code?: string};
+    error?: {
+        message: string;
+        code:
+            | "CMP_CREATE_FAILED"
+            | "CMP_SYNC_FAILED"
+            | "CMP_UPDATE_FAILED"
+            | "CMP_ADD_FAILED"
+            | "CMP_DOCTOR_FAILED"
+            | "CMP_BACKUP_FAILED"
+            | "CMP_CLEAN_CACHE_FAILED";
+        causeCode?: string;
+    };
 };
 ```
+
+Failure reports always carry a stable `CMP_*` command error code. If the underlying system
+provides a native code such as `ENOENT`, it is kept in `causeCode` so callers do not depend
+on OS-specific information.
 
 Example failure report:
 
@@ -531,7 +623,8 @@ Example failure report:
     "pending": [],
     "suggestedCommands": [],
     "error": {
-        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0."
+        "message": "Invalid version \"not-semver\". Use a SemVer version such as 0.1.0.",
+        "code": "CMP_SYNC_FAILED"
     }
 }
 ```

@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { getAsset, isSea } from 'node:sea'
 import { fileURLToPath } from 'node:url'
 import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
 import { DEFAULT_OCR_SUBMODULE_PATH, DEFAULT_OCR_SUBMODULE_URL } from './assets.js'
-import { embeddedBinaryTemplates, embeddedTextTemplates } from './template-assets.generated.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
 const TEMPLATE_ROOT = resolveTemplateRoot()
@@ -734,7 +734,12 @@ function agentBootstrapPy(): string {
 }
 
 function template(path: string, values: Record<string, string> = {}): string {
-  let content = embeddedTextTemplates[path] ?? readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
+  // In a single-executable build there is no templates/ directory next to the
+  // binary; assets embedded by build-sea.mjs are the only source. Everywhere
+  // else the tracked templates/ tree is read directly so edits apply at once.
+  let content = isSea()
+    ? new TextDecoder().decode(getAsset(seaAssetKey(path)))
+    : readFileSync(join(TEMPLATE_ROOT, path), 'utf8')
   content = content.replace(/\r\n/g, '\n')
   for (const [
     key,
@@ -746,9 +751,12 @@ function template(path: string, values: Record<string, string> = {}): string {
 }
 
 function templateBinary(path: string): Buffer {
-  const embedded = embeddedBinaryTemplates[path]
-  if (embedded !== undefined) return Buffer.from(embedded, 'base64')
+  if (isSea()) return Buffer.from(getAsset(seaAssetKey(path)))
   return readFileSync(join(TEMPLATE_ROOT, path))
+}
+
+function seaAssetKey(path: string): string {
+  return `templates/${path}`
 }
 
 function resolveTemplateRoot(): string {

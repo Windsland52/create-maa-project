@@ -339,7 +339,6 @@ async function checkPythonTooling(root: string, config: MaaProjectConfig, lines:
   for (const path of [
     '.python-version',
     'pyproject.toml',
-    'agent/bootstrap.py',
     'agent/main.py',
     'agent/agent_runtime.py',
   ]) {

@@ -13,8 +13,8 @@ If `package.json` exists at the project root, you can also run `pnpm install`, `
 `pnpm check:py` to use the generated formatting and validation tooling. When you open the project
 in VS Code, `.vscode/tasks.json` automatically runs `uv sync` and `pnpm install --frozen-lockfile`.
 
-The Agent entrypoint is `agent/main.py` (including the Python version check); Linux release
-packages use `agent/bootstrap.py` to create a venv and install runtime dependencies.
+The Agent entrypoint is `agent/main.py` (including the Python version check); release packages
+ship their own Python runtime with the dependencies preinstalled and start it directly.
 Agent runtime lives in `agent/agent_runtime.py` and imports modules
 from `agent/custom/action`, `agent/custom/reco`, and `agent/custom/sink` to register custom
 logic. PI environment, parameter parsing, logging, and path helpers live in `agent/utils/`.

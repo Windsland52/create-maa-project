@@ -44,7 +44,9 @@ const RELEASE_TARGETS = [
     runtimeArch: 'x64',
   },
   {
-    runner: 'ubuntu-latest',
+    // Native arm64 runner: the aarch64 interpreter, its wheels and the dependency
+    // download all follow the host architecture.
+    runner: 'ubuntu-24.04-arm',
     artifactOs: 'linux',
     arch: 'aarch64',
     ext: 'tar.gz',
@@ -220,7 +222,6 @@ export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version' 
     managed('requirements.txt', agentRequirements()),
     managed('agent/__init__.py', agentTemplate('__init__.py')),
     managed('agent/agent_runtime.py', agentTemplate('agent_runtime.py')),
-    managed('agent/bootstrap.py', agentBootstrapPy()),
     managed('agent/main.py', agentMainPy()),
     managed('agent/custom/__init__.py', agentTemplate('custom/__init__.py')),
     managed('agent/custom/action/__init__.py', agentTemplate('custom/action/__init__.py')),
@@ -748,10 +749,6 @@ function agentRequirements(): string {
 
 function agentRequirementsIn(): string {
   return template('agent/requirements.in')
-}
-
-function agentBootstrapPy(): string {
-  return template('agent/agent/bootstrap.py')
 }
 
 function template(path: string, values: Record<string, string> = {}): string {

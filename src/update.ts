@@ -483,9 +483,6 @@ async function updatePythonRuntime(
       '--update python-runtime requires exactly one runtime platform because Agent dependencies are installed into a platform-specific Python runtime. Set CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>.',
     )
   }
-  if (platform.startsWith('linux-')) {
-    return updateLinuxPythonRuntime(root, platform, options.commandRunner)
-  }
   if (platform.startsWith('win-')) {
     return updateWindowsEmbeddedPythonRuntime(root, platform, options)
   }
@@ -599,10 +596,12 @@ async function ensureEmbeddedPythonExecutable(root: string, platform: string): P
     await chmod(join(root, python), 0o755)
     return python
   }
-  if (!platform.startsWith('osx-')) {
+  if (platform.startsWith('win-')) {
     throw new Error(`Embedded Python executable is missing after extraction: ${python}`)
   }
 
+  // python-build-standalone links bin/python3 to the versioned interpreter and the
+  // extractor skips symlinks, so copy the real binary into place (macOS and Linux).
   const binPath = `.create-maa-project/runtime/python/${platform}/bin`
   const candidate = await findPythonExecutableCandidate(root, binPath)
   if (!candidate) {
@@ -623,39 +622,6 @@ async function findPythonExecutableCandidate(root: string, binPath: string): Pro
     if (await exists(join(root, binPath, name))) return name
   }
   return (await readdir(join(root, binPath))).find((name) => /^python3(?:\.\d+)?$/.test(name))
-}
-
-async function updateLinuxPythonRuntime(
-  root: string,
-  platform: string,
-  commandRunner: UpdateCommandRunner,
-): Promise<{ written: string[] }> {
-  const depsPath = `.create-maa-project/runtime/python-deps/${platform}`
-  const stagingRoot = await mkdtemp(join(tmpdir(), `create-maa-project-python-runtime-${randomUUID()}-`))
-  try {
-    await commandRunner(root, 'python3', [
-      '-m',
-      'pip',
-      'download',
-      '--requirement',
-      'requirements.txt',
-      '--dest',
-      stagingRoot,
-      '--only-binary=:all:',
-      ...linuxWheelPlatformArgs(platform),
-    ])
-    await trackProjectPathForBackup(root, depsPath)
-    await rm(join(root, depsPath), {
-      recursive: true,
-      force: true,
-    })
-    await cp(stagingRoot, join(root, depsPath), { recursive: true, force: true })
-  } finally {
-    await rm(stagingRoot, { recursive: true, force: true })
-  }
-  return {
-    written: await listRelativeFiles(root, depsPath),
-  }
 }
 
 async function downloadRuntimeArchive(
@@ -714,48 +680,6 @@ function patchWindowsPythonPth(content: string): string {
     if (!next.some((line) => line.trim() === path)) next.push(path)
   }
   return `${next.filter((line, index) => line.length > 0 || index < next.length - 1).join('\n')}\n`
-}
-
-function linuxWheelPlatformArgs(platform: string): string[] {
-  const tags =
-    platform === 'linux-arm64'
-      ? [
-          'manylinux_2_28_aarch64',
-          'manylinux_2_17_aarch64',
-          'manylinux2014_aarch64',
-          'linux_aarch64',
-        ]
-      : [
-          'manylinux_2_28_x86_64',
-          'manylinux_2_17_x86_64',
-          'manylinux2014_x86_64',
-          'linux_x86_64',
-        ]
-  return tags.flatMap((tag) => [
-    '--platform',
-    tag,
-  ])
-}
-
-async function listRelativeFiles(root: string, basePath: string): Promise<string[]> {
-  const base = join(root, basePath)
-  if (!(await exists(base))) return []
-  const written: string[] = []
-  await collectRelativeFiles(base, basePath, written)
-  return written
-}
-
-async function collectRelativeFiles(path: string, relativePath: string, output: string[]): Promise<void> {
-  const entries = await readdir(path, { withFileTypes: true })
-  for (const entry of entries) {
-    const childRelativePath = `${relativePath}/${entry.name}`
-    const childPath = join(path, entry.name)
-    if (entry.isDirectory()) {
-      await collectRelativeFiles(childPath, childRelativePath, output)
-    } else if (entry.isFile()) {
-      output.push(childRelativePath)
-    }
-  }
 }
 
 export async function updateOcrModels(

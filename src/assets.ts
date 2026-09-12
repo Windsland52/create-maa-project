@@ -848,6 +848,10 @@ function pythonStandalonePlatform(value: string): string | undefined {
       return 'osx-x64'
     case 'aarch64-apple-darwin':
       return 'osx-arm64'
+    case 'x86_64-unknown-linux-gnu':
+      return 'linux-x64'
+    case 'aarch64-unknown-linux-gnu':
+      return 'linux-arm64'
     default:
       return undefined
   }

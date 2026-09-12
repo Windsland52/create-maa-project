@@ -13,8 +13,8 @@ uv run python agent/main.py
 使用生成的格式化与校验工具。在 VS Code 中打开项目时，`.vscode/tasks.json` 会自动执行
 `uv sync` 和 `pnpm install --frozen-lockfile`。
 
-Agent 入口在 `agent/main.py`（含 Python 版本检查）；Linux 发布包由 `agent/bootstrap.py`
-创建虚拟环境并安装运行依赖。
+Agent 入口在 `agent/main.py`（含 Python 版本检查）；发布包自带 Python 运行时与依赖，
+由包内解释器直接启动。
 Agent runtime 在 `agent/agent_runtime.py`，会导入 `agent/custom/action`、`agent/custom/reco`
 和 `agent/custom/sink` 中的模块并注册自定义逻辑。PI 环境变量、参数解析、日志和路径工具在
 `agent/utils/`。

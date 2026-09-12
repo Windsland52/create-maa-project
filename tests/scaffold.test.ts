@@ -84,7 +84,7 @@ const EXPECTED_RELEASE_TARGETS = [
     runtimeArch: 'x64',
   },
   {
-    runner: 'ubuntu-latest',
+    runner: 'ubuntu-24.04-arm',
     artifactOs: 'linux',
     arch: 'aarch64',
     ext: 'tar.gz',
@@ -610,7 +610,6 @@ describe('scaffold', () => {
     expect(pyproject).toContain('reportAttributeAccessIssue = "none"')
     expect(await pathExists(join(root, 'maa-agent-test', 'ruff.toml'))).toBe(false)
     expect(await pathExists(join(root, 'maa-agent-test', 'pyrightconfig.json'))).toBe(false)
-    const bootstrap = await readFile(join(root, 'maa-agent-test', 'agent/bootstrap.py'), 'utf8')
     const main = await readFile(join(root, 'maa-agent-test', 'agent/main.py'), 'utf8')
     const agentRuntime = await readFile(join(root, 'maa-agent-test', 'agent/agent_runtime.py'), 'utf8')
     const custom = await readFile(join(root, 'maa-agent-test', 'agent/custom/__init__.py'), 'utf8')
@@ -620,14 +619,6 @@ describe('scaffold', () => {
     const params = await readFile(join(root, 'maa-agent-test', 'agent/utils/params.py'), 'utf8')
     const utilsInit = await readFile(join(root, 'maa-agent-test', 'agent/utils/__init__.py'), 'utf8')
     const gitignore = await readFile(join(root, 'maa-agent-test', '.gitignore'), 'utf8')
-    expect(bootstrap).toContain('debug')
-    expect(bootstrap).toContain('agent-bootstrap.log')
-    expect(bootstrap).toContain('requirements_install_lock')
-    expect(bootstrap).not.toContain('requirements_marker')
-    expect(bootstrap).not.toContain('pip_config.json')
-    expect(bootstrap).toContain('create-maa-project --update python-deps')
-    expect(bootstrap).toContain('from datetime import UTC, datetime')
-    expect(bootstrap).not.toContain('timezone.utc')
     expect(main).toContain('pyright: ignore[reportAttributeAccessIssue]')
     expect(main).toContain('from agent_runtime import run_agent  # noqa: E402')
     expect(main).toContain('sys.exit(main())')
@@ -2288,19 +2279,13 @@ export default defineConfig({
       await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'), 'gui', {
         mode: 0o666,
       })
-      if (runtimePlatform.startsWith('linux-')) {
-        const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps', runtimePlatform)
-        await mkdir(depsRoot, { recursive: true })
-        await writeFile(join(depsRoot, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
+      const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
+      if (runtimePlatform.startsWith('win-')) {
+        await mkdir(pythonRuntimeRoot, { recursive: true })
+        await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
       } else {
-        const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
-        if (runtimePlatform.startsWith('win-')) {
-          await mkdir(pythonRuntimeRoot, { recursive: true })
-          await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
-        } else {
-          await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
-          await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
-        }
+        await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
+        await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
       }
 
       await expect(
@@ -2325,38 +2310,25 @@ export default defineConfig({
         version?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
       }
-      const expectedChildExec = runtimePlatform.startsWith('win-')
-        ? 'python/python.exe'
-        : runtimePlatform.startsWith('osx-')
-          ? 'python/bin/python3'
-          : 'python3'
+      const expectedChildExec = runtimePlatform.startsWith('win-') ? 'python/python.exe' : 'python/bin/python3'
 
       expect(packageInterface.$schema).toBeUndefined()
       expect(packageInterface.version).toBe('v2.0.0')
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
-      expect(packageInterface.agent?.[0]?.child_args).toEqual([
-        '-u',
-        runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py',
-      ])
+      expect(packageInterface.agent?.[0]?.child_args).toEqual(['-u', 'agent/main.py'])
       expect(sourceInterface.agent?.[0]?.child_args).not.toEqual(packageInterface.agent?.[0]?.child_args)
-      const packagedAgentEntry = runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py'
-      const packagedEntry = await readFile(join(projectRoot, 'dist/package-mfaa', packagedAgentEntry), 'utf8')
+      const packagedEntry = await readFile(join(projectRoot, 'dist/package-mfaa', 'agent/main.py'), 'utf8')
       expect(packagedEntry).toContain('Python >=3.13,<3.14 is required')
-      if (runtimePlatform.startsWith('linux-')) {
-        expect(packagedEntry).toContain('agent-bootstrap.log')
-      }
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/__pycache__'))).toBe(false)
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/agent/main.pyo'))).toBe(false)
-      if (runtimePlatform.startsWith('linux-')) {
-        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/python'))).toBe(false)
-        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
-      } else {
-        expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
-        expect(await pathExists(join(projectRoot, 'dist/package-mfaa/requirements.txt'))).toBe(false)
-        expect(
-          await pathExists(join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256')),
-        ).toBe(false)
-      }
+      // Every platform ships the interpreter with the dependencies preinstalled: no
+      // wheelhouse inputs and no runtime install.
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa/requirements.txt'))).toBe(false)
+      expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps'))).toBe(false)
+      expect(
+        await pathExists(join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256')),
+      ).toBe(false)
       if (!runtimePlatform.startsWith('win-') && process.platform !== 'win32') {
         expect(
           (
@@ -2405,19 +2377,13 @@ export default defineConfig({
       await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'mxu.exe' : 'mxu'), 'gui', {
         mode: 0o666,
       })
-      if (runtimePlatform.startsWith('linux-')) {
-        const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps', runtimePlatform)
-        await mkdir(depsRoot, { recursive: true })
-        await writeFile(join(depsRoot, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
+      const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
+      if (runtimePlatform.startsWith('win-')) {
+        await mkdir(pythonRuntimeRoot, { recursive: true })
+        await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
       } else {
-        const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
-        if (runtimePlatform.startsWith('win-')) {
-          await mkdir(pythonRuntimeRoot, { recursive: true })
-          await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
-        } else {
-          await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
-          await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
-        }
+        await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
+        await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
       }
 
       await expect(
@@ -2442,20 +2408,12 @@ export default defineConfig({
         title?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
       }
-      const expectedChildExec = runtimePlatform.startsWith('win-')
-        ? 'python/python.exe'
-        : runtimePlatform.startsWith('osx-')
-          ? 'python/bin/python3'
-          : 'python3'
+      const expectedChildExec = runtimePlatform.startsWith('win-') ? 'python/python.exe' : 'python/bin/python3'
 
       expect(packageInterface.title).toContain('| MXU')
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
-      // Re-declaring the Agent command in the MXU GUI config makes Linux start agent/main.py
-      // directly, so agent/bootstrap.py never builds the .venv or installs the dependencies.
-      expect(packageInterface.agent?.[0]?.child_args).toEqual([
-        '-u',
-        runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py',
-      ])
+      // The MXU GUI config must not re-declare the Agent command: prepareReleaseInterface owns it.
+      expect(packageInterface.agent?.[0]?.child_args).toEqual(['-u', 'agent/main.py'])
       // MXU packages use the maafw layout instead of top-level runtimes/libs/plugins
       for (const relativePath of [
         'runtimes',
@@ -2465,12 +2423,9 @@ export default defineConfig({
         expect(await pathExists(join(packageRoot, relativePath))).toBe(false)
       }
       expect(await pathExists(join(packageRoot, 'maafw'))).toBe(true)
-      if (runtimePlatform.startsWith('linux-')) {
-        expect(await pathExists(join(packageRoot, 'deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
-        expect(await pathExists(join(packageRoot, 'requirements.txt'))).toBe(true)
-      } else {
-        expect(await pathExists(join(packageRoot, expectedChildExec))).toBe(true)
-      }
+      expect(await pathExists(join(packageRoot, expectedChildExec))).toBe(true)
+      expect(await pathExists(join(packageRoot, 'requirements.txt'))).toBe(false)
+      expect(await pathExists(join(packageRoot, 'deps'))).toBe(false)
     }
   })
 
@@ -3358,18 +3313,30 @@ export default defineConfig({
     ])
   })
 
-  it('downloads Linux Agent wheels without embedding Python', async () => {
+  it('downloads the Linux embedded Python runtime and installs Agent requirements', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
     await createProject(defaultOptions({ name: 'maa-python-runtime-linux', template: 'agent' }))
     const projectRoot = join(root, 'maa-python-runtime-linux')
     process.chdir(projectRoot)
 
+    const archive = createTarGzArchive([
+      {
+        path: 'python/install/bin/python3.13',
+        content: Buffer.from('python'),
+        mode: 0o755,
+      },
+      {
+        path: 'python/install/lib/python3.13/site-packages/README.txt',
+        content: Buffer.from('site'),
+        mode: 0o644,
+      },
+    ])
     const commands: Array<{ root: string; command: string; args: string[] }> = []
     const progress: string[] = []
-    const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps/linux-arm64')
-    await mkdir(depsRoot, { recursive: true })
-    await writeFile(join(depsRoot, 'old.whl'), 'old-wheel', 'utf8')
+    const runtimeRoot = join(projectRoot, '.create-maa-project/runtime/python/linux-arm64')
+    await mkdir(runtimeRoot, { recursive: true })
+    await writeFile(join(runtimeRoot, 'old-runtime.txt'), 'old-runtime', 'utf8')
 
     await withEnvironment({ CREATE_MAA_PROJECT_RUNTIME_PLATFORM: 'linux-arm64' }, async () => {
       const result = await recordUpdateRequests(
@@ -3379,18 +3346,37 @@ export default defineConfig({
           ],
         }),
         {
-          productManifestResolver: async () => {
-            throw new Error('Linux Python runtime should not use GitHub release resolver')
+          productManifestResolver: async (request) => {
+            expect(request).toEqual({
+              product: 'Python',
+              channel: 'latest',
+              platform: 'linux-arm64',
+            })
+            return {
+              schemaVersion: 1,
+              product: 'Python',
+              version: '20260610',
+              assets: [
+                {
+                  path: '.create-maa-project/runtime/python/linux-arm64/cpython-3.13.14+20260610-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz',
+                  url: 'https://example.test/python.tar.gz',
+                  sha256: sha256(archive),
+                  size: archive.byteLength,
+                  extract: {
+                    product: 'Python',
+                    platform: 'linux-arm64',
+                    format: 'tar.gz',
+                  },
+                },
+              ],
+            }
           },
           assetDownloader: async () => {
-            throw new Error('Linux Python runtime should not download an embedded Python archive')
+            expect(await readFile(join(runtimeRoot, 'old-runtime.txt'), 'utf8')).toBe('old-runtime')
+            return archive
           },
           commandRunner: async (cwd, command, args) => {
             commands.push({ root: cwd, command, args })
-            expect(await readFile(join(depsRoot, 'old.whl'), 'utf8')).toBe('old-wheel')
-            const destination = args[args.indexOf('--dest') + 1]
-            if (!destination) throw new Error('pip download destination is missing')
-            await writeFile(join(destination, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
           },
           onProgress: (message) => progress.push(message),
         },
@@ -3399,29 +3385,30 @@ export default defineConfig({
       expect(result.pending.some((item) => item.kind === 'python-runtime')).toBe(false)
       expect(result.written).toEqual(
         expect.arrayContaining([
-          '.create-maa-project/runtime/python-deps/linux-arm64/maafw-0.0.0-py3-none-any.whl',
+          '.create-maa-project/runtime/python/linux-arm64/bin/python3',
+          '.create-maa-project/runtime/python/linux-arm64/lib/python3.13/site-packages/README.txt',
         ]),
       )
-      expect(await pathExists(join(projectRoot, '.create-maa-project/runtime/python/linux-arm64'))).toBe(false)
-      expect(await pathExists(join(depsRoot, 'old.whl'))).toBe(false)
+      // python-build-standalone links bin/python3 to the versioned interpreter; the
+      // extractor drops symlinks, so the runtime must still expose a real bin/python3.
+      expect(await readFile(join(runtimeRoot, 'bin/python3'), 'utf8')).toBe('python')
+      expect(await readFile(join(runtimeRoot, 'bin/python3.13'), 'utf8')).toBe('python')
+      expect(await pathExists(join(runtimeRoot, 'old-runtime.txt'))).toBe(false)
     })
 
     expect(commands).toEqual([
       {
         root: projectRoot,
-        command: 'python3',
-        args: expect.arrayContaining([
-          '-m',
+        command: 'uv',
+        args: [
           'pip',
-          'download',
+          'install',
+          '--python',
+          '.create-maa-project/runtime/python/linux-arm64/bin/python3',
+          '--system',
           '--requirement',
           'requirements.txt',
-          '--dest',
-          expect.stringContaining('create-maa-project-python-runtime-'),
-          '--only-binary=:all:',
-          '--platform',
-          'manylinux_2_28_aarch64',
-        ]),
+        ],
       },
     ])
     expect(progress).toEqual([

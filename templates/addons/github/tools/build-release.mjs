@@ -79,9 +79,8 @@ const GUI_TYPES = {
             const modified = {...iface};
             modified.title = `${iface.label ?? slug} ${ver} | MXU`;
             // Deliberately no agent override: prepareReleaseInterface already sets the
-            // platform-correct command (Linux -> agent/bootstrap.py for the venv and dependency
-            // install, win/mac -> agent/main.py with preinstalled deps), and MXU resolves
-            // relative child_exec paths against the project root on its own.
+            // platform-correct command (the bundled interpreter running agent/main.py), and
+            // MXU resolves relative child_exec paths against the project root on its own.
             return modified;
         },
     },
@@ -121,7 +120,7 @@ const artifacts = [];
 for (const guiKey of enabledGuis) {
     const gui = GUI_TYPES[guiKey];
     console.log(`\n--- Building ${gui.suffix} package ---`);
-    const packagePaths = releasePackagePaths(interfaceJson, runtimePlatform, guiKey);
+    const packagePaths = releasePackagePaths(interfaceJson, guiKey);
 
     const guiInterface = gui.modifyInterface(
         prepareReleaseInterface(interfaceJson, version, runtimePlatform),
@@ -141,7 +140,7 @@ for (const guiKey of enabledGuis) {
                 throw new Error(`release package path is missing: ${path}`);
             }
         }
-        if (packageHasAgent(interfaceJson) && hasEmbeddedPythonRuntime(runtimePlatform)) {
+        if (packageHasAgent(interfaceJson)) {
             const pythonPath = pythonRuntimePath(runtimePlatform);
             if (!existsSync(pythonPath)) {
                 throw new Error(`release package path is missing: ${pythonPath}`);
@@ -216,7 +215,7 @@ function isProjectRelativePath(path) {
     );
 }
 
-function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {
+function releasePackagePaths(interfaceJson, guiKey) {
     const paths = [
         "tasks",
         "resource",
@@ -226,11 +225,6 @@ function releasePackagePaths(interfaceJson, runtimePlatform, guiKey) {
     }
     if (packageHasAgent(interfaceJson)) {
         paths.push("agent");
-        if (runtimePlatform.startsWith("linux-")) {
-            // Linux is the only platform whose Agent resolves requirements.txt at
-            // runtime (bootstrap.py); win/mac runtimes ship with preinstalled deps.
-            paths.push("requirements.txt", linuxPythonDepsPath(runtimePlatform));
-        }
     }
     if (typeof interfaceJson.icon === "string" && interfaceJson.icon) {
         paths.push(interfaceJson.icon);
@@ -263,7 +257,12 @@ function prepareReleaseInterface(interfaceJson, version, runtimePlatform) {
                 ? {
                       ...agent,
                       child_exec: releaseAgentChildExec(runtimePlatform),
-                      child_args: releaseAgentChildArgs(runtimePlatform),
+                      // Every package ships its own interpreter with the Agent dependencies
+                      // preinstalled, so the Agent always starts through agent/main.py.
+                      child_args: [
+                          "-u",
+                          "agent/main.py",
+                      ],
                   }
                 : agent,
         );
@@ -283,14 +282,14 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
     }
     for (const path of packagePaths) {
         const options = path === "agent" ? {filter: shouldCopyAgentPath} : {};
-        copyPath(path, join(pkgDir, releasePackagePath(path)), options);
+        copyPath(path, join(pkgDir, path), options);
     }
     for (const path of optionalPackagePaths()) {
         if (existsSync(path)) {
-            copyPath(path, join(pkgDir, releasePackagePath(path)));
+            copyPath(path, join(pkgDir, path));
         }
     }
-    if (packageHasAgent(interfaceJson) && hasEmbeddedPythonRuntime(runtimePlatform)) {
+    if (packageHasAgent(interfaceJson)) {
         copyPath(pythonRuntimePath(runtimePlatform), join(pkgDir, "python"));
     }
     if (!gui.flatLayout) {
@@ -332,9 +331,8 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         throw new Error("release package smoke failed: package must not contain a top-level wrapper directory");
     }
     for (const path of packagePaths) {
-        const packagePath = releasePackagePath(path);
-        if (!existsSync(join(root, packagePath))) {
-            throw new Error(`release package smoke failed: package path is missing: ${packagePath}`);
+        if (!existsSync(join(root, path))) {
+            throw new Error(`release package smoke failed: package path is missing: ${path}`);
         }
     }
     for (const path of releaseDevPaths()) {
@@ -376,11 +374,8 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
     }
     if (packageHasAgent(packagedInterface)) {
         const childExec = packagedInterface.agent[0]?.child_exec ?? releaseAgentChildExec(runtimePlatform);
-        if (hasEmbeddedPythonRuntime(runtimePlatform) && !existsSync(join(root, ...childExec.split("/")))) {
+        if (!existsSync(join(root, ...childExec.split("/")))) {
             throw new Error(`release package smoke failed: Agent Python entrypoint is missing: ${childExec}`);
-        }
-        if (!existsSync(join(root, "agent", "bootstrap.py"))) {
-            throw new Error("release package smoke failed: Agent bootstrap is missing");
         }
     }
     assertUnixExecutablePermissions(root, runtimePlatform);
@@ -484,25 +479,12 @@ function removeFiles(root, shouldRemove) {
     });
 }
 
-function releasePackagePath(path) {
-    const normalized = path.split("\\").join("/");
-    return normalized.startsWith(".create-maa-project/runtime/python-deps/") ? "deps" : path;
-}
-
 function guiRuntimePath(runtimeDir, runtimePlatform) {
     return join(".create-maa-project", "runtime", runtimeDir, runtimePlatform);
 }
 
 function pythonRuntimePath(runtimePlatform) {
     return join(".create-maa-project", "runtime", "python", runtimePlatform);
-}
-
-function linuxPythonDepsPath(runtimePlatform) {
-    return join(".create-maa-project", "runtime", "python-deps", runtimePlatform);
-}
-
-function hasEmbeddedPythonRuntime(runtimePlatform) {
-    return runtimePlatform.startsWith("win-") || runtimePlatform.startsWith("osx-");
 }
 
 function guiEntrypointName(runtimePlatform) {
@@ -560,25 +542,11 @@ function normalizeRuntimeArch(value) {
     return "";
 }
 
+// Every release package ships an embedded interpreter with the Agent dependencies
+// preinstalled: Windows uses the python.org embeddable runtime, macOS and Linux use
+// python-build-standalone. All of them live under `python/` at the package root.
 function releaseAgentChildExec(runtimePlatform) {
-    if (runtimePlatform.startsWith("win-")) return "python/python.exe";
-    if (runtimePlatform.startsWith("osx-")) return "python/bin/python3";
-    return "python3";
-}
-
-function releaseAgentChildArgs(runtimePlatform) {
-    // win/mac embedded runtimes ship with preinstalled dependencies and start
-    // straight into the Agent; only Linux relies on bootstrap.py to set up a venv.
-    if (runtimePlatform.startsWith("linux-")) {
-        return [
-            "-u",
-            "agent/bootstrap.py",
-        ];
-    }
-    return [
-        "-u",
-        "agent/main.py",
-    ];
+    return runtimePlatform.startsWith("win-") ? "python/python.exe" : "python/bin/python3";
 }
 
 function isRecord(value) {

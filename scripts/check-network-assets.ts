@@ -16,6 +16,8 @@ const EXPECTED_RUNTIME_PLATFORMS = [
   'win-x64',
 ] as const
 const EXPECTED_PYTHON_STANDALONE_PLATFORMS = [
+  'linux-arm64',
+  'linux-x64',
   'osx-arm64',
   'osx-x64',
 ] as const

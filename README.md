@@ -241,7 +241,6 @@ dev-tools 会写入 13 个文件：`.node-version`、`.prettierrc.mjs`、`.prett
 
 ```text
 agent/
-├── bootstrap.py
 ├── main.py
 ├── agent_runtime.py
 ├── custom/
@@ -251,7 +250,7 @@ uv.lock
 requirements.txt
 ```
 
-生成的 bootstrap 负责本地运行时准备、依赖检查、debug 日志和启动 `agent/main.py`。`config/pip_config.json`、`.venv/`、`debug/` 等运行时本地文件会被忽略，不进入提交。
+`agent/main.py` 是 Agent 入口（含 Python 版本检查），`agent/agent_runtime.py` 注册 `custom/` 下的自定义逻辑；本地开发用 `uv sync` 准备依赖。发布包自带 Python 运行时与依赖（Windows 用 python.org 嵌入式发行版，macOS 与 Linux 用 python-build-standalone），不依赖用户系统里的 Python。`config/`、`.venv/`、`debug/` 等运行时本地文件会被忽略，不进入提交。
 
 ## Release 与 Runtime
 

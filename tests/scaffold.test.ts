@@ -2826,6 +2826,47 @@ export default defineConfig({
       ],
     })
 
+    const linuxPython = await resolveProductAssetManifestFromGithubRelease(
+      { product: 'Python', channel: '20260610', platform: 'linux-arm64' },
+      {
+        fetchJson: async () => ({
+          tag_name: '20260610',
+          assets: [
+            {
+              name: 'cpython-3.13.14+20260610-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz',
+              browser_download_url: 'https://example.test/linux.tar.gz',
+              digest: `sha256:${'a'.repeat(64)}`,
+              size: 27111312,
+            },
+            {
+              name: 'cpython-3.13.14+20260610-aarch64-unknown-linux-gnu-freethreaded-install_only_stripped.tar.gz',
+              browser_download_url: 'https://example.test/linux-freethreaded.tar.gz',
+              digest: `sha256:${'b'.repeat(64)}`,
+              size: 1,
+            },
+          ],
+        }),
+      },
+    )
+
+    // Linux bundles the same standalone runtime as macOS; the freethreaded build stays filtered.
+    expect(linuxPython).toMatchObject({
+      product: 'Python',
+      tag: '20260610',
+      platform: 'linux-arm64',
+      assets: [
+        {
+          path: '.create-maa-project/runtime/python/linux-arm64/cpython-3.13.14+20260610-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz',
+          sha256: 'a'.repeat(64),
+          extract: {
+            product: 'Python',
+            platform: 'linux-arm64',
+            format: 'tar.gz',
+          },
+        },
+      ],
+    })
+
     await withEnvironment(
       {
         GITHUB_ACTIONS: 'true',

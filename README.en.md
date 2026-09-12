@@ -316,7 +316,6 @@ project:
 
 ```text
 agent/
-├── bootstrap.py
 ├── main.py
 ├── agent_runtime.py
 ├── custom/
@@ -326,9 +325,12 @@ uv.lock
 requirements.txt
 ```
 
-The generated bootstrap handles local runtime setup, dependency checks, debug logging, and
-starting `agent/main.py`. Runtime-local files such as `config/pip_config.json`, `.venv/`,
-and `debug/` are ignored instead of committed.
+`agent/main.py` is the Agent entrypoint (including the Python version check) and
+`agent/agent_runtime.py` registers the custom logic under `custom/`; local development prepares
+dependencies with `uv sync`. Release packages ship their own Python runtime and dependencies
+(python.org embeddable on Windows, python-build-standalone on macOS and Linux), so they never
+depend on the Python installed on the user's machine. Runtime-local files such as `config/`,
+`.venv/`, and `debug/` are ignored instead of committed.
 
 ## Release and Runtime
 

@@ -42,6 +42,11 @@
     dist\sea\create-maa-project-win-x86_64.exe <tmp>\demo2 --skip-download --no-git
     ```
 
+> 生成项目的依赖版本不需要手动 bump：`src/template-deps.json` 是唯一来源，`pnpm sync:deps` 从 npm
+> registry 取最新版（默认只升同 major，跨 major 用 `--major`），每日由 `Deps Sync` workflow 跑完
+> `pnpm check` 后自动提交。发布前确认该 workflow 最近一次运行是绿的即可；要立刻生效就本地跑一次
+> `pnpm sync:deps`。
+
 ## CHANGELOG
 
 `CHANGELOG.md` 由**人工精炼维护**：合并同类项、以用户视角描述效果，内部重构与 CI 细节通常不逐条罗列。

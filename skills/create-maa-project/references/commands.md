@@ -86,7 +86,7 @@ Custom feature list leaves it unchecked, so do not assume an interactive project
 
 | File                                                          | Refresh |
 | ------------------------------------------------------------- | ------- |
-| `.node-version` (pins Node 24)                                | managed |
+| `.node-version` (pins Node 22)                                | managed |
 | `.prettierrc.mjs`                                             | managed |
 | `.prettierignore`                                             | once    |
 | `package.json` (devDependencies, engines, packageManager)     | once    |
@@ -175,7 +175,8 @@ a finding with the `--update ocr-models` repair command.
 
 ## Generated project toolchain
 
-Generated repositories target Node 24 and pnpm 11.5.1. `dev-tools` projects get local
+Generated repositories target Node 22 (>= 22.13) and pnpm 11; the exact pnpm version is pinned by
+the generated project's `packageManager`. `dev-tools` projects get local
 formatting, schema validation, MaaFW checks, and release dry-run scripts; `agent` projects
 additionally get uv, Ruff, and Pyright. Opening the generated project in VS Code syncs
 dependencies through `.vscode/tasks.json` (`pnpm install --frozen-lockfile`; agent projects

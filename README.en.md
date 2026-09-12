@@ -253,7 +253,8 @@ For the full creation options (`--slug`, `--controller`, `--license`, `--git`, .
 
 ## Tooling
 
-Generated repository tooling targets Node 22 (>= 22.13) and pnpm 11.5.1. Dev-tool projects include
+Generated repository tooling targets Node 22 (>= 22.13) and pnpm 11; the exact pnpm version is
+pinned by the generated project's `packageManager`. Dev-tool projects include
 project-local scripts for formatting, schema validation, MaaFW checks, project state
 linting, and release dry-runs. Agent projects add uv, Ruff, Pyright, and Python checks.
 When a generated project is opened in VS Code, `.vscode/tasks.json` syncs dependencies

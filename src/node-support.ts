@@ -1,8 +1,10 @@
 /**
  * The Node.js version this project and every generated project target.
  *
- * The floor is set by pnpm: the generated projects pin `pnpm@11.5.1`, which requires Node >=22.13
- * (pnpm 11 uses the `node:sqlite` builtin). Node 22 is an LTS line supported into 2027 and is the
+ * The floor is set by pnpm: generated projects pin pnpm through `src/template-deps.json`, and the
+ * pinned pnpm major requires Node >=22.13 (pnpm 11 uses the `node:sqlite` builtin). A pnpm major
+ * never moves automatically, and `pnpm sync:deps` also holds a same-major bump whose published
+ * `engines.node` would exceed this floor. Node 22 is an LTS line supported into 2027 and is the
  * oldest line still receiving security fixes, so it is the lowest floor worth supporting.
  *
  * `SUPPORTED_NODE_MAJOR` is what `.node-version` and generated CI workflows pin, so version

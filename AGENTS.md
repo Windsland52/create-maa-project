@@ -104,6 +104,25 @@ Never write the version literally in a template, in `doctor.ts`, or in generated
 how it drifted before. `tests/node-support.test.ts` fails if a hardcoded `24` reappears, and CI runs
 the full suite on both the floor and the current LTS so the floor cannot drift upward unnoticed.
 
+## Template Dependency Pins
+
+`src/template-deps.json` is the single source of truth for the npm versions a generated project's
+`package.json` pins. `templates/addons/dev-tools/package.json` carries `{{devDependencies}}` /
+`{{pnpmVersion}}` placeholders rendered from it — never write a version literal back into that
+template. This repository's own `devDependencies` mirror the shared toolchain packages, because the
+CLI formats its templates with the same Prettier plugins a generated project uses.
+
+`pnpm sync:deps` resolves every pin from the npm registry, mirrors the shared ones into
+`package.json`, and refreshes the lockfile. `.github/workflows/deps-sync.yml` runs it daily on the
+Node floor and commits only when `pnpm check` passes; it refuses to commit when the run touched files
+outside the pin set, because a formatter bump can reflow generated templates and that is a contract
+change for a human to land with a changelog entry. Only same-major moves are automatic: `--major` is
+a human decision, and a same-major pnpm bump is held when its published `engines.node` would outgrow
+the floor — best-effort, since pnpm does not publish its real requirement, which leaves the floor CI
+run as the backstop. `tests/template-deps.test.ts` fails if a pin reappears as a literal in the
+template, if this repository's pins drift from the source, or if a document states the pnpm patch
+version.
+
 ## Testing the CLI
 
 - Tests import `src/` directly; the child-process suites run `dist/index.js`, so **rebuild

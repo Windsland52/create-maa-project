@@ -208,7 +208,7 @@ create-maa-project --doctor                  # 诊断当前项目（只读）
 
 ## 工具链
 
-生成的仓库工具链面向 Node 22（>= 22.13）和 pnpm 11.5.1。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
+生成的仓库工具链面向 Node 22（>= 22.13）和 pnpm 11：确切的 pnpm 版本由生成项目的 `packageManager` 固定。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
 
 dev-tools 会写入 13 个文件：`.node-version`、`.prettierrc.mjs`、`.prettierignore`、`package.json`、`pnpm-workspace.yaml`、`tools/validate-schema.mjs`，以及 `tools/schema/` 下的 7 个文件（4 个上游 schema、2 个可编辑的自定义 schema、`schema-manifest.json`）。编辑器集成是独立的 `vscode` add-on（依赖 dev-tools），写入 `.vscode/` 下的 `settings.json`、`extensions.json`、`tasks.json`，Agent 项目再加 `launch.json`；不传 `--add vscode` 就不会有 `.vscode/`。逐项用途与刷新方式（`managed` 可被 `--update` 刷新、`once` 仅首次创建写入）见[命令文档](./docs/commands.md#dev-tools-写入的文件)与 [vscode 一节](./docs/commands.md#vscode-写入的文件)。
 

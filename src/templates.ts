@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
 import { DEFAULT_OCR_SUBMODULE_PATH, DEFAULT_OCR_SUBMODULE_URL } from './assets.js'
 import { SUPPORTED_NODE_MAJOR, SUPPORTED_NODE_RANGE } from './node-support.js'
+import { TEMPLATE_DEV_DEPENDENCIES, TEMPLATE_PNPM_VERSION } from './template-deps.js'
 import { addV, prettyJson, stableJson } from './utils.js'
 
 const TEMPLATE_ROOT = resolveTemplateRoot()
@@ -460,6 +461,10 @@ function generatedPackageJson(input: ProjectTemplateInput): string {
     version: jsonStringContent(input.version),
     license: jsonStringContent(packageLicense(input.license)),
     nodeRange: jsonStringContent(SUPPORTED_NODE_RANGE),
+    // Pinned exactly: a generated project installs what the template was tested with. Freshness is
+    // `pnpm sync:deps`'s job, not the installer's.
+    devDependencies: indentContinuation(stableJson(TEMPLATE_DEV_DEPENDENCIES).trimEnd(), 4),
+    pnpmVersion: TEMPLATE_PNPM_VERSION,
     scripts: indentContinuation(stableJson(packageScripts(input)).trimEnd(), 4),
   })
 }

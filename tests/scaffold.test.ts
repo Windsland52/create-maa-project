@@ -41,6 +41,7 @@ import {
   type DownloadProgress,
 } from '../src/assets.js'
 import { sha256 } from '../src/utils.js'
+import { TEMPLATE_DEV_DEPENDENCIES } from '../src/template-deps.js'
 
 const cwdStack: string[] = []
 const tempRoots: string[] = []
@@ -655,10 +656,8 @@ describe('scaffold', () => {
     expect(pnpmWorkspace).toContain('- create-maa-project')
     expect(pnpmWorkspace).not.toContain('prettier@')
     expect(await readJson(join(root, 'maa-agent-test', 'package.json'))).toMatchObject({
-      devDependencies: {
-        prettier: '3.9.5',
-        'prettier-plugin-multiline-arrays': '4.1.10',
-      },
+      // Taken from the single source so bumping a pin cannot fail this test.
+      devDependencies: TEMPLATE_DEV_DEPENDENCIES,
       scripts: {
         'format:py': 'uv run --frozen ruff format .',
         'lint:py': 'uv run --frozen ruff check .',

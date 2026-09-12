@@ -1,0 +1,57 @@
+name: Deps Sync
+
+# Keeps the npm versions pinned into generated projects current. The pins live in
+# src/template-deps.json and are rendered into templates/addons/dev-tools/package.json. The job
+# commits only those files, and only after `pnpm check` passes, so a bad bump (a formatter that
+# reflows a template, a test that pins a version) fails instead of landing.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          # The floor, not the LTS: a bump that outgrows the supported Node fails this job's own
+          # gate instead of landing and breaking every generated project's install.
+          node-version: 22.13
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve pinned versions from the npm registry
+        run: pnpm sync:deps
+      - run: pnpm check
+      - name: Commit dependency pin updates
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No dependency pin changes."
+            exit 0
+          fi
+          git status --porcelain
+          changed="$(git status --porcelain | sed -E 's/^.{3}//')"
+          unexpected="$(printf '%s\n' "$changed" | grep -v -E '^(src/template-deps\.json|package\.json|pnpm-lock\.yaml)$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::The dependency sync also changed files outside the pin set:"
+            printf '%s\n' "$unexpected"
+            echo "A formatter bump can reflow generated files, and generated output is a contract."
+            echo "Run 'pnpm sync:deps' locally, review the reflow, then commit it deliberately with a changelog entry."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/template-deps.json package.json pnpm-lock.yaml
+          git commit -m "chore(deps): sync generated-project dependency pins [skip changelog]"
+          git push

@@ -1,19 +1,11 @@
 {
-    "devDependencies": {
-        "@nekosu/maa-tools": "1.0.24",
-        "@nekosu/prettier-plugin-maafw-sort": "1.0.5",
-        "ajv": "8.20.0",
-        "ajv-formats": "3.0.1",
-        "jsonc-parser": "3.3.1",
-        "prettier": "3.9.5",
-        "prettier-plugin-multiline-arrays": "4.1.10"
-    },
+    "devDependencies": {{devDependencies}},
     "engines": {
         "node": "{{nodeRange}}"
     },
     "license": "{{license}}",
     "name": "{{name}}",
-    "packageManager": "pnpm@11.5.1",
+    "packageManager": "pnpm@{{pnpmVersion}}",
     "private": true,
     "scripts": {{scripts}},
     "type": "module",

@@ -2376,6 +2376,104 @@ export default defineConfig({
     expect(sourceInterface.version).toBe('v0.1.0')
   })
 
+  it('generated release staging keeps the platform agent command for MXU packages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-mxu-release-test', template: 'agent' }))
+    const projectRoot = join(root, 'maa-mxu-release-test')
+    await clearPending(projectRoot)
+
+    const configPath = join(projectRoot, 'maa-project.json')
+    const projectConfig = (await readJson(configPath)) as { runtime?: Record<string, unknown> }
+    projectConfig.runtime = {
+      mfa: { enabled: false },
+      mxu: { enabled: true },
+    }
+    await writeFile(configPath, JSON.stringify(projectConfig, null, 4) + '\n', 'utf8')
+
+    for (const runtimePlatform of [
+      'win-x64',
+      'osx-arm64',
+      'linux-x64',
+    ]) {
+      const nativeRuntimeRoot = join(projectRoot, 'runtimes', runtimePlatform, 'native')
+      await mkdir(nativeRuntimeRoot, { recursive: true })
+      await writeFile(join(nativeRuntimeRoot, 'MaaFramework.dll'), 'maafw', 'utf8')
+      await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
+      const guiRoot = join(projectRoot, '.create-maa-project/runtime/mxu', runtimePlatform)
+      await mkdir(guiRoot, { recursive: true })
+      await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'mxu.exe' : 'mxu'), 'gui', {
+        mode: 0o666,
+      })
+      if (runtimePlatform.startsWith('linux-')) {
+        const depsRoot = join(projectRoot, '.create-maa-project/runtime/python-deps', runtimePlatform)
+        await mkdir(depsRoot, { recursive: true })
+        await writeFile(join(depsRoot, 'maafw-0.0.0-py3-none-any.whl'), 'wheel', 'utf8')
+      } else {
+        const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
+        if (runtimePlatform.startsWith('win-')) {
+          await mkdir(pythonRuntimeRoot, { recursive: true })
+          await writeFile(join(pythonRuntimeRoot, 'python.exe'), 'python', 'utf8')
+        } else {
+          await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
+          await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
+        }
+      }
+
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            'tools/build-release.mjs',
+          ],
+          {
+            cwd: projectRoot,
+            env: {
+              ...process.env,
+              GITHUB_REF_NAME: 'v2.0.0',
+              CREATE_MAA_PROJECT_RUNTIME_PLATFORM: runtimePlatform,
+            },
+          },
+        ),
+      ).resolves.toBeDefined()
+
+      const packageRoot = join(projectRoot, 'dist/package-mxu')
+      const packageInterface = (await readJson(join(packageRoot, 'interface.json'))) as {
+        title?: unknown
+        agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
+      }
+      const expectedChildExec = runtimePlatform.startsWith('win-')
+        ? 'python/python.exe'
+        : runtimePlatform.startsWith('osx-')
+          ? 'python/bin/python3'
+          : 'python3'
+
+      expect(packageInterface.title).toContain('| MXU')
+      expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
+      // Re-declaring the Agent command in the MXU GUI config makes Linux start agent/main.py
+      // directly, so agent/bootstrap.py never builds the .venv or installs the dependencies.
+      expect(packageInterface.agent?.[0]?.child_args).toEqual([
+        '-u',
+        runtimePlatform.startsWith('linux-') ? 'agent/bootstrap.py' : 'agent/main.py',
+      ])
+      // MXU packages use the maafw layout instead of top-level runtimes/libs/plugins
+      for (const relativePath of [
+        'runtimes',
+        'libs',
+        'plugins',
+      ]) {
+        expect(await pathExists(join(packageRoot, relativePath))).toBe(false)
+      }
+      expect(await pathExists(join(packageRoot, 'maafw'))).toBe(true)
+      if (runtimePlatform.startsWith('linux-')) {
+        expect(await pathExists(join(packageRoot, 'deps/maafw-0.0.0-py3-none-any.whl'))).toBe(true)
+        expect(await pathExists(join(packageRoot, 'requirements.txt'))).toBe(true)
+      } else {
+        expect(await pathExists(join(packageRoot, expectedChildExec))).toBe(true)
+      }
+    }
+  })
+
   it('doctor reports missing required project files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

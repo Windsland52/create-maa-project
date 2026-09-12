@@ -75,27 +75,13 @@ const GUI_TYPES = {
                       "mxu.exe",
                   ],
         flatLayout: false,
-        modifyInterface(iface, slug, ver, platform) {
+        modifyInterface(iface, slug, ver) {
             const modified = {...iface};
             modified.title = `${iface.label ?? slug} ${ver} | MXU`;
-            if (Array.isArray(modified.agent) && modified.agent[0]) {
-                modified.agent = modified.agent.map((agent) =>
-                    isRecord(agent)
-                        ? {
-                              ...agent,
-                              child_exec: platform.startsWith("win-")
-                                  ? "./python/python.exe"
-                                  : platform.startsWith("osx-")
-                                    ? "./python/bin/python3"
-                                    : "python3",
-                              child_args: [
-                                  "-u",
-                                  "./agent/main.py",
-                              ],
-                          }
-                        : agent,
-                );
-            }
+            // Deliberately no agent override: prepareReleaseInterface already sets the
+            // platform-correct command (Linux -> agent/bootstrap.py for the venv and dependency
+            // install, win/mac -> agent/main.py with preinstalled deps), and MXU resolves
+            // relative child_exec paths against the project root on its own.
             return modified;
         },
     },

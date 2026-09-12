@@ -208,6 +208,7 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   return [
     managed('.github/workflows/check.yml', checkWorkflow()),
     releaseWorkflowFile(input),
+    managed('.github/workflows/package-smoke.yml', packageSmokeWorkflow()),
     managed('tools/build-release.mjs', buildReleaseScript(input)),
     managed('tools/sync-runtime.mjs', syncRuntimeScript()),
   ]
@@ -496,6 +497,15 @@ function maatoolsConfig(_resources: string[], includeAgent = false): string {
 
 function checkWorkflow(): string {
   return template('addons/github/.github/workflows/check.yml', { nodeMajor: SUPPORTED_NODE_MAJOR })
+}
+
+function packageSmokeWorkflow(): string {
+  return trimTrailingWhitespace(
+    template('addons/github/.github/workflows/package-smoke.yml', {
+      nodeMajor: SUPPORTED_NODE_MAJOR,
+      releaseTargetMatrix: releaseTargetMatrixYaml(),
+    }),
+  )
 }
 
 function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>): string {

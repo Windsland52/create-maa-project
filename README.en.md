@@ -331,9 +331,12 @@ and `debug/` are ignored instead of committed.
 
 ## Release and Runtime
 
-Projects with the GitHub add-on include check and release workflows. Release packaging is
-tag-driven: source metadata can stay at `0.1.0`, while the release package injects the Git
-tag version into the staged `interface.json`.
+Projects with the GitHub add-on include check, release and package-smoke workflows. Release
+packaging is tag-driven: source metadata can stay at `0.1.0`, while the release package injects
+the Git tag version into the staged `interface.json`. `package-smoke` uses the same target
+matrix as the release, building and verifying packages on push and pull requests (including the
+bundled Python runtime and the Agent launch command), so packaging problems surface long before
+a tag is pushed.
 
 The default runtime profile targets [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia):
 

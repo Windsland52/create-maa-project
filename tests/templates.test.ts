@@ -1,6 +1,12 @@
 import { check } from 'prettier'
 import { describe, expect, it } from 'vitest'
-import { devToolFiles, releaseWorkflowFile, vscodeFiles, type ProjectTemplateInput } from '../src/templates.js'
+import {
+  devToolFiles,
+  githubFiles,
+  releaseWorkflowFile,
+  vscodeFiles,
+  type ProjectTemplateInput,
+} from '../src/templates.js'
 
 /**
  * The file lists are documented for users in docs/commands.md and the skill reference. Changing
@@ -134,6 +140,34 @@ describe('workflow templates', () => {
     expect(typeof file.content).toBe('string')
     await expect(
       check(file.content.toString(), {
+        parser: 'yaml',
+        trailingComma: 'none',
+        tabWidth: 2,
+        printWidth: 100,
+      }),
+    ).resolves.toBe(true)
+  })
+
+  it('emits a formatted package-smoke workflow covering every release target', async () => {
+    const file = githubFiles(devToolInput(true)).find((entry) => entry.path === '.github/workflows/package-smoke.yml')
+
+    expect(file?.managed).toBe(true)
+    const content = String(file?.content ?? '')
+    // The placeholders must be fully rendered, and the matrix must mirror release.yml.
+    expect(content.replaceAll('${{', '')).not.toContain('{{')
+    expect(content.match(/- os: /g) ?? []).toHaveLength(6)
+    for (const runner of [
+      'windows-latest',
+      'windows-11-arm',
+      'ubuntu-latest',
+      'ubuntu-24.04-arm',
+      'macos-15-intel',
+      'macos-latest',
+    ]) {
+      expect(content).toContain(`- os: ${runner}`)
+    }
+    await expect(
+      check(content, {
         parser: 'yaml',
         trailingComma: 'none',
         tabWidth: 2,

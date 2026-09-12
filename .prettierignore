@@ -17,6 +17,7 @@ templates/base/tools/schema/pipeline.schema.json
 # These template sources contain replacement tokens and only become parseable
 # after create-maa-project renders them.
 templates/addons/dev-tools/package.json
+templates/addons/github/.github/workflows/package-smoke.yml
 templates/addons/github/.github/workflows/release.yml
 templates/addons/github/tools/build-release.mjs
 templates/base/maatools.config.mts

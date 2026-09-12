@@ -255,7 +255,7 @@ requirements.txt
 
 ## Release 与 Runtime
 
-带 GitHub add-on 的项目会包含 check 和 release workflows。发布打包以 Git tag 为准：源码元数据可以保持 `0.1.0`，release staging 会把 Git tag 版本注入包内的 `interface.json`。
+带 GitHub add-on 的项目会包含 check、release 和 package-smoke workflows。发布打包以 Git tag 为准：源码元数据可以保持 `0.1.0`，release staging 会把 Git tag 版本注入包内的 `interface.json`。`package-smoke` 使用与 release 相同的目标矩阵，在 push / PR 时先构建并校验一遍包（含包内 Python 运行时与 Agent 启动命令），因此打包问题不必等到打 tag 才暴露。
 
 默认 runtime profile 面向 [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia)：
 

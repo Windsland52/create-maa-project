@@ -374,6 +374,16 @@ async function checkPythonTooling(root: string, config: MaaProjectConfig, lines:
     }
   }
 
+  const bootstrapPath = join(root, 'agent', 'bootstrap.py')
+  if (await exists(bootstrapPath)) {
+    // Only older projects carry this file: release packages bundle their own interpreter and
+    // install the Agent dependencies at build time, so nothing bootstraps a venv at runtime.
+    lines.push(
+      '[WARN] agent/bootstrap.py is obsolete: release packages bundle their own Python runtime and no longer install dependencies at runtime.',
+    )
+    lines.push('      To fix: delete agent/bootstrap.py; it is no longer generated or used.')
+  }
+
   if (repairAgent) lines.push('      To fix generated Agent files: create-maa-project --add agent')
   if (repairDependencies) lines.push('      To fix dependency files: create-maa-project --update python-deps')
   if (ok) lines.push('[OK] Python Agent files and dependency state are present.')

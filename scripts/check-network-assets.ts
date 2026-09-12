@@ -21,6 +21,14 @@ const EXPECTED_PYTHON_STANDALONE_PLATFORMS = [
   'osx-arm64',
   'osx-x64',
 ] as const
+// MXU publishes no arm64 Linux runtime; sync-runtime warns and skips that target.
+const EXPECTED_MXU_PLATFORMS = [
+  'linux-x64',
+  'osx-arm64',
+  'osx-x64',
+  'win-arm64',
+  'win-x64',
+] as const
 const EXPECTED_PYTHON_EMBED_ARCHES = [
   'amd64',
   'arm64',
@@ -43,13 +51,14 @@ type AssetLike = {
 async function main(): Promise<void> {
   await checkRuntimeRelease('MaaFramework')
   await checkRuntimeRelease('MFAAvalonia')
+  await checkRuntimeRelease('MXU', EXPECTED_MXU_PLATFORMS)
   await checkRuntimeRelease('Python', EXPECTED_PYTHON_STANDALONE_PLATFORMS)
   await checkPythonWindowsEmbeddable()
   await checkOcrAssets()
 }
 
 async function checkRuntimeRelease(
-  product: 'MaaFramework' | 'MFAAvalonia' | 'Python',
+  product: 'MaaFramework' | 'MFAAvalonia' | 'MXU' | 'Python',
   expectedPlatforms: readonly string[] = EXPECTED_RUNTIME_PLATFORMS,
 ): Promise<void> {
   const manifest = await resolveProductAssetManifestFromGithubRelease({
@@ -89,7 +98,7 @@ async function checkOcrAssets(): Promise<void> {
 }
 
 function assertRuntimeManifest(
-  product: 'MaaFramework' | 'MFAAvalonia' | 'Python',
+  product: 'MaaFramework' | 'MFAAvalonia' | 'MXU' | 'Python',
   manifest: ProductAssetManifest | undefined,
   expectedPlatforms: readonly string[],
 ): asserts manifest is ProductAssetManifest {
@@ -112,9 +121,11 @@ function assertRuntimeManifest(
     const prefix =
       product === 'MFAAvalonia'
         ? `.create-maa-project/runtime/mfaa/${extraction.platform}/`
-        : product === 'Python'
-          ? `.create-maa-project/runtime/python/${extraction.platform}/`
-          : `plugins/${extraction.platform}/`
+        : product === 'MXU'
+          ? `.create-maa-project/runtime/mxu/${extraction.platform}/`
+          : product === 'Python'
+            ? `.create-maa-project/runtime/python/${extraction.platform}/`
+            : `plugins/${extraction.platform}/`
     if (!asset.path.startsWith(prefix)) {
       throw new Error(`${product} asset path does not match runtime layout: ${asset.path}`)
     }

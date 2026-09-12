@@ -77,3 +77,150 @@ jobs:
       - name: Diagnose the generated project
         working-directory: .ci-smoke-project
         run: node ../dist/index.js --doctor
+
+  package-smoke:
+    name: Package smoke (${{ matrix.target }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-latest
+          # Cross-built from x86_64 so the "target interpreter cannot run here" fallback
+          # (uv --target --python-platform) stays covered. Releases build this target on
+          # ubuntu-24.04-arm instead.
+          - target: linux-arm64
+            os: ubuntu-latest
+            cross: true
+          - target: win-x64
+            os: windows-latest
+          - target: osx-arm64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # The smoke must exercise the templates in this checkout: auto-update would otherwise hand
+    # the command to the published CLI. (CI=true already disables it; be explicit anyway.)
+    env:
+      CREATE_MAA_PROJECT_AUTO_UPDATE: 0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v9.0.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # The GitHub add-on enables the MFAAvalonia runtime only; MXU packaging is covered by
+      # the release tests, which build both GUI layouts.
+      - name: Create an Agent project with GitHub automation
+        env:
+          CREATE_MAA_PROJECT_OCR_SOURCE: download
+        run: >-
+          node dist/index.js .ci-package-project
+          --no-interactive
+          --no-git
+          --template agent
+          --add github
+          --slug ci-package
+          --name "CI Package"
+      # The create step installs the project dependencies already; install again with the
+      # lockfile pinned so the smoke also proves the generated lock is consistent.
+      - name: Install the generated project dependencies
+        working-directory: .ci-package-project
+        run: pnpm install --frozen-lockfile
+      # CREATE_MAA_PROJECT_BIN makes the generated project use this checkout instead of
+      # pnpm dlx, so the smoke exercises the templates in this pull request.
+      - name: Synchronize the release runtime
+        working-directory: .ci-package-project
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.target }}
+          CREATE_MAA_PROJECT_BIN: node ${{ github.workspace }}/dist/index.js
+          CREATE_MAA_PROJECT_OCR_SOURCE: download
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm sync:runtime
+      - name: Build the release packages
+        working-directory: .ci-package-project
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.target }}
+        run: node tools/build-release.mjs --release-tag v0.0.0-ci-smoke
+      - name: Verify the package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: .ci-package-project
+        shell: pwsh
+        run: |
+          $packageName = 'package-mfaa'
+          $interface = Get-Content -LiteralPath "dist/$packageName/interface.json" -Raw | ConvertFrom-Json
+          if ($interface.agent[0].child_exec -ne 'python/python.exe') {
+            throw "Unexpected Agent child_exec: $($interface.agent[0].child_exec)"
+          }
+          if (($interface.agent[0].child_args -join ' ') -ne '-u agent/main.py') {
+            throw "Unexpected Agent child_args: $($interface.agent[0].child_args -join ' ')"
+          }
+
+          $python = Join-Path (Resolve-Path "dist/$packageName").Path 'python\python.exe'
+          if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+            throw "Embedded Python is missing: $python"
+          }
+          if (Test-Path -LiteralPath "dist/$packageName/requirements.txt") {
+            throw 'Release package must not ship requirements.txt'
+          }
+
+          Push-Location "dist/$packageName"
+          try {
+            & $python -I -c 'import sys; sys.path.insert(0, "agent"); import agent_runtime, custom; print("embedded Python imports passed")'
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Embedded Python import smoke failed'
+            }
+            & $python -I -m compileall -q agent
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Agent compile smoke failed'
+            }
+          } finally {
+            Pop-Location
+          }
+          Write-Host '[OK] win-x64 package'
+      - name: Verify the package (Unix)
+        if: runner.os != 'Windows'
+        working-directory: .ci-package-project
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name='package-mfaa'
+          package="dist/$package_name"
+          agent_command="$(node --input-type=module -e "
+          import fs from 'node:fs';
+          const agent = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).agent?.[0];
+          console.log(agent ? agent.child_exec + '|' + (agent.child_args ?? []).join(' ') : '');
+          " "$package/interface.json")"
+          if [ "$agent_command" != 'python/bin/python3|-u agent/main.py' ]; then
+            echo "[ERR] unexpected Agent command: $agent_command"
+            exit 1
+          fi
+
+          interpreter="$package/python/bin/python3"
+          if [ ! -f "$interpreter" ] || [ ! -x "$interpreter" ]; then
+            echo "[ERR] embedded Python is missing or not executable: $interpreter"
+            exit 1
+          fi
+          if [ -f "$package/requirements.txt" ] || [ -d "$package/deps" ]; then
+            echo '[ERR] release package must not ship requirements.txt or a wheelhouse'
+            exit 1
+          fi
+
+          if [ "${{ matrix.cross || 'false' }}" = 'true' ]; then
+            echo "[OK] $package_name (cross-built; the target interpreter cannot run here)"
+            exit 0
+          fi
+
+          (
+            cd "$package"
+            ./python/bin/python3 -I -c 'import sys; sys.path.insert(0, "agent"); import agent_runtime, custom; print("embedded Python imports passed")'
+            ./python/bin/python3 -I -m compileall -q agent
+          )
+          echo "[OK] $package_name"

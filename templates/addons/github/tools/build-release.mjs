@@ -13,6 +13,7 @@ import {
 import {basename, dirname, join} from "node:path";
 
 const dryRun = process.argv.includes("--dry-run");
+const releaseTagOverride = commandLineValue("--release-tag");
 const projectSlug = {{projectSlug}};
 const releaseArtifactName = {{releaseArtifactName}};
 mkdirSync("dist", {recursive: true});
@@ -28,7 +29,7 @@ if (!isReleaseVersion(sourceVersion)) {
     throw new Error("interface.json version must be a release tag such as v0.1.0");
 }
 
-const releaseTag = detectReleaseTag();
+const releaseTag = releaseTagOverride ?? detectReleaseTag();
 if (!dryRun && !releaseTag) {
     throw new Error("release build requires a SemVer Git tag such as v0.1.0");
 }
@@ -558,6 +559,18 @@ function detectReleaseTag() {
     if (typeof refName === "string" && refName.startsWith("v")) return refName;
     const ref = process.env.GITHUB_REF;
     return typeof ref === "string" && ref.startsWith("refs/tags/") ? ref.slice("refs/tags/".length) : undefined;
+}
+
+// Lets CI and local runs build a staging package without pushing a tag, the way the
+// package-smoke workflow does.
+function commandLineValue(name) {
+    const index = process.argv.indexOf(name);
+    if (index < 0) return undefined;
+    const value = process.argv[index + 1];
+    if (typeof value !== "string" || value.startsWith("--")) {
+        throw new Error(`${name} requires a value`);
+    }
+    return value;
 }
 
 function isReleaseVersion(value) {

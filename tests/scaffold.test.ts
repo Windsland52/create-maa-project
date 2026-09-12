@@ -2415,12 +2415,16 @@ export default defineConfig({
           process.execPath,
           [
             'tools/build-release.mjs',
+            '--release-tag',
+            'v2.0.0',
           ],
           {
             cwd: projectRoot,
             env: {
               ...process.env,
-              GITHUB_REF_NAME: 'v2.0.0',
+              // No GITHUB_REF_NAME: --release-tag is what lets a package smoke build staging
+              // packages on a branch.
+              GITHUB_REF_NAME: undefined,
               CREATE_MAA_PROJECT_RUNTIME_PLATFORM: runtimePlatform,
             },
           },
@@ -2466,6 +2470,31 @@ export default defineConfig({
     expect(report.ok).toBe(false)
     expect(output).toContain('Required project file is missing: tools/validate-schema.mjs')
     expect(output).toContain('create-maa-project --add dev-tools')
+  })
+
+  it('doctor warns about a leftover Agent bootstrap without failing the project', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-bootstrap-leftover', template: 'agent', skipDownload: true }))
+    const projectRoot = join(root, 'maa-bootstrap-leftover')
+    await clearPending(projectRoot)
+
+    const before = await runDoctor(projectRoot)
+    expect(before.lines.join('\n')).not.toContain('agent/bootstrap.py')
+
+    // Projects created before the bundled runtime landed still carry the file; it is unused,
+    // so the report tells the user to delete it without marking the project as broken.
+    await writeFile(join(projectRoot, 'agent/bootstrap.py'), '# legacy bootstrap\n', 'utf8')
+    const after = await runDoctor(projectRoot)
+    const output = after.lines.join('\n')
+
+    expect(after.ok).toBe(before.ok)
+    expect(output).toContain('[WARN] agent/bootstrap.py is obsolete')
+    expect(output).toContain('delete agent/bootstrap.py')
+    expect(output).not.toContain('Required Python Agent file is missing: agent/bootstrap.py')
+    expect(after.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'python-tooling', status: 'pass' })]),
+    )
   })
 
   it('doctor reports a missing pnpm lockfile', async () => {

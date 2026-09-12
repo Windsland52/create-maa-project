@@ -18,6 +18,8 @@ create-maa-project [name] --no-git
 
 可用的控制目标：`Adb`、`Win32`、`MacOS`、`PlayCover`、`Gamepad`、`WlRoots`。默认为 `Adb`。
 
+控制目标写入生成的 `interface.json` 时使用 MaaFW 自己的控制器类型：`Adb`、`Win32`、`MacOS`、`PlayCover`、`Gamepad`，以及 `WlRoots` 对应的 `Linux`（Linux 上的 wlroots 桌面应用）。每个控制目标生成一个条目：`name` 是控制器标识（如 `Adb`），`label` 是界面显示名（如 `Android / Emulator`），`type` 为上述类型。
+
 Git 初始化默认开启：目标不在已有 Git 仓库内时，创建（含 `--yes`/`--no-interactive` 和 MCP 未传 `git` 的非交互路径）会自动 `git init` 并做首次提交；`--no-git` 可显式关闭。Git 未安装或 `git init` 失败时创建仍然成功，具体原因写入 JSON report 的 `git` 字段。
 
 增量能力：

@@ -29,6 +29,7 @@ import {
 } from '../src/project.js'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
+import { CONTROLLER_KINDS } from '../src/controllers.js'
 import type { CliOptions } from '../src/types.js'
 import {
   PYTHON_EMBED_VERSION,
@@ -2247,6 +2248,30 @@ export default defineConfig({
     await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
   })
 
+  it('writes the MaaFW controller type for every --controller kind', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-controller-type-test', controllers: [...CONTROLLER_KINDS] }))
+    const projectRoot = join(root, 'maa-controller-type-test')
+
+    // `name` is the controller ID, `label` the display text, and `type` MaaFW's enum: the CLI
+    // kind names the target, so `Adb` must not become "Android" and wlroots becomes `Linux`.
+    // The generated project's own check:schema validates this file against the synced
+    // upstream interface.schema.json, so an unknown type fails there too.
+    expect(await readJson(join(projectRoot, 'interface.json'))).toMatchObject({
+      controller: [
+        { name: 'Adb', label: 'Android / Emulator', type: 'Adb', display_short_side: 720 },
+        { name: 'Windows', label: 'Windows app', type: 'Win32', display_short_side: 720 },
+        { name: 'macOS', label: 'macOS app', type: 'MacOS', display_short_side: 720 },
+        { name: 'PlayCover', label: 'PlayCover iOS app', type: 'PlayCover', display_short_side: 720 },
+        { name: 'Gamepad', label: 'Gamepad (Windows)', type: 'Gamepad', display_short_side: 720 },
+        { name: 'WlRoots', label: 'wlroots app (Linux)', type: 'Linux', display_short_side: 720 },
+      ],
+    })
+
+    await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
+  })
+
   it('generated release staging rewrites agent child exec without changing source interface', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)
@@ -3840,7 +3865,7 @@ export default defineConfig({
       name: 'maa-test',
       label: 'Maa Test',
       controller: [
-        { name: 'Android', label: 'Android / Emulator', type: 'Adb' },
+        { name: 'Adb', label: 'Android / Emulator', type: 'Adb' },
       ],
       resource: [
         {

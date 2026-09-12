@@ -336,26 +336,36 @@ export function interfaceController(
     return {
       name: metadata.name,
       label: metadata.label,
-      type: kind,
+      // `type` is MaaFW's controller enum, not the CLI's --controller kind.
+      type: metadata.type,
       display_short_side: 720,
     }
   })
 }
 
-function controllerMetadata(kind: ControllerKind): { name: string; label: string } {
+/**
+ * `name` is the controller ID and `label` is the text MaaFW clients display, so the platform
+ * wording belongs in `label` only — a project can carry several Adb controllers (a device and
+ * a cloud client, say), none of which is necessarily "Android". `type` must stay inside the
+ * `controller[].type` enum of the synced upstream `tools/schema/interface.schema.json`: MaaFW
+ * calls the wlroots target `Linux`, while the CLI keeps the more descriptive `WlRoots` kind.
+ * tests/scaffold.test.ts runs the generated project's own schema check over every kind, so a
+ * kind without a valid type fails there.
+ */
+function controllerMetadata(kind: ControllerKind): { name: string; label: string; type: string } {
   switch (kind) {
     case 'Adb':
-      return { name: 'Android', label: 'Android / Emulator' }
+      return { name: 'Adb', label: 'Android / Emulator', type: 'Adb' }
     case 'Win32':
-      return { name: 'Windows', label: 'Windows app' }
+      return { name: 'Windows', label: 'Windows app', type: 'Win32' }
     case 'MacOS':
-      return { name: 'macOS', label: 'macOS app' }
+      return { name: 'macOS', label: 'macOS app', type: 'MacOS' }
     case 'PlayCover':
-      return { name: 'PlayCover', label: 'PlayCover iOS app' }
+      return { name: 'PlayCover', label: 'PlayCover iOS app', type: 'PlayCover' }
     case 'Gamepad':
-      return { name: 'Gamepad', label: 'Gamepad (Windows)' }
+      return { name: 'Gamepad', label: 'Gamepad (Windows)', type: 'Gamepad' }
     case 'WlRoots':
-      return { name: 'WlRoots', label: 'wlroots app (Linux)' }
+      return { name: 'WlRoots', label: 'wlroots app (Linux)', type: 'Linux' }
   }
 }
 

@@ -38,6 +38,11 @@ create-maa-project --mcp [--root <path>]
 | `--no-interactive`                         | Disable interactive creation prompts                                                                                   |
 | `--version <semver>`                       | Project version (distinct from `-V`, the CLI version)                                                                  |
 
+`--controller` writes MaaFW's own controller types to `interface.json`: `Adb`, `Win32`, `MacOS`,
+`PlayCover`, `Gamepad`, and `Linux` for the `WlRoots` target (a wlroots desktop app on Linux).
+Each entry carries a `name` (controller ID, e.g. `Adb`) and a `label` (display text, e.g.
+`Android / Emulator`).
+
 ## Maintenance options
 
 | Option                              | Meaning                                                                                                            |

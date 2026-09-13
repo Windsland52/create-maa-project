@@ -14,7 +14,6 @@ class RuntimePaths:
     config_dir: Path
     resource_dir: Path
     debug_dir: Path
-    requirements_file: Path
     interface_file: Path
 
 
@@ -31,7 +30,6 @@ def build_runtime_paths(
         config_dir=resolved_work_root / "config",
         resource_dir=resolved_work_root / "resource",
         debug_dir=resolved_work_root / "debug",
-        requirements_file=resolved_project_root / "requirements.txt",
         interface_file=resolved_project_root / "interface.json",
     )
 

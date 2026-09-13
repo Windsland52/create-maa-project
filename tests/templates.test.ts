@@ -182,6 +182,22 @@ describe('workflow templates', () => {
     ).resolves.toBe(true)
   })
 
+  it('leaves no MXU package expectation unguarded on linux-arm64', () => {
+    const file = githubFiles(devToolInput(true)).find((entry) => entry.path === '.github/workflows/package-smoke.yml')
+    const expectations = String(file?.content ?? '')
+      .split('\n')
+      .filter((line) => line.includes("'package-mxu'"))
+
+    // MXU publishes no linux-arm64 runtime: tools/sync-runtime.mjs skips that target and
+    // tools/build-release.mjs then produces no package-mxu. Both verification branches (Windows
+    // and bash) must therefore guard the expectation, or package-smoke stays red on
+    // ubuntu-24.04-arm for every project that enables MXU.
+    expect(expectations).toHaveLength(2)
+    for (const line of expectations) {
+      expect(line).toContain('linux-arm64')
+    }
+  })
+
   it('pins and verifies git-cliff while generating cumulative release notes', () => {
     const file = releaseWorkflowFile({
       slug: 'maaxxxx',

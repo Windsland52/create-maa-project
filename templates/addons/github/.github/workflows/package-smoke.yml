@@ -65,11 +65,15 @@ jobs:
       - name: Verify packaging
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
         run: |
           $project = Get-Content -LiteralPath 'maa-project.json' -Raw | ConvertFrom-Json
           $expected = @()
           if ($project.runtime.mfa.enabled -ne $false) { $expected += 'package-mfaa' }
-          if ($project.runtime.mxu.enabled) { $expected += 'package-mxu' }
+          # MXU publishes no linux-arm64 runtime, so tools/sync-runtime.mjs skips it there and
+          # tools/build-release.mjs produces no package-mxu: expecting one would fail this job.
+          if ($project.runtime.mxu.enabled -and $env:RUNTIME_PLATFORM -ne 'linux-arm64') { $expected += 'package-mxu' }
 
           $actual = @(
             Get-ChildItem -LiteralPath dist -Directory |
@@ -122,6 +126,8 @@ jobs:
       - name: Verify packaging
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          RUNTIME_PLATFORM: ${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}
         run: |
           set -euo pipefail
           read_expected() {
@@ -130,7 +136,9 @@ jobs:
           const project = JSON.parse(fs.readFileSync('maa-project.json', 'utf8'));
           const names = [];
           if (project.runtime?.mfa?.enabled !== false) names.push('package-mfaa');
-          if (project.runtime?.mxu?.enabled) names.push('package-mxu');
+          // MXU publishes no linux-arm64 runtime, so tools/sync-runtime.mjs skips it there and
+          // tools/build-release.mjs produces no package-mxu: expecting one would fail this job.
+          if (project.runtime?.mxu?.enabled && process.env.RUNTIME_PLATFORM !== 'linux-arm64') names.push('package-mxu');
           console.log(names.join(' '));
           "
           }

@@ -61,6 +61,7 @@ describe('supported Node floor', () => {
     const files = [
       'templates/addons/auto-format/.github/workflows/format.yml',
       'templates/addons/github/.github/workflows/check.yml',
+      'templates/addons/github/.github/workflows/package-smoke.yml',
       'templates/addons/github/.github/workflows/release.yml',
       'templates/addons/optimize-images/.github/workflows/optimize-images.yml',
       'templates/addons/schema-sync/.github/workflows/schema-sync.yml',

@@ -4,6 +4,30 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 > 维护方式：条目由人工精炼（合并同类项、以用户视角描述），可用 `pnpm run changelog:draft` 生成 git-cliff 草稿作为参考；完整逐提交历史见 `git log`。
 
+## [3.5.0] - 2026-09-13
+
+### 新增
+
+- 带 GitHub add-on 的项目新增 `package-smoke` workflow：在 push / PR 时按与 release 相同的六个目标各自构建并校验发布包（含包内 Python 运行时与 Agent 启动命令），打包问题不必等到打 tag 才暴露；MXU 没有 linux-arm64 产物，该目标只校验其余包
+- `--doctor` 会提示删除遗留的 `agent/bootstrap.py`（该文件已不再生成，也不再被使用），不影响项目的其余诊断结论
+
+### 变更
+
+- Agent 发布包改为每个平台自带 Python 运行时：Windows 用 python.org 嵌入式发行版，macOS 与 Linux 用 python-build-standalone，依赖在打包阶段就装进包内解释器，因此 Linux 不再产出 wheelhouse，发布包也不再在启动时安装依赖
+- 生成项目固定的工具链依赖改为由 `src/template-deps.json` 单点维护：本仓库每日从 npm registry 同步同 major 的最新版（跨 major 仍由人工决定），dev-tools 的 `package.json` 改为从该清单渲染。本次随之更新 `@nekosu/maa-tools` 1.0.24 → 1.1.2、`@nekosu/prettier-plugin-maafw-sort` 1.0.5 → 1.0.6、`prettier` 3.9.5 → 3.9.6、`prettier-plugin-multiline-arrays` 4.1.10 → 4.1.11
+
+### 修复
+
+- 生成的 `interface.json` 现在写入 MaaFW 自己的控制器类型与 ID：`name` 用控制器标识（`Adb`、`Windows`、`macOS`、`PlayCover`、`Gamepad`、`WlRoots`），`type` 用 MaaFW 枚举（其中 `WlRoots` 写为 `Linux`），`label` 仍是界面显示名
+- MXU 发布包不再重复声明 Agent 启动命令：`child_exec` / `child_args` 统一由 release staging 写入，包内不会出现两份不一致的定义
+- Windows 上的自动更新交接与 Agent Skill 同步不再把子进程参数拼成一行命令：Node 22.12+ 的 `DEP0190` 弃用警告不再出现在 stderr，交接给新版本时原有参数（包括带空格的路径）逐项传递
+
+### 不兼容变更
+
+- **Agent 发布包自带 Python 运行时，`agent/bootstrap.py` 不复存在。** 生成项目不再写入 `agent/bootstrap.py`，发布包也不再包含 `requirements.txt` 与 Linux wheelhouse；包内解释器（Windows 为 `python/python.exe`，macOS / Linux 为 `python/bin/python3`）已预装依赖，由它直接启动 `agent/main.py`。升级已有项目：先执行 `create-maa-project --sync` 刷新 release 工具与模板，再对每个目标平台执行 `create-maa-project --update python-runtime` 与 `create-maa-project --update python-deps`，最后再打 tag。遗留的 `agent/bootstrap.py` 不会再被使用，可以删除（`--doctor` 会给出提示）。
+
+[3.5.0]: https://github.com/Windsland52/create-maa-project/compare/v3.4.0...v3.5.0
+
 ## [3.4.0] - 2026-09-10
 
 ### 变更

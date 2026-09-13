@@ -22,6 +22,8 @@ create-maa-project [name] --no-git
 
 Git 初始化默认开启：目标不在已有 Git 仓库内时，创建（含 `--yes`/`--no-interactive` 和 MCP 未传 `git` 的非交互路径）会自动 `git init` 并做首次提交；`--no-git` 可显式关闭。Git 未安装或 `git init` 失败时创建仍然成功，具体原因写入 JSON report 的 `git` 字段。
 
+交互式创建的默认值：项目目录 `maa-project`（项目 ID 由目录名推导，推导不出合法 ID 时才追问）、显示名取目录名、项目类型 `pipeline`、license `AGPL-3.0-or-later`、控制目标 `Adb`、仓库预设「全部」、不添加额外资源包；Git 初始化按上一条规则。`--yes --no-interactive` 使用同一套默认值。
+
 增量能力：
 
 ```bash
@@ -123,17 +125,26 @@ create-maa-project --update python-runtime
 
 `--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
 
+`maa-project.json` 的 `maafw.channel` / `maafw.version` 决定 MaaFramework runtime 资产如何解析：
+`version` 非空时按该精确版本获取；为空时按 `channel`（缺省 `stable`）取通道内最新的发布，其中
+`stable` 只接受正式版，`beta` 额外接受 rc 与 beta（rc 归入 beta），`alpha` 再额外接受 alpha。
+
 ### OCR 模型的两种供应方式
 
-默认供应方式取决于创建时**本机 Git 是否可用**，这与 `--git`/`--no-git` 无关（后者只管项目是否执行 `git init`）：
+默认供应方式取决于创建时**本机 Git 是否可用**，以及项目目录是否本身就是 Git 工作树根；这与 `--git`/`--no-git` 无关（后者只管项目是否执行 `git init`）：
 
-| 创建时 Git | `.gitmodules` | `maa-project.json` 的 `ocr` | `resource/base/model/ocr/`              |
-| ---------- | ------------- | --------------------------- | --------------------------------------- |
-| 可用       | 写入          | `{"source":"submodule",…}`  | 写入 `.gitignore`（模型为派生文件）     |
-| 不可用     | 不写入        | **完全没有 `ocr` 键**       | 改为提交 `manifest.json`（记录 sha256） |
+| 创建时 Git       | `.gitmodules` | `maa-project.json` 的 `ocr` | `resource/base/model/ocr/`              |
+| ---------------- | ------------- | --------------------------- | --------------------------------------- |
+| 可用             | 写入          | `{"source":"submodule",…}`  | 写入 `.gitignore`（模型为派生文件）     |
+| 可用但在父仓库内 | 不写入        | **完全没有 `ocr` 键**       | 改为提交 `manifest.json`（记录 sha256） |
+| 不可用           | 不写入        | **完全没有 `ocr` 键**       | 改为提交 `manifest.json`（记录 sha256） |
 
 因此同一个创建命令在不同机器上产出的项目**结构可能不同**，而两者的退出码与文件计数相同。可用
 `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 或 `=download` 显式指定，避免依赖本机环境。
+
+在父仓库的子目录中创建项目时一律退回 download 模式（模型随子项目提交，不改写父仓库的
+`.gitmodules`）；此时显式指定 `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 会直接报错，需要把项目建在
+Git 工作树根目录或父仓库之外。
 
 注意：Git 可用时即使传入 `--no-git`，生成的 `.gitmodules` 也会被写入（此时还没有 `.git` 目录）。
 该文件是为之后的 `git init` 或手动初始化准备的子模块声明，不是错误；不想保留可以删除。

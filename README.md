@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/create-maa-project)](https://www.npmjs.com/package/create-maa-project)
 [![PyPI](https://img.shields.io/pypi/v/create-maa-project)](https://pypi.org/project/create-maa-project)
 [![license](https://img.shields.io/github/license/Windsland52/create-maa-project)](./LICENSE)
-![node](https://img.shields.io/badge/node-%3E%3D24-green)
+![node](https://img.shields.io/badge/node-%3E%3D22.13-green)
 ![platform](https://img.shields.io/badge/platform-win%20%7C%20linux%20%7C%20osx-blueviolet)
 
 `create-maa-project` 是 [MaaFramework](https://github.com/MaaXYZ/MaaFramework)（MaaFW）应用项目的脚手架 CLI：回答几个问题，它会生成一个可以直接提交、构建的 Pipeline 或 Python Agent 项目。创建时的所有选择都记录在仓库内的 `maa-project.json` 中，之后通过显式的 `--sync`、`--add`、`--update`、`--doctor` 命令维护，人和 AI 工具都能读取并复现同样的结果。
@@ -14,8 +14,9 @@ AI coding agent 推荐通过 [Agent Skill](#配合-agent-skill-使用) 接入：
 
 ## 目录
 
+- [能力边界](#能力边界)
 - [安装 CLI](#安装-cli)
-- [交互式创建项目](#交互式创建项目)
+- [创建项目](#创建项目)
 - [配合 Agent Skill 使用](#配合-agent-skill-使用)
 - [配合 MCP Client 使用](#配合-mcp-client-使用)
 - [自动更新](#自动更新)
@@ -27,110 +28,84 @@ AI coding agent 推荐通过 [Agent Skill](#配合-agent-skill-使用) 接入：
 - [Release 与 Runtime](#release-与-runtime)
 - [常见问题](#常见问题)
 - [JSON Report 模式](#json-report-模式)
+- [变更记录](#变更记录)
 - [License](#license)
+
+## 能力边界
+
+| create-maa-project 负责                                                                                        | create-maa-project 不负责                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 生成与增量维护项目文件：`create`、`--add`、`--sync`、`--update`                                                | 构建、校验、打包、发布生成的产物——那是生成项目里 dev-tools 与 github workflows（`pnpm check`、`release:dry-run`、`package-smoke`、`release`）的职责 |
+| 获取资产与依赖：OCR 模型、MaaFramework 与 MFAAvalonia runtime、schema、pnpm 与 uv 依赖                         | 编写业务内容（pipeline、任务、资源、自定义逻辑）：创建时只写一份起步模板；项目自有的 `once` 文件同样归项目所有，后续命令不覆盖                      |
+| 写入前登记备份、失败自动回滚，并提供 `--list-backups` / `--show-backup` / `--restore`                          | 对已创建项目做通用模板升级（需版本化 migration）；旧 schema 不会被隐式改写，v1 迁移必须显式 `--sync config`                                         |
+| 只读诊断：`--doctor` 检查 `maa-project.json`、`interface.json` 与资源路径、依赖锁、已启用工具链和 OCR 模型文件 | 解析运行日志、做 MaaFW 运行时诊断、定位识别或任务失败原因                                                                                           |
+| 本地 `git init` 与首次提交（在受管文件事务完成之后）                                                           | 推送、打 tag、建远端仓库或发版                                                                                                                      |
+| 输出稳定的 JSON report（`schemaVersion`、`CMP_*` 错误码）；MCP 与 Agent Skill 走同一条写入路径                 | 收集遥测或上报使用数据                                                                                                                              |
 
 ## 安装 CLI
 
-最简单的方式是使用 npm 版本。先安装 Node.js（>= 22.13），然后全局安装 `create-maa-project`：
+需要 Node.js（>= 22.13）。最简单的方式是 npm 全局安装：
 
 ```bash
 npm install -g create-maa-project
 ```
 
-也可以不全局安装，直接临时运行最新版：
+也可以临时运行最新版：
 
 ```bash
 npx create-maa-project@latest
 ```
 
-PyPI 包适合更偏 Python 工具链的环境，但 npm 是主分发渠道：
+PyPI 包适合偏 Python 工具链的环境（npm 仍是主分发渠道）：
 
 ```bash
 uvx create-maa-project
 pipx run create-maa-project
 ```
 
-## 交互式创建项目
+## 创建项目
 
-第一次使用时，直接运行 CLI，然后按提示回答问题：
+直接运行 CLI 并按提示回答，回车接受默认值：
 
 ```bash
 create-maa-project
 ```
 
-如果使用 `npx`，运行：
+几个关键选择：
 
-```bash
-npx create-maa-project@latest
-```
+- **项目类型**：`pipeline` 适合普通任务/资源项目；需要 Python 自定义逻辑时才选 `agent`。
+- **控制目标**：可多选，默认 `Adb`，完整清单见[命令文档](./docs/commands.md)。
+- **仓库功能**：预设 全部 / 最小 / 自定义，「全部」包含开发工具、GitHub 自动化与社区文件，add-on 清单见[命令文档](./docs/commands.md)。勾选会自动补全依赖（例如 `community` 会带上 `github` 与 `dev-tools`），人类输出中的 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段会说明差异。
+- **Git 初始化**：目标已在 Git 仓库内时默认否，否则默认是。
 
-交互流程按顺序询问以下问题，直接回车即可接受默认值：
-
-1. **项目目录**：默认 `maa-project`。
-2. **项目 ID**：仅当目录名无法自动转成合法 ID 时追问；否则自动推导并显示。
-3. **显示名称**：默认取目录名。
-4. **项目类型**：`pipeline` 适合普通任务/资源项目；只有需要 Python 自定义逻辑时才选 `agent`。
-5. **许可证**：默认 AGPL-3.0-or-later。
-6. **控制目标**：可多选，默认 Adb。
-7. **仓库配置**：全部 / 最小 / 自定义；每个预设都会显示一行概括说明（全部＝开发工具、GitHub 自动化与社区文件，最小＝不添加任何仓库功能）。完整的 add-on 清单：全部会装上 `dev-tools`、`vscode`、`github`、`git-cliff`、`auto-format`、`optimize-images`、`schema-sync`、`community`、`dependabot`；选自定义可以逐项查看并勾选。
-8. **额外资源包**：默认不添加。
-9. **初始化 Git 仓库**：目标已在 Git 仓库内时默认否，否则默认是。
-
-第 8、9 项按单键 `y`/`n` 回答，回车接受默认值。提示宽度会跟随终端列数折行；随时按 Ctrl+C 可安静退出（退出码 `130`，不会打印 `Error:`）。
-
-自定义仓库功能时，列表按依赖关系缩进，勾选某项会自动勾上它依赖的功能，取消被依赖项也会一并取消依赖它的功能——所以复选框显示的就是最终会启用的集合。编辑器集成（`vscode`）默认不勾选，需要时按空格选中。依赖规则：`vscode`、`github`、`agent` 依赖 `dev-tools`，`agent` 还依赖 `vscode`；`git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`。用 `--add` 传参时同样会自动补全，并由 `Add-ons required by dependencies:` 一行与 JSON report 的 `addons` 字段说明。
-
-项目创建完成后：
+随时按 Ctrl+C 可安静退出（退出码 `130`）。创建完成后建议跑一次只读诊断：
 
 ```bash
 cd <project-folder>
 create-maa-project --doctor
 ```
 
-如果工具输出 pending actions，就在项目根目录执行它提示的命令。带 dev tools 的项目之后可以运行：
-
-```bash
-pnpm check
-```
-
-如果自动语言识别不符合你的终端，可以强制指定提示语言：
-
-```bash
-create-maa-project --lang zh-CN
-create-maa-project --lang en
-```
+输出 pending actions 时，在项目根目录执行它提示的命令；带 dev-tools 的项目之后可以运行 `pnpm check`。提示语言默认自动识别，可用 `--lang zh-CN|en` 强制指定。
 
 ## 配合 Agent Skill 使用
 
-这是 AI coding agent 的推荐接入方式。本项目内置了遵循 Agent Skills 规范的技能包 [`skills/create-maa-project`](./skills/create-maa-project)，可为 AI Coding Agent（如 Claude Code、Cursor、Windsurf、GitHub Copilot、Antigravity、Cline 等）提供完整的工作流指引、最佳实践、命令参数规范与故障排查知识；agent 读取指引后直接调用与人类用户相同的 CLI 命令，CLI 的新能力自动可用。
+这是 AI coding agent 的推荐接入方式。仓库内置遵循 Agent Skills 规范的技能包 [`skills/create-maa-project`](./skills/create-maa-project)，为 Claude Code、Codex 等 AI 工具提供工作流指引、命令参数规范与故障排查知识；agent 读取指引后调用与人类用户相同的 CLI 命令，CLI 的新能力自动可用。
 
-使用 [skills CLI](https://github.com/vercel-labs/skills) 即可一键为本地 Agent 安装该技能：
+用 [skills CLI](https://github.com/vercel-labs/skills) 一键安装到本地 Agent（省略 `--agent` 参数时交互式探测并勾选）：
 
 ```bash
-# 全局安装 create-maa-project skill 到所支持的本地 Agent
 npx skills add https://github.com/Windsland52/create-maa-project --skill create-maa-project --global
 ```
 
-省去 `--agent` 参数时，CLI 会交互式探测本地已安装的 AI 工具并供你勾选。安装后，Coding Agent 在面对创建 MaaFramework 项目、添加 add-ons、运行 `--doctor` 诊断或升级依赖等任务时，会自动阅读并遵守该技能指引。
-
-详细信息与本地开发安装说明请参见 [Skills 文档](./skills/README.md)。
+安装后，agent 在创建 MaaFramework 项目、添加 add-ons、运行 `--doctor` 诊断等任务时会自动遵守该技能指引。详见 [Skills 文档](./skills/README.md)。
 
 ## 配合 MCP Client 使用
 
-MCP 是 Agent Skill 之外的替代接入方式，适合 agent 没有 shell 权限、或需要在 client 中按 tool 粒度管控权限的环境。启动 MCP server 时建议始终用 `--root` 显式指定允许 MCP 操作的工作区。
-
-JSON 配置示例（全局安装 / `npx` / `uvx`）、tool 调用约定与 `projectPath` 路径规则，见 [MCP 文档](./docs/mcp.md)。
+MCP 是 Agent Skill 之外的替代接入方式。启动 MCP server 时建议始终用 `--root` 显式指定允许 MCP 操作的工作区。JSON 配置示例（全局安装 / `npx` / `uvx`）、tool 调用约定与 `projectPath` 路径规则，见 [MCP 文档](./docs/mcp.md)。
 
 ## 自动更新
 
-为了保证 CLI 运行时与 AI Agent 掌握的规范始终保持最新，`create-maa-project` 内置了轻量级、零干扰的自动更新与热交付机制：
-
-- **24 小时更新检查**：CLI 最多每 24 小时向 npm 官方 registry 查询一次最新稳定版本。网络请求设置了极短超时（1500ms），遇离线、代理异常或网络延迟时静默回退至本地版本，绝不阻断用户正常命令；
-- **运行时热交付（Runtime Handoff）**：若检测到远端发布了更高版本的稳定 CLI，会自动将当前命令行参数安全交接给最新版本的临时运行时执行，无需手动反复升级；
-- **Agent Skill 自动同步**：在新版本首次运行后，CLI 会在后台自动触发 `skills update create-maa-project --global --yes`，同步更新全局安装的 Agent Skill（每个发布版本仅触发一次）；
-- **离线与 CI 环境变量控制**：
-    - `CREATE_MAA_PROJECT_AUTO_UPDATE=0`：完全禁用自动更新检查、运行时转交与 Skill 同步（在 CI 环境下默认自动禁用）；
-    - `CREATE_MAA_PROJECT_AUTO_UPDATE=1`：在 CI 环境下强制启用自动更新。
+CLI 内置零干扰的自动更新：最多每 24 小时向 npm registry 查询一次最新版本（超时 1500ms，离线或网络异常时静默回退本地版本）；发现新版本时把当前命令交接给最新版的临时运行时执行，并在后台同步更新全局安装的 Agent Skill（每个发布版本仅一次）。设置 `CREATE_MAA_PROJECT_AUTO_UPDATE=0` 可完全禁用（CI 环境默认禁用，`=1` 强制启用）。
 
 ## 项目模型
 
@@ -139,57 +114,19 @@ JSON 配置示例（全局安装 / `npx` / `uvx`）、tool 调用约定与 `proj
 - `slug`：ASCII kebab-case ID，用于仓库名、package 名、artifact 名和 `interface.json` 的 `name`。
 - `displayName`：面向用户的显示名，用于 `interface.json` 的 `label`，可以是中文或其它展示文本。
 
-完整仓库/工具项目通常包含：
-
-```text
-my-project/
-├── interface.json
-├── maa-project.json
-├── tasks/tutorial.json
-├── resource/base/
-│   ├── default_pipeline.json
-│   ├── pipeline/tutorial.json
-│   ├── image/empty.png
-│   └── model/ocr/
-├── tools/
-├── tools/schema/
-├── .github/workflows/
-├── .vscode/
-├── package.json
-├── maatools.config.mts
-└── README.md
-```
-
-资源结构固定围绕 `resource/base/` 和可选的 `resource/<pack>/`。`interface.json` 的 resource 路径按 `maa-project.json` 中记录的顺序生成；后添加的资源包在 MaaFW 资源查找中有更高覆盖优先级。
-
-CLI 只在首次创建时写入 `interface.json`、`package.json`、`tasks/`、`resource/`、README、license 等项目自有文件。之后仅由明确的 `--sync`、`--add` 或具体 `--update` 操作改写对应文件；通用模板升级应通过版本化 migration 实现。
+资源结构固定围绕 `resource/base/` 与可选的 `resource/<pack>/`；`interface.json` 的 resource 路径按 `maa-project.json` 中记录的顺序生成，后添加的资源包在 MaaFW 资源查找中有更高覆盖优先级。项目自有文件只在首次创建时写入，之后仅由显式的 `--sync`、`--add`、`--update` 改写对应文件。
 
 ## 状态与安全
 
-进入 Git 的状态文件：
-
-- `maa-project.json`：用户意图，包括项目元数据、功能/插件选择、资源包、runtime channel/version、网络模式、license 和 Agent 配置。`version` 非空时精确版本优先；为空时按 `stable`、`beta`（含 rc）或 `alpha` channel 解析。
-
-本机状态放在 `.create-maa-project/`，生成项目默认忽略该目录：
-
-```text
-.create-maa-project/
-├── backups/
-├── cache/
-├── logs/
-└── run-locks/
-```
+进入 Git 的状态文件是 `maa-project.json`（用户意图：项目元数据、add-on 选择、资源包、runtime channel/version、网络模式、license 与 Agent 配置）。本机状态放在生成项目默认忽略的 `.create-maa-project/` 下（`backups/`、`cache/`、`logs/`、`run-locks/`）。
 
 安全规则：
 
-- 写配置或生成文件前会创建带唯一所有者标识的项目运行锁；异常退出留下的锁可用 `--clear-stale-lock` 清理。
-- 覆盖或创建受管文件前会先登记到同一次操作备份；失败时自动回滚，成功后也可用输出的 backup id 恢复。
-- `--list-backups` 和 `--show-backup <id>` 可检查备份；`--restore <id> --dry-run` 会列出恢复/删除动作但不改文件。
-- `.git` 属于受保护的仓库状态，不进入受管文件备份。创建项目时 Git 初始化在受管文件事务完成后执行；`git init` 失败产生的新 `.git` 会被安全清理。
-- `--force` 跳过确认，但不跳过备份。
-- `--yes` 接受创建默认值并关闭交互，但不等于 `--force`，也不会允许覆盖非空目录。
+- 写配置或生成文件前会创建带唯一所有者标识的项目运行锁；异常退出留下的锁用 `--clear-stale-lock` 清理。
+- 覆盖或创建受管文件前会先登记到同一次操作备份，失败时自动回滚；`--list-backups`、`--show-backup <id>` 与 `--restore <id> --dry-run` 用于检查和预演恢复。`.git` 属于受保护状态，不进入备份。
+- `--force` 跳过确认但不跳过备份；`--yes` 接受创建默认值，但不等于 `--force`，不允许覆盖非空目录。
 - 非空且不在 Git 仓库中的目标目录需要显式 `--force --allow-non-git-dir`。
-- `--doctor` 只读，并直接检查当前项目文件状态。
+- `--doctor` 只读，直接检查当前项目文件状态。
 
 ## 命令
 
@@ -204,23 +141,13 @@ create-maa-project --update ocr-models       # 补齐 / 更新 OCR 模型
 create-maa-project --doctor                  # 诊断当前项目（只读）
 ```
 
-完整的创建选项（`--slug`、`--controller`、`--license`、`--git` 等）、add-on 与 sync/update 目标清单、执行控制 flag，以及 Git 初始化和 schema v1 迁移行为，见[命令文档](./docs/commands.md)。
+完整的创建选项、add-on 与 sync/update 目标清单、执行控制 flag，以及 Git 初始化和 schema v1 迁移行为，见[命令文档](./docs/commands.md)。
 
 ## 工具链
 
-生成的仓库工具链面向 Node 22（>= 22.13）和 pnpm 11：确切的 pnpm 版本由生成项目的 `packageManager` 固定。带 dev-tools 的项目会包含本地格式化、schema 校验、MaaFW 检查和 release dry-run 脚本。Agent 项目额外包含 uv、Ruff、Pyright 和 Python 检查。在 VS Code 中打开生成的项目时，`.vscode/tasks.json` 会自动同步依赖：pipeline 项目执行 `pnpm install --frozen-lockfile`，Agent 项目额外执行 `uv sync`。
+生成的仓库工具链面向 Node 22（>= 22.13）和 pnpm 11：确切的 pnpm 版本由生成项目的 `packageManager` 固定。dev-tools 提供本地格式化、schema 校验与 MaaFW 检查脚本，`github` 再追加 release dry-run 与 runtime 同步脚本，Agent 项目额外包含 uv、Ruff、Pyright 检查；带 `vscode` add-on 的项目在 VS Code 中打开时，`.vscode/tasks.json` 会自动同步依赖。每个 add-on 写入哪些文件、哪些可被 `--update` 刷新（`managed` / `once`），见[命令文档](./docs/commands.md#dev-tools-写入的文件)。
 
-dev-tools 会写入 13 个文件：`.node-version`、`.prettierrc.mjs`、`.prettierignore`、`package.json`、`pnpm-workspace.yaml`、`tools/validate-schema.mjs`，以及 `tools/schema/` 下的 7 个文件（4 个上游 schema、2 个可编辑的自定义 schema、`schema-manifest.json`）。编辑器集成是独立的 `vscode` add-on（依赖 dev-tools），写入 `.vscode/` 下的 `settings.json`、`extensions.json`、`tasks.json`，Agent 项目再加 `launch.json`；不传 `--add vscode` 就不会有 `.vscode/`。逐项用途与刷新方式（`managed` 可被 `--update` 刷新、`once` 仅首次创建写入）见[命令文档](./docs/commands.md#dev-tools-写入的文件)与 [vscode 一节](./docs/commands.md#vscode-写入的文件)。
-
-### OCR 模型供应
-
-- 创建项目时默认把 `MaaXYZ/MaaCommonAssets` 以 `--depth 1` 克隆为子模块，并把 `ppocr_v6/small` 的 OCR 模型复制到 `resource/base/model/ocr/`。子模块模式下该目录会写入 `.gitignore`（模型是派生文件），同时生成或合并 `.gitmodules`，保留已有子模块映射，版本由提交中的 gitlink 钉死。
-- 在已有 Git 仓库的子目录中创建项目时，默认使用 download 模式，模型随子项目提交。显式设置 `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` 时需要在 Git 工作树根目录或父仓库之外创建项目；子项目不会改写父仓库的 `.gitmodules`。
-- 本地 Git 不可用（或显式 `CREATE_MAA_PROJECT_OCR_SOURCE=download`）时改为从下载源获取 OCR 模型：写入 `manifest.json` 记录 sha256，模型文件纳入版本控制。
-- 子模块克隆失败会登记 pending action，稍后执行 `create-maa-project --update ocr-models` 补齐；该命令也会自动初始化已注册但尚未拉取的子模块。
-- `--doctor` 会检查 `resource/base/model/ocr/` 下 `det.onnx`/`rec.onnx`/`keys.txt` 是否存在且非空（新建克隆后未供模型的项目会在此报出 finding）。
-- Runtime 更新会记录工具安装的文件，后续更新只清理其中已从新版本移除的文件；旧文件和安装记录均可通过本次备份恢复。
-- 网络或工具失败会在本次命令结果中返回 pending action，并附带修复命令；常见网络问题的恢复方法见[常见问题](#常见问题)。
+OCR 模型默认以 `--depth 1` 子模块克隆 `MaaXYZ/MaaCommonAssets`，并把 `ppocr_v6/small` 复制到 `resource/base/model/ocr/`；在已有仓库的子目录或本机 Git 不可用时自动改用 download 模式，提交带 sha256 的 `manifest.json`。克隆或下载失败会登记 pending action，稍后用 `create-maa-project --update ocr-models` 补齐。两种供应方式的细节见[命令文档](./docs/commands.md#ocr-模型的两种供应方式)。
 
 ### 环境变量
 
@@ -250,20 +177,13 @@ uv.lock
 requirements.txt
 ```
 
-`agent/main.py` 是 Agent 入口（含 Python 版本检查），`agent/agent_runtime.py` 注册 `custom/` 下的自定义逻辑；本地开发用 `uv sync` 准备依赖。发布包自带 Python 运行时与依赖（Windows 用 python.org 嵌入式发行版，macOS 与 Linux 用 python-build-standalone），不依赖用户系统里的 Python。`config/`、`.venv/`、`debug/` 等运行时本地文件会被忽略，不进入提交。
+`agent/main.py` 是 Agent 入口（含 Python 版本检查），`agent_runtime.py` 注册 `custom/` 下的自定义逻辑；本地开发用 `uv sync` 准备依赖。发布包自带 Python 运行时与依赖（Windows 用 python.org 嵌入式发行版，macOS 与 Linux 用 python-build-standalone），不依赖用户系统里的 Python。`config/`、`.venv/`、`debug/` 等运行时本地文件不进入提交。
 
 ## Release 与 Runtime
 
-带 GitHub add-on 的项目会包含 check、release 和 package-smoke workflows。发布打包以 Git tag 为准：源码元数据可以保持 `0.1.0`，release staging 会把 Git tag 版本注入包内的 `interface.json`。`package-smoke` 使用与 release 相同的目标矩阵，在 push / PR 时先构建并校验一遍包（含包内 Python 运行时与 Agent 启动命令），因此打包问题不必等到打 tag 才暴露。
+带 GitHub add-on 的项目会包含 check、release 和 package-smoke workflows。发布打包以 Git tag 为准：源码元数据可以保持 `0.1.0`，release staging 会把 tag 版本注入包内的 `interface.json`；`package-smoke` 在 push / PR 时用与 release 相同的目标矩阵先行构建校验，打包问题不必等到打 tag 才暴露。
 
-默认 runtime profile 面向 [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia)：
-
-- `create-maa-project --update maafw` 同步 MaaFramework 资产。
-- `create-maa-project --update runtime:mfa` 同步 MFAAvalonia GUI runtime 资产。
-- 生成的 `pnpm sync:runtime` 会执行二者；Agent 项目还会同步 Python runtime。
-- Release job 通过 `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` 选择目标 runtime 资产。
-
-默认 release artifact 覆盖 Windows、Linux、macOS 的 `x86_64` 和 `aarch64`。Windows 使用 `.zip`，Linux 和 macOS 使用 `.tar.gz`。
+默认 runtime profile 面向 [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia)：`--update maafw` 同步 MaaFramework 资产，`--update runtime:mfa` 同步 MFAAvalonia GUI runtime，生成的 `pnpm sync:runtime` 执行二者（Agent 项目还会同步 Python runtime）。默认 release artifact 覆盖 Windows、Linux、macOS 的 `x86_64` 与 `aarch64`，Windows 使用 `.zip`，Linux 和 macOS 使用 `.tar.gz`。
 
 ## 常见问题
 
@@ -291,9 +211,7 @@ requirements.txt
 
 ## JSON Report 模式
 
-给 `create`、`sync`、`update`、`doctor` 和备份检查/恢复命令传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式强制非交互执行；进度、`Log:` 和人类可读 `Error:` 不会写入 stdout。退出码 `0` 表示成功，`1` 表示失败或 `doctor` 发现问题；JSON 中的 `exitCode` 与进程退出码一致。
-
-完整的 report schema（含 `doctor.checks` 与备份操作结果）、稳定 `CMP_*` 错误码和失败示例，见 [JSON Report 文档](./docs/json-report.md)。
+给 `create`、`sync`、`update`、`doctor` 和备份检查/恢复命令传入 `--report` 后，CLI 会在 stdout 输出唯一一个机器可读 JSON 文档。Report 模式强制非交互执行；进度、`Log:` 和人类可读 `Error:` 不会写入 stdout。退出码 `0` 表示成功，`1` 表示失败或 `doctor` 发现问题。完整的 report schema、稳定 `CMP_*` 错误码和失败示例，见 [JSON Report 文档](./docs/json-report.md)。
 
 ## 变更记录
 

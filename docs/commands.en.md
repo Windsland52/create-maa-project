@@ -26,6 +26,8 @@ Each target becomes one entry: `name` is the controller ID (e.g. `Adb`), `label`
 
 Git initialization is enabled by default: when the target is outside an existing Git repository, project creation (including non-interactive paths like `--yes`/`--no-interactive` and MCP without `git`) automatically runs `git init` and creates the initial commit; pass `--no-git` to disable it. If Git is not installed or `git init` fails, creation still succeeds and the reason is recorded in the `git` field of the JSON report.
 
+Interactive creation defaults: project folder `maa-project` (the project ID is derived from the folder name and only asked for when no valid ID can be derived), display name from the folder name, project type `pipeline`, license `AGPL-3.0-or-later`, control target `Adb`, the All repository preset, and no extra resource pack; Git initialization follows the rule above. `--yes --no-interactive` uses these same defaults.
+
 Add-ons:
 
 ```bash
@@ -133,19 +135,31 @@ create-maa-project --update python-runtime
 `--update all` is intentionally unsupported. Run explicit updates so pending actions and
 logs stay clear.
 
+`maafw.channel` / `maafw.version` in `maa-project.json` decide how MaaFramework runtime assets
+resolve: a non-empty `version` fetches that exact release, while an empty one selects the newest
+release the `channel` (default `stable`) allows — `stable` accepts final releases only, `beta` also
+accepts rc and beta builds (rc counts as beta), and `alpha` also accepts alpha builds.
+
 ### The two OCR provisioning modes
 
-Which mode creation uses depends on whether **Git is available on the machine**, not on
-`--git`/`--no-git` (that flag only controls whether the project runs `git init`):
+Which mode creation uses depends on whether **Git is available on the machine** and whether the
+project directory is itself a Git worktree root, not on `--git`/`--no-git` (that flag only
+controls whether the project runs `git init`):
 
-| Git at creation | `.gitmodules` | `ocr` in `maa-project.json` | `resource/base/model/ocr/`             |
-| --------------- | ------------- | --------------------------- | -------------------------------------- |
-| available       | written       | `{"source":"submodule",…}`  | added to `.gitignore` (models derived) |
-| unavailable     | not written   | **no `ocr` key at all**     | `manifest.json` with sha256, committed |
+| Git at creation      | `.gitmodules` | `ocr` in `maa-project.json` | `resource/base/model/ocr/`             |
+| -------------------- | ------------- | --------------------------- | -------------------------------------- |
+| available            | written       | `{"source":"submodule",…}`  | added to `.gitignore` (models derived) |
+| available, in parent | not written   | **no `ocr` key at all**     | `manifest.json` with sha256, committed |
+| unavailable          | not written   | **no `ocr` key at all**     | `manifest.json` with sha256, committed |
 
 So the same create command can produce structurally different projects on different machines,
 while both report the same exit code and file count. Set `CREATE_MAA_PROJECT_OCR_SOURCE=submodule`
 or `=download` to pin the mode instead of depending on the environment.
+
+Creating inside a subdirectory of a parent repository always falls back to download mode (the
+models are committed with the child project, and the parent's `.gitmodules` is never rewritten);
+requesting `CREATE_MAA_PROJECT_OCR_SOURCE=submodule` there fails immediately, so create the project
+at a Git worktree root or outside the parent repository.
 
 Note: when Git is available, `.gitmodules` is written even with `--no-git`, before any `.git`
 directory exists. It is the submodule declaration for a later `git init`, not a defect; delete it

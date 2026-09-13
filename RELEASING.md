@@ -83,7 +83,7 @@ tag 推送后触发 `.github/workflows/release.yml`，任务链如下（`needs` 
 | `check`            | —                                   | 注入版本、`pnpm audit`、`pnpm check`、**校验 CHANGELOG 段落**、打包 npm 包并 smoke、生成 SBOM |
 | `sea`              | `check`                             | 六个平台构建 SEA 单文件并各自 smoke：win/linux/macos × x86_64/aarch64                         |
 | `release-manifest` | `sea`                               | 汇总发布清单 `create-maa-project-manifest.json`                                               |
-| `release_notes`    | `release-manifest`                  | 用 `scripts/changelog-notes.mjs` 从 `CHANGELOG.md` 提取该版本段落为 Release body              |
+| `release_notes`    | —（tag 触发，与 `sea` 并行）        | 用 `scripts/changelog-notes.mjs` 从 `CHANGELOG.md` 提取该版本段落为 Release body              |
 | `github-release`   | `release-manifest`, `release_notes` | 创建 GitHub Release（附 6 个二进制、manifest、SBOM）                                          |
 | `npm`              | `github-release`                    | 发布 npm 包（已存在同版本则跳过），带 provenance                                              |
 | `pypi`             | `npm`                               | 构建并发布 Python wheel，安装后 smoke                                                         |

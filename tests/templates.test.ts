@@ -1,5 +1,9 @@
+import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { check } from 'prettier'
 import { describe, expect, it } from 'vitest'
+import { PYTHON_EMBED_VERSION, PYTHON_STANDALONE_MINOR } from '../src/assets.js'
 import {
   devToolFiles,
   githubFiles,
@@ -7,6 +11,8 @@ import {
   vscodeFiles,
   type ProjectTemplateInput,
 } from '../src/templates.js'
+
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 /**
  * The file lists are documented for users in docs/commands.md and the skill reference. Changing
@@ -193,5 +199,22 @@ describe('workflow templates', () => {
     expect(content).toContain("--exclude '*-*' HEAD^")
     expect(content).toContain('"$previous_stable_tag..HEAD"')
     expect(content).not.toContain('--latest')
+  })
+})
+
+describe('generated release tooling', () => {
+  it('renders the Python runtime versions from the CLI constants', async () => {
+    const rendered = githubFiles(devToolInput(true)).find((entry) => entry.path === 'tools/sync-runtime.mjs')
+    const content = String(rendered?.content ?? '')
+
+    expect(content).toContain(`const PYTHON_EMBED_VERSION = "${PYTHON_EMBED_VERSION}";`)
+    expect(content).toContain(`const PYTHON_STANDALONE_MINOR = "${PYTHON_STANDALONE_MINOR}";`)
+    expect(content).not.toContain('{{')
+
+    // The template itself must stay placeholder-driven: a copied literal would let the CLI's
+    // `--update python-runtime` and this project-side script download different interpreters.
+    const source = await readFile(join(repoRoot, 'templates/addons/github/tools/sync-runtime.mjs'), 'utf8')
+    expect(source).toContain('const PYTHON_EMBED_VERSION = "{{pythonEmbedVersion}}";')
+    expect(source).toContain('const PYTHON_STANDALONE_MINOR = "{{pythonStandaloneMinor}}";')
   })
 })

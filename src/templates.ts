@@ -3,7 +3,12 @@ import { dirname, join } from 'node:path'
 import { getAsset, isSea } from 'node:sea'
 import { fileURLToPath } from 'node:url'
 import type { ControllerKind, LicenseKind, MaaProjectConfig, ManagedFileInput, ResourcePackConfig } from './types.js'
-import { DEFAULT_OCR_SUBMODULE_PATH, DEFAULT_OCR_SUBMODULE_URL } from './assets.js'
+import {
+  DEFAULT_OCR_SUBMODULE_PATH,
+  DEFAULT_OCR_SUBMODULE_URL,
+  PYTHON_EMBED_VERSION,
+  PYTHON_STANDALONE_MINOR,
+} from './assets.js'
 import { SUPPORTED_NODE_MAJOR, SUPPORTED_NODE_RANGE } from './node-support.js'
 import { TEMPLATE_DEV_DEPENDENCIES, TEMPLATE_PNPM_VERSION } from './template-deps.js'
 import { addV, prettyJson, stableJson } from './utils.js'
@@ -657,7 +662,10 @@ function releaseTargetArtifactTuples(): string {
 }
 
 function syncRuntimeScript(): string {
-  return template('addons/github/tools/sync-runtime.mjs')
+  return template('addons/github/tools/sync-runtime.mjs', {
+    pythonEmbedVersion: PYTHON_EMBED_VERSION,
+    pythonStandaloneMinor: PYTHON_STANDALONE_MINOR,
+  })
 }
 
 function generatedReadme(input: ProjectTemplateInput): string {

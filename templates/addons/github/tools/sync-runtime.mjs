@@ -12,8 +12,10 @@ import {
 } from "node:fs";
 import {dirname, join} from "node:path";
 
-const PYTHON_EMBED_VERSION = "3.13.14";
-const PYTHON_STANDALONE_MINOR = "3.13";
+// Rendered from src/assets.ts so the CLI's own interpreter download and this project-side script
+// can never fetch different Python runtimes.
+const PYTHON_EMBED_VERSION = "{{pythonEmbedVersion}}";
+const PYTHON_STANDALONE_MINOR = "{{pythonStandaloneMinor}}";
 // Must stay above the top-level `await syncPythonRuntime()` call below: `const` bindings are
 // not initialized before their statement runs, so a later declaration is a TDZ error here.
 const PYTHON_STANDALONE_TRIPLES = {

@@ -132,7 +132,8 @@ const DEFAULT_DOWNLOAD_ATTEMPTS = 3
 const DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
 const DEFAULT_MAX_ARCHIVE_ENTRIES = 100_000
 export const PYTHON_EMBED_VERSION = '3.13.14'
-const PYTHON_STANDALONE_MINOR = '3.13'
+/** Minor line of the python-build-standalone runtime, rendered into the generated release tooling. */
+export const PYTHON_STANDALONE_MINOR = '3.13'
 
 export async function resolveOcrManifestFromEnvironment(
   options: ProductAssetManifestResolveOptions = {},

@@ -16,6 +16,8 @@ export const SKILLS_CLI_VERSION = '1.5.22'
 export const HANDOFF_ENVIRONMENT_KEY = 'CREATE_MAA_PROJECT_UPDATE_HANDOFF'
 export const PROBE_ENVIRONMENT_KEY = 'CREATE_MAA_PROJECT_UPDATE_PROBE'
 export const SKILL_NAME = 'create-maa-project'
+export const SHELL_COMMAND_ENVIRONMENT_KEY = 'CREATE_MAA_PROJECT_UPDATE_COMMAND'
+export const SHELL_ARGUMENT_ENVIRONMENT_KEY = 'CREATE_MAA_PROJECT_UPDATE_ARG'
 
 export type UpdateState = {
   schemaVersion: typeof UPDATE_STATE_SCHEMA_VERSION
@@ -158,16 +160,72 @@ async function fetchLatestStableVersion(): Promise<string | undefined> {
   }
 }
 
+export type ProgramInvocation = {
+  command: string
+  args: string[]
+  environment: NodeJS.ProcessEnv
+  windowsVerbatimArguments: boolean
+}
+
+/**
+ * Build the spawn invocation for one child program.
+ *
+ * Windows cannot start the `npm.cmd` shim without a shell, but `shell: true` makes Node join the
+ * command and its arguments with plain spaces: an argument that contains a space would be split,
+ * and Node >= 22.12 prints DEP0190 for every such spawn. Running `cmd.exe` explicitly and passing
+ * each argument through an environment placeholder keeps the arguments intact and the output
+ * quiet. `scripts/smoke-cli-artifact.mjs` uses the same technique. The placeholders carry plain
+ * command-line text, so a literal `%` in an argument is expanded a second time by `cmd /c call`;
+ * that trade-off is accepted because `shell: true` loses every spaced argument instead.
+ *
+ * `platform` is a parameter so the Windows branch is testable on every runner.
+ */
+export function programInvocation(
+  executable: string,
+  args: string[],
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): ProgramInvocation {
+  if (platform !== 'win32') {
+    return { command: executable, args, environment, windowsVerbatimArguments: false }
+  }
+  const commandEnvironment: NodeJS.ProcessEnv = {
+    ...environment,
+    [SHELL_COMMAND_ENVIRONMENT_KEY]: executable,
+  }
+  const placeholders = args.map((argument, index) => {
+    const name = `${SHELL_ARGUMENT_ENVIRONMENT_KEY}_${index}`
+    commandEnvironment[name] = argument
+    return `"%${name}%"`
+  })
+  return {
+    command: process.env.ComSpec ?? 'cmd.exe',
+    args: [
+      '/d',
+      '/s',
+      '/v:off',
+      '/c',
+      [
+        `call "%${SHELL_COMMAND_ENVIRONMENT_KEY}%"`,
+        ...placeholders,
+      ].join(' '),
+    ],
+    environment: commandEnvironment,
+    windowsVerbatimArguments: true,
+  }
+}
+
 async function runProgram(executable: string, args: string[], options: CommandOptions): Promise<CommandResult> {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     let settled = false
     let timeout: NodeJS.Timeout | undefined
-    const child = spawn(executable, args, {
-      env: options.environment,
-      shell: process.platform === 'win32',
+    const invocation = programInvocation(executable, args, options.environment)
+    const child = spawn(invocation.command, invocation.args, {
+      env: invocation.environment,
       stdio: options.inheritStdio ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     })
     child.stdout?.on('data', (chunk: Buffer | string) => {
       stdout += chunk.toString().slice(0, CAPTURE_LIMIT_CHARACTERS - stdout.length)

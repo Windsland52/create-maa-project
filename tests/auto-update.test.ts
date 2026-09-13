@@ -4,7 +4,10 @@ import { join, resolve } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
   createMaaProjectConfigDirectory,
+  programInvocation,
   runWithAutomaticUpdates,
+  SHELL_ARGUMENT_ENVIRONMENT_KEY,
+  SHELL_COMMAND_ENVIRONMENT_KEY,
   SKILL_NAME,
   SKILLS_CLI_VERSION,
 } from '../src/auto-update.js'
@@ -210,4 +213,40 @@ it('resolves config directory respecting environment overrides', () => {
   expect(createMaaProjectConfigDirectory({ CREATE_MAA_PROJECT_CONFIG_DIR: '/custom/dir' })).toBe(
     join(resolve('/custom/dir')),
   )
+})
+
+it('routes Windows subprocesses through cmd.exe placeholders instead of shell concatenation', () => {
+  const args = [
+    'exec',
+    '--yes',
+    '--package=create-maa-project@0.2.0',
+    '--',
+    'create-maa-project',
+    'my project',
+  ]
+  const invocation = programInvocation('npm', args, { PATH: 'C:\\npm' }, 'win32')
+
+  expect(invocation.command.toLowerCase()).toMatch(/cmd\.exe$/)
+  expect(invocation.windowsVerbatimArguments).toBe(true)
+  expect(invocation.args.slice(0, 4)).toEqual(['/d', '/s', '/v:off', '/c'])
+
+  // `shell: true` would concatenate the arguments into the command line: a spaced path would be
+  // split, and Node >= 22.12 prints DEP0190 for every spawn. Each argument must instead travel
+  // through its own placeholder.
+  const commandLine = invocation.args[4] ?? ''
+  expect(commandLine).toContain(`call "%${SHELL_COMMAND_ENVIRONMENT_KEY}%"`)
+  expect(commandLine).toContain(`"%${SHELL_ARGUMENT_ENVIRONMENT_KEY}_5%"`)
+  expect(commandLine).not.toContain('my project')
+  expect(invocation.environment[SHELL_COMMAND_ENVIRONMENT_KEY]).toBe('npm')
+  expect(invocation.environment[`${SHELL_ARGUMENT_ENVIRONMENT_KEY}_5`]).toBe('my project')
+  expect(invocation.environment.PATH).toBe('C:\\npm')
+})
+
+it('spawns programs directly off Windows', () => {
+  expect(programInvocation('npm', ['exec'], {}, 'linux')).toEqual({
+    command: 'npm',
+    args: ['exec'],
+    environment: {},
+    windowsVerbatimArguments: false,
+  })
 })

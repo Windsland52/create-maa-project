@@ -128,6 +128,13 @@ create-maa-project maa-helper --template agent --slug maa-helper \
   `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 - Sync (`--sync`): `config`, `metadata`, `display-name`, `version`, `license`,
   `github-url`, `network`.
+- `--sync` refreshes only what `maa-project.json` determines. Everything the project wrote by hand
+  into `interface.json` is kept: a controller's `label`, `attach_resource_path`, `icon`, `option`, a
+  per-type block or a tuned `display_short_side`, a controller the config cannot express, a `github`
+  link the config does not record, and an `agent` block on a non-Agent project. Only a controller's
+  ID (including the pre-rename `Android`/`WlRoots`) and its `type` are repaired. Use `--sync` to fix
+  drift, never to reset those; `project.interfaceUnmanaged` in the config skips the `interface.json`
+  write entirely.
 - Update (`--update`): `schema`, `maafw`, `runtime:mfa`, `runtime:mxu`, `ocr-models`,
   `node-deps`, `python-deps`, `python-runtime`.
 

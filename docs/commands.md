@@ -110,6 +110,15 @@ create-maa-project --sync network --network official
 旧版 `maa-project.json` 不会在其他维护命令中被静默改写。遇到 schema v1 时，请显式运行
 `create-maa-project --sync config`；迁移会进入项目备份，可用 `--restore` 回退。
 
+`--sync` 只刷新由 `maa-project.json` 派生的部分，`interface.json` 里手工写的内容一律保留：
+
+- 控制器条目按配置里的控制目标就地修好标识与 `type`；`label`、`attach_resource_path`、`icon`、`option`、`display_long_side` 以及 `linux`／`adb` 这类按类型的子块都原样留下，`display_short_side` 和 `label` 的手工调整也不会被打回去。配置表达不出的控制器（例如第二个 Adb 客户端）保留不动；CLI 早期写过的控制器 ID（`Android`、`WlRoots`）在原地改名，不会另外多出一条；如果某个控制目标由项目自己的条目承担（例如把默认的 Adb 条目换成了自己的云客户端），只修 `type`，标识和显示名不动。
+- 资源包同理：配置已知的包就地刷新并保持配置顺序，配置里关掉的包会被移除，配置不认识的包保留。
+- `github` 只在 `maa-project.json` 里记了仓库地址时才会写入；没有记录时手工写的那条保留，`--doctor` 给出 `[INFO]` 提示可用 `--sync github-url` 记录，不再当作错误。
+- `agent` 块只在项目是 Python Agent 时重新生成，否则保留。
+
+因此 `--sync metadata` 依然是把控制器漂移修回上游枚举的修复命令，但它不会替你丢弃没用配置表达过的东西。
+
 更新：
 
 ```bash

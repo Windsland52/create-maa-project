@@ -1615,6 +1615,132 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
   })
 
+  it('keeps the hand-tuned parts of interface.json when syncing metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-interface-merge',
+        controllers: [
+          'Linux',
+          'Adb',
+        ],
+        add: [
+          'resource-pack',
+        ],
+        resourcePackSlug: 'extra',
+        label: 'Extra',
+      }),
+    )
+    const projectRoot = join(root, 'maa-interface-merge')
+    process.chdir(projectRoot)
+    const interfacePath = join(projectRoot, 'interface.json')
+    const configPath = join(projectRoot, 'maa-project.json')
+
+    // A project may carry controller fields the CLI never writes, a controller the config cannot
+    // express, its own github link, and an agent block. Syncing metadata refreshes what the config
+    // derives and has to leave the rest alone: this file is hand-tuned, and the CLI only owns the
+    // parts it generates.
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, any>
+    interfaceJson.github = 'https://github.com/SomeUser/HandWritten'
+    Object.assign(interfaceJson.controller[0], {
+      name: 'WlRoots',
+      type: 'WlRoots',
+      label: 'My wlroots client',
+      display_short_side: 1280,
+      attach_resource_path: [
+        'resource/extra',
+      ],
+      icon: 'controller.png',
+      linux: { wlr_socket_path: '/run/user/1000/wayland-0' },
+    })
+    interfaceJson.controller[1].name = 'Android'
+    interfaceJson.controller.push({ name: 'MyAdbClient', label: 'My ADB client', type: 'Adb' })
+    interfaceJson.resource[0].hash = 'sha256:base'
+    interfaceJson.agent = [
+      {
+        child_exec: 'python',
+        child_args: [
+          'agent/main.py',
+        ],
+        identifier: 'my-agent',
+      },
+    ]
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    // Which packs are enabled is the config's business, so turning one off still removes it.
+    const config = (await readJson(configPath)) as Record<string, any>
+    config.resources = config.resources.map((pack: Record<string, unknown>) =>
+      pack.slug === 'extra' ? { ...pack, enabled: false } : pack,
+    )
+    await writeFile(configPath, JSON.stringify(config, null, 4) + '\n', 'utf8')
+
+    await syncProject(defaultOptions({ sync: 'metadata' }))
+
+    const synced = (await readJson(interfacePath)) as Record<string, any>
+    expect(synced.github).toBe('https://github.com/SomeUser/HandWritten')
+    // The pre-rename ID and enum are repaired in place. Everything the project wrote itself — its
+    // label, its tuned size, its extra fields — survives the repair.
+    expect(synced.controller).toEqual([
+      {
+        name: 'Linux',
+        label: 'My wlroots client',
+        type: 'Linux',
+        display_short_side: 1280,
+        attach_resource_path: [
+          'resource/extra',
+        ],
+        icon: 'controller.png',
+        linux: { wlr_socket_path: '/run/user/1000/wayland-0' },
+      },
+      { name: 'Adb', label: 'Android / Emulator', type: 'Adb', display_short_side: 720 },
+      { name: 'MyAdbClient', label: 'My ADB client', type: 'Adb' },
+    ])
+    expect(synced.resource).toEqual([
+      {
+        name: 'base',
+        label: 'Base',
+        path: [
+          './resource/base',
+        ],
+        hash: 'sha256:base',
+      },
+    ])
+    expect(synced.agent).toEqual([
+      {
+        child_exec: 'python',
+        child_args: [
+          'agent/main.py',
+        ],
+        identifier: 'my-agent',
+      },
+    ])
+  })
+
+  it('leaves a project-owned controller serving a configured kind as it is', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-controller-serving' }))
+    const projectRoot = join(root, 'maa-controller-serving')
+    const interfacePath = join(projectRoot, 'interface.json')
+
+    // The project gave its Adb controller an ID of its own, which the config cannot express — the
+    // config only says "Adb". That entry is what serves the kind, so the CLI repairs its enum and
+    // keeps its identity instead of renaming it, and it does not add a duplicate default entry.
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, any>
+    interfaceJson.controller = [{ name: 'MyAdbClient', label: 'My ADB client', type: 'Adb' }]
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    process.chdir(projectRoot)
+    await syncProject(defaultOptions({ sync: 'metadata' }))
+
+    expect((await readJson(interfacePath)) as Record<string, any>).toMatchObject({
+      controller: [
+        { name: 'MyAdbClient', label: 'My ADB client', type: 'Adb' },
+      ],
+    })
+  })
+
   it('honors positional values for every value-bearing sync target', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

@@ -248,6 +248,11 @@ function checkInterfaceMetadata(
       lines.push(
         '[INFO] interface.json github differs from maa-project.json project.github; interface.json is unmanaged so this is allowed.',
       )
+    } else if (config.project.github === undefined) {
+      // The CLI only writes a link the config carries, so this one is the project's own value. Point
+      // at the command that records it instead of failing a check the config cannot resolve.
+      lines.push('[INFO] interface.json github is not recorded in maa-project.json project.github.')
+      lines.push('      To record it: create-maa-project --sync github-url <https://github.com/owner/repo>')
     } else {
       lines.push('[ERR] interface.json github differs from maa-project.json project.github.')
       lines.push('      To fix: create-maa-project --sync metadata')

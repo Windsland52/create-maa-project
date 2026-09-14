@@ -118,7 +118,27 @@ create-maa-project --sync network --network official
 
 Other maintenance commands never rewrite a legacy `maa-project.json` implicitly. For schema v1,
 run `create-maa-project --sync config` explicitly; the migration creates a project backup that can
-be rolled back with `--restore`.
+be reverted with `--restore`.
+
+`--sync` refreshes only what `maa-project.json` derives, and keeps whatever the project wrote by
+hand into `interface.json`:
+
+- Controller entries have their ID and `type` repaired in place for each configured target, while
+  `label`, `attach_resource_path`, `icon`, `option`, `display_long_side` and the per-type blocks
+  (`linux`, `adb`, …) are left as they are — a tuned `display_short_side` or `label` is not reset. A
+  controller the config cannot express (a second Adb client, say) is kept; the controller IDs the CLI
+  used to write (`Android`, `WlRoots`) are renamed in place instead of gaining a duplicate entry; and
+  when a configured target is served by the project's own entry (the default Adb entry replaced by a
+  cloud client, say), only its `type` is repaired and its identity is left alone.
+- Resource packs work the same way: packs the config knows are refreshed in config order, a pack the
+  config turned off is removed, and a pack it has never heard of is kept.
+- `github` is written only when `maa-project.json` records a repository, so a hand-written link
+  survives; `--doctor` reports it as `[INFO]` with `--sync github-url` as the way to record it,
+  instead of failing the check.
+- The `agent` block is regenerated only for Python Agent projects, and is otherwise left alone.
+
+`--sync metadata` therefore still repairs controller drift back to the upstream enum, without
+discarding anything the config never expressed.
 
 Updates:
 

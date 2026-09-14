@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -100,7 +100,50 @@ describe('doctor malformed JSON diagnostics', () => {
       ]),
     )
   })
+
+  it('reports an untracked github link as info instead of a failure', async () => {
+    const projectRoot = await createTempProject('untracked-github')
+    await setInterfaceGithub(projectRoot, 'https://github.com/SomeUser/HandWritten')
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(output).toContain('[INFO] interface.json github is not recorded in maa-project.json project.github.')
+    expect(output).not.toContain('[ERR] interface.json github differs')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-metadata', status: 'pass' }),
+      ]),
+    )
+  })
+
+  it('fails when interface.json contradicts a recorded github link', async () => {
+    const projectRoot = await createTempProject('contradicted-github')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, any>
+    config.project.github = 'https://github.com/MaaXYZ/Config'
+    await writeFile(configPath, JSON.stringify(config, null, 4) + '\n', 'utf8')
+    await setInterfaceGithub(projectRoot, 'https://github.com/SomeUser/HandWritten')
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(output).toContain('[ERR] interface.json github differs from maa-project.json project.github.')
+    expect(output).toContain('To fix: create-maa-project --sync metadata')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-metadata', status: 'fail' }),
+      ]),
+    )
+  })
 })
+
+async function setInterfaceGithub(projectRoot: string, github: string): Promise<void> {
+  const interfacePath = join(projectRoot, 'interface.json')
+  const interfaceJson = JSON.parse(await readFile(interfacePath, 'utf8')) as Record<string, unknown>
+  interfaceJson.github = github
+  await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+}
 
 async function createTempProject(name: string, addons: string[] = []): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cmp-doctor-'))

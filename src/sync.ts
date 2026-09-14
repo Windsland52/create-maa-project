@@ -16,13 +16,15 @@ import {
   licenseText,
   maatoolsConfigFile,
 } from './templates.js'
-import type { CliOptions, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
-import { projectControllerKinds } from './controllers.js'
+import type { CliOptions, ControllerKind, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
+import { normalizeControllerKind, projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools } from './features.js'
 import { addV, exists, prettyJson, readText, stableJson, stripV, throwIfAborted, writeFileAtomic } from './utils.js'
 import { assertValidSemVer } from './semver.js'
 
 const syncOperation = Symbol('syncOperation')
+
+type ProjectConfig = Awaited<ReturnType<typeof readProjectConfig>>
 
 type SyncEnvironment = {
   writeFiles?: typeof writeGeneratedFiles
@@ -287,18 +289,99 @@ function normalizeGithubRepoUrl(value: string | undefined): string {
   return `https://github.com/${pathParts[0]}/${pathParts[1]}`
 }
 
-function applyPackageMetadata(
-  packageJson: Record<string, unknown>,
-  config: Awaited<ReturnType<typeof readProjectConfig>>,
-): void {
+function applyPackageMetadata(packageJson: Record<string, unknown>, config: ProjectConfig): void {
   packageJson.name = config.project.slug
   packageJson.version = config.project.version
   packageJson.license = config.license.spdx === 'None' ? 'UNLICENSED' : config.license.spdx
 }
 
+/**
+ * Controller IDs the CLI itself used to write. An entry carrying one is the same controller as the
+ * derived entry that replaced it, so it is renamed in place instead of being kept as a duplicate.
+ */
+const LEGACY_CONTROLLER_IDS: Record<string, string> = {
+  Android: 'Adb',
+  WlRoots: 'Linux',
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function entriesOf(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter(isRecord).map((entry) => ({ ...entry })) : []
+}
+
+function canonicalControllerId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return LEGACY_CONTROLLER_IDS[value] ?? value
+}
+
+function controllerKindOf(entry: Record<string, unknown>): ControllerKind | undefined {
+  return typeof entry.type === 'string' ? normalizeControllerKind(entry.type) : undefined
+}
+
+/** An entry the config cannot express may still carry a `type` the synced schema rejects. */
+function withRepairedControllerType(entry: Record<string, unknown>): Record<string, unknown> {
+  const kind = controllerKindOf(entry)
+  return kind === undefined ? entry : { ...entry, type: kind }
+}
+
+/**
+ * `interface.json` is hand-tuned: a project may carry controller fields the CLI never writes
+ * (`attach_resource_path`, `icon`, `option`, a per-type block, a label of its own, …) or a
+ * controller the config cannot express, such as a second Adb client. Each configured kind therefore
+ * repairs the entry already serving it: the CLI's own entry, matched by ID including the IDs it used
+ * to write, gets its ID and enum refreshed, while an entry that merely serves that kind only gets its
+ * enum repaired and keeps its identity. A kind nothing serves gets the derived default, and every
+ * other entry is kept, so syncing metadata repairs drift without discarding what the project wrote.
+ */
+function syncedControllers(existing: unknown, config: ProjectConfig): Array<Record<string, unknown>> {
+  const entries = entriesOf(existing)
+  const claimed = new Set<Record<string, unknown>>()
+  const merged: Array<Record<string, unknown>> = interfaceController(projectControllerKinds(config)).map((target) => {
+    const own = entries.find((entry) => !claimed.has(entry) && canonicalControllerId(entry.name) === target.name)
+    if (own !== undefined) {
+      claimed.add(own)
+      return { ...own, name: target.name, type: target.type }
+    }
+    const kind = normalizeControllerKind(target.type)
+    const serving = entries.find((entry) => !claimed.has(entry) && controllerKindOf(entry) === kind)
+    if (serving !== undefined) {
+      claimed.add(serving)
+      return { ...serving, type: target.type }
+    }
+    return { ...target }
+  })
+  for (const entry of entries) {
+    if (!claimed.has(entry)) merged.push(withRepairedControllerType(entry))
+  }
+  return merged
+}
+
+/**
+ * Packs work like controllers: the config owns the packs it knows, so it refreshes them in place and
+ * drops the ones it turned off, while a pack it has never heard of belongs to someone else and stays.
+ */
+function syncedResources(existing: unknown, config: ProjectConfig): Array<Record<string, unknown>> {
+  const disabled = new Set(config.resources.filter((pack) => !pack.enabled).map((pack) => pack.slug))
+  const available = entriesOf(existing).filter((entry) => !(typeof entry.name === 'string' && disabled.has(entry.name)))
+  const claimed = new Set<Record<string, unknown>>()
+  const merged: Array<Record<string, unknown>> = interfaceResourceItems(enabledResourcePacks(config)).map((target) => {
+    const current = available.find((entry) => !claimed.has(entry) && entry.name === target.name)
+    if (current === undefined) return { ...target }
+    claimed.add(current)
+    return { ...current, label: target.label, path: target.path }
+  })
+  for (const entry of available) {
+    if (!claimed.has(entry)) merged.push(entry)
+  }
+  return merged
+}
+
 function applyInterfaceMetadata(
   interfaceJson: Record<string, unknown>,
-  config: Awaited<ReturnType<typeof readProjectConfig>>,
+  config: ProjectConfig,
   hasDefaultIcon: boolean,
 ): void {
   interfaceJson.name = config.project.slug
@@ -311,19 +394,25 @@ function applyInterfaceMetadata(
   } else if (interfaceJson.icon === 'logo.ico') {
     delete interfaceJson.icon
   }
-  interfaceJson.controller = interfaceController(projectControllerKinds(config))
-  interfaceJson.resource = interfaceResourceItems(enabledResourcePacks(config))
-  if (config.project.github) {
-    interfaceJson.github = config.project.github
-  } else {
-    delete interfaceJson.github
-  }
+  interfaceJson.controller = syncedControllers(interfaceJson.controller, config)
+  interfaceJson.resource = syncedResources(interfaceJson.resource, config)
+  // The config is the source when it carries a link. With none, a hand-written one is left alone;
+  // doctor reports that divergence as INFO rather than deleting a value it does not manage.
+  if (config.project.github) interfaceJson.github = config.project.github
   if (config.python) {
+    const derived = interfaceAgent(config.python.devCommand)
+    const [
+      current,
+      ...rest
+    ] = entriesOf(interfaceJson.agent)
+    const agent = current === undefined ? { ...derived } : { ...current, ...derived }
+    // `child_args` is generated only for a command with arguments, so a refreshed agent has to drop
+    // a stale list instead of inheriting the one it had.
+    if (current !== undefined && derived.child_args === undefined) delete agent.child_args
     interfaceJson.agent = [
-      interfaceAgent(config.python.devCommand),
+      agent,
+      ...rest,
     ]
-  } else {
-    delete interfaceJson.agent
   }
 }
 

@@ -15,6 +15,7 @@ import {
   addGitCliff,
   addGithub,
   addResourcePack,
+  addVscode,
   assertCanCreateTarget,
   type GitRunner,
 } from '../src/scaffold.js'
@@ -1739,6 +1740,229 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         { name: 'MyAdbClient', label: 'My ADB client', type: 'Adb' },
       ],
     })
+  })
+
+  it('leaves the project-owned MaaTools config and VS Code files alone', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-hand-tuned',
+        add: [
+          'dev-tools',
+          'vscode',
+        ],
+      }),
+    )
+    const projectRoot = join(root, 'maa-hand-tuned')
+    const maatoolsPath = join(projectRoot, 'maatools.config.mts')
+    const settingsPath = join(projectRoot, '.vscode/settings.json')
+    const extensionsPath = join(projectRoot, '.vscode/extensions.json')
+    process.chdir(projectRoot)
+
+    // The MaaTools config and the `.vscode` files are `once`: the project owns them after creation, so
+    // maintenance may add to them but must never replace what they hold.
+    await writeFile(
+      maatoolsPath,
+      `// kept\nexport default {\n  maaVersion: 'v5.11.0',\n  interfacePath: 'interface.json',\n  check: {},\n}\n`,
+      'utf8',
+    )
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify(
+        {
+          'editor.formatOnSave': true,
+          'editor.rulers': [
+            80,
+            120,
+          ],
+          // A key the add-on generates, extended rather than replaced.
+          'files.associations': { '*.mts': 'typescript' },
+          // An array the add-on generates, extended rather than replaced.
+          'json.schemas': [
+            {
+              fileMatch: [
+                '/my-config.json',
+              ],
+              url: './my.schema.json',
+            },
+          ],
+        },
+        null,
+        4,
+      )}\n`,
+      'utf8',
+    )
+    await writeFile(
+      extensionsPath,
+      `${JSON.stringify({ recommendations: ['my.custom.extension'] }, null, 4)}\n`,
+      'utf8',
+    )
+
+    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+    await addResourcePack(
+      defaultOptions({
+        add: [
+          'resource-pack',
+        ],
+        resourcePackSlug: 'extra',
+        label: 'Extra',
+      }),
+    )
+    await addVscode(
+      defaultOptions({
+        add: [
+          'vscode',
+        ],
+      }),
+    )
+
+    expect(await readFile(maatoolsPath, 'utf8')).toContain('// kept')
+    const settings = (await readJson(settingsPath)) as Record<string, any>
+    expect(settings['editor.rulers']).toEqual([
+      80,
+      120,
+    ])
+    // The add-on still applies what it owns, next to what the project added — including inside the
+    // nested objects and arrays it generates.
+    expect(settings['editor.formatOnSave']).toBe(true)
+    expect(settings['files.associations']).toMatchObject({ '*.json': 'jsonc', '*.mts': 'typescript' })
+    expect(settings['json.schemas']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ url: './my.schema.json' }),
+        expect.objectContaining({ url: './tools/schema/interface.schema.json' }),
+      ]),
+    )
+    const extensions = (await readJson(extensionsPath)) as Record<string, any>
+    expect(extensions.recommendations).toContain('my.custom.extension')
+    expect(extensions.recommendations).toContain('esbenp.prettier-vscode')
+  })
+
+  it('appends a resource pack without regenerating the resource entries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-pack-append' }))
+    const projectRoot = join(root, 'maa-pack-append')
+    const interfacePath = join(projectRoot, 'interface.json')
+    process.chdir(projectRoot)
+
+    // `interface.json` is hand-tuned, so adding a pack appends to the entries already there instead of
+    // regenerating the array from the config.
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, any>
+    interfaceJson.resource[0].hash = 'sha256:base'
+    interfaceJson.resource.push({
+      name: 'hand-written',
+      label: 'Hand written',
+      path: [
+        './resource/hand-written',
+      ],
+    })
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+
+    await addResourcePack(
+      defaultOptions({
+        add: [
+          'resource-pack',
+        ],
+        resourcePackSlug: 'extra',
+        label: 'Extra',
+      }),
+    )
+
+    expect((await readJson(interfacePath)) as Record<string, any>).toMatchObject({
+      resource: [
+        {
+          name: 'base',
+          label: 'Base',
+          path: [
+            './resource/base',
+          ],
+          hash: 'sha256:base',
+        },
+        {
+          name: 'hand-written',
+          label: 'Hand written',
+          path: [
+            './resource/hand-written',
+          ],
+        },
+        {
+          name: 'extra',
+          label: 'Extra',
+          path: [
+            './resource/extra',
+          ],
+        },
+      ],
+    })
+  })
+
+  it('adds the agent debug session to a hand-tuned MaaTools config without replacing it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-agent-patch',
+        add: [
+          'dev-tools',
+          'vscode',
+        ],
+      }),
+    )
+    const projectRoot = join(root, 'maa-agent-patch')
+    const maatoolsPath = join(projectRoot, 'maatools.config.mts')
+    const launchPath = join(projectRoot, '.vscode/launch.json')
+    process.chdir(projectRoot)
+
+    await writeFile(
+      maatoolsPath,
+      `// kept\nexport default {\n  maaVersion: 'v5.11.0',\n  interfacePath: 'interface.json',\n  check: {},\n}\n`,
+      'utf8',
+    )
+
+    await addAgent(
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
+    )
+
+    const patched = await readFile(maatoolsPath, 'utf8')
+    expect(patched).toContain('// kept')
+    expect(patched).toContain("maaVersion: 'v5.11.0'")
+    expect(patched).toContain("uv: 'Maa Agent: Debug'")
+
+    // Running the add-on again must not add a second block or otherwise rewrite the file.
+    await addAgent(
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
+    )
+    expect(await readFile(maatoolsPath, 'utf8')).toBe(patched)
+
+    // `launch.json` is `once` too, so an add-on merges its configurations in.
+    await writeFile(
+      launchPath,
+      `${JSON.stringify({ version: '0.2.0', configurations: [{ name: 'My own launch' }], myExtra: 'keep' }, null, 4)}\n`,
+      'utf8',
+    )
+    await addVscode(
+      defaultOptions({
+        add: [
+          'vscode',
+        ],
+      }),
+    )
+
+    const launch = (await readJson(launchPath)) as Record<string, any>
+    expect(launch.myExtra).toBe('keep')
+    expect(launch.configurations.map((entry: Record<string, unknown>) => entry.name)).toEqual([
+      'My own launch',
+      'Maa Agent: Debug',
+    ])
   })
 
   it('honors positional values for every value-bearing sync target', async () => {

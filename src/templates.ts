@@ -139,10 +139,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
       : [
           once('LICENSE', generatedLicense),
         ]),
-    once(
-      'maatools.config.mts',
-      maatoolsConfig(resourcePaths(input.resources ?? defaultResources()), input.includeAgent),
-    ),
+    once('maatools.config.mts', maatoolsConfig(input.includeAgent)),
   ]
 
   if (input.includeDevTools) {
@@ -249,8 +246,23 @@ export function configFile(config: MaaProjectConfig): ManagedFileInput {
   return once('maa-project.json', stableJson(config))
 }
 
-export function maatoolsConfigFile(resources: string[], includeAgent = false): ManagedFileInput {
-  return once('maatools.config.mts', maatoolsConfig(resources, includeAgent))
+export function maatoolsConfigFile(includeAgent = false): ManagedFileInput {
+  return once('maatools.config.mts', maatoolsConfig(includeAgent))
+}
+
+/**
+ * MaaTools config is `once`, so the agent add-on patches its debug session into the file the project
+ * owns instead of regenerating it. Returns the content unchanged when the session is already there,
+ * and `undefined` when there is no object to patch — the caller leaves the file alone rather than
+ * replacing something it cannot merge with.
+ */
+export function withAgentDebugSession(content: string): string | undefined {
+  if (/^[ \t]*vscode\s*:/m.test(content)) return content
+  const closing = content.lastIndexOf('}')
+  if (closing < 0) return undefined
+  const head = content.slice(0, closing).replace(/\s+$/, '')
+  const separator = head.endsWith(',') || head.endsWith('{') ? '' : ','
+  return `${head}${separator}\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}',\n    },\n  },\n${content.slice(closing)}`
 }
 
 export function gitCliffFiles(): ManagedFileInput[] {
@@ -394,10 +406,6 @@ function defaultResources(): Array<Pick<ResourcePackConfig, 'slug' | 'label' | '
   ]
 }
 
-function resourcePaths(resources: Pick<ResourcePackConfig, 'path'>[]): string[] {
-  return resources.map((resource) => `./${resource.path}`)
-}
-
 export function interfaceAgent(command: string[] | undefined): {
   child_exec: string
   child_args?: string[]
@@ -508,7 +516,7 @@ function pnpmWorkspaceYaml(): string {
   return template('addons/dev-tools/pnpm-workspace.yaml')
 }
 
-function maatoolsConfig(_resources: string[], includeAgent = false): string {
+function maatoolsConfig(includeAgent = false): string {
   return template('base/maatools.config.mts', {
     vscodeBlock: includeAgent
       ? `,\n  vscode: {\n    agents: {\n      uv: '${AGENT_DEBUG_SESSION_NAME}',\n    },\n  }`

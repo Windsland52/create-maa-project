@@ -132,9 +132,13 @@ create-maa-project maa-helper --template agent --slug maa-helper \
   into `interface.json` is kept: a controller's `label`, `attach_resource_path`, `icon`, `option`, a
   per-type block or a tuned `display_short_side`, a controller the config cannot express, a `github`
   link the config does not record, and an `agent` block on a non-Agent project. Only a controller's
-  ID (including the pre-rename `Android`/`WlRoots`) and its `type` are repaired. Use `--sync` to fix
-  drift, never to reset those; `project.interfaceUnmanaged` in the config skips the `interface.json`
-  write entirely.
+  ID (including the pre-rename `Android`/`WlRoots`) and its `type` are repaired. `maatools.config.mts`
+  and the `once` files under `.vscode/` are not written at all. Use `--sync` to fix drift, never to
+  reset those; `project.interfaceUnmanaged` in the config skips the `interface.json` write entirely.
+- `--add` merges the files a project owns instead of replacing them: `settings.json` and
+  `extensions.json` keep their other keys, `launch.json` merges `configurations` by `name`, and
+  `--add agent` only adds the `vscode.agents.uv` debug session to `maatools.config.mts`. Never hand a
+  project a regenerated copy of one of those and call it maintenance.
 - Update (`--update`): `schema`, `maafw`, `runtime:mfa`, `runtime:mxu`, `ocr-models`,
   `node-deps`, `python-deps`, `python-runtime`.
 

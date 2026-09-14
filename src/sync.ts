@@ -9,13 +9,7 @@ import {
   writeProjectState,
 } from './project.js'
 import type { ProjectWriteOperation } from './project.js'
-import {
-  interfaceAgent,
-  interfaceController,
-  interfaceResourceItems,
-  licenseText,
-  maatoolsConfigFile,
-} from './templates.js'
+import { interfaceAgent, interfaceController, interfaceResourceItems, licenseText } from './templates.js'
 import type { CliOptions, ControllerKind, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
 import { normalizeControllerKind, projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools } from './features.js'
@@ -129,12 +123,6 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   const pyproject = await syncedPyproject(root, config)
   throwIfAborted(environment.signal)
 
-  files.push(
-    maatoolsConfigFile(
-      enabledResourcePacks(config).map((pack) => `./${pack.path}`),
-      config.python !== undefined,
-    ),
-  )
   files.push({ path: CONFIG_FILE, content: stableJson(config), managed: false })
   // interface.json is intentionally unmanaged: projects may carry a hand-tuned
   // controller/resource layout (e.g. multi-server packs) that the template-

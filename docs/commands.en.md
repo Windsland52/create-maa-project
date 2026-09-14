@@ -96,6 +96,13 @@ why the add-on requires dev-tools:
 | `.vscode/tasks.json`      | Syncs dependencies when the project is opened                       | managed |
 | `.vscode/launch.json`     | Agent projects only: the `Maa Agent: Debug` launch config           | once    |
 
+Those three `once` files are merged rather than replaced when the add-on runs: `settings.json` and
+`extensions.json` keep the keys the project already has (`--add vscode` again does not drop your own
+`editor.rulers` or an extension you added), and `launch.json` merges `configurations` by `name`. Only
+the `managed` `tasks.json` is refreshed whole. `maatools.config.mts` is `once` as well: `--add agent`
+only adds the `vscode.agents.uv` debug session to the file that is already there, and neither `--sync`
+nor `--add resource-pack` rewrites it.
+
 A project without this add-on has no `.vscode/`, and `--doctor` reports `vscode-settings` as
 skipped rather than failed.
 
@@ -136,6 +143,8 @@ hand into `interface.json`:
   survives; `--doctor` reports it as `[INFO]` with `--sync github-url` as the way to record it,
   instead of failing the check.
 - The `agent` block is regenerated only for Python Agent projects, and is otherwise left alone.
+- `maatools.config.mts` and the `once` files under `.vscode/` are not written at all: they belong to
+  the project once created, so no `--sync` target rewrites them.
 
 `--sync metadata` therefore still repairs controller drift back to the upstream enum, without
 discarding anything the config never expressed.

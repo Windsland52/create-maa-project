@@ -25,7 +25,9 @@ import {
   releaseWorkflowFile,
   schemaSyncFiles,
   vscodeFiles,
+  withAgentDebugSession,
 } from './templates.js'
+import type { ProjectTemplateInput } from './templates.js'
 import type {
   CliOptions,
   GitInitResult,
@@ -345,10 +347,78 @@ async function addVscodeLocked(options: CliOptions, root: string): Promise<Scaff
   config.features.vscode = { enabled: true }
   config.addons.vscode = { enabled: true }
   const files = [
-    ...vscodeFiles(templateInputFromConfig(config)),
+    ...(await mergedVscodeFiles(root, templateInputFromConfig(config))),
     configFile(config),
   ]
   return writeAddonFiles(root, config, files, options, { overwriteUnmanaged: true })
+}
+
+/**
+ * `.vscode/extensions.json`, `settings.json` and `launch.json` are `once` — the project owns them
+ * once the add-on has written them — so re-running the add-on merges its own entries into what is
+ * already there instead of replacing the file. `tasks.json` is managed and is refreshed whole.
+ */
+async function mergedVscodeFiles(root: string, input: ProjectTemplateInput): Promise<ManagedFileInput[]> {
+  const merged: ManagedFileInput[] = []
+  for (const file of vscodeFiles(input)) {
+    if (file.managed) {
+      merged.push(file)
+      continue
+    }
+    const existing = await readJsonObjectIfPresent(root, file.path)
+    const generated = typeof file.content === 'string' ? (JSON.parse(file.content) as Record<string, unknown>) : {}
+    const content =
+      file.path === '.vscode/launch.json'
+        ? stableJson({
+            ...existing,
+            ...generated,
+            configurations: mergedLaunchConfigurations(existing, generated),
+          })
+        : stableJson(mergeGenerated(existing, generated) as Record<string, unknown>)
+    merged.push({ ...file, content })
+  }
+  return merged
+}
+
+/**
+ * The add-on owns the keys it generates, not the rest of the file: a scalar takes the generated value,
+ * a nested object is merged key by key, and an array keeps the project's entries and gains the
+ * generated ones it lacks.
+ */
+function mergeGenerated(existing: unknown, generated: unknown): unknown {
+  if (Array.isArray(existing) && Array.isArray(generated)) {
+    const known = new Set(existing.map((entry) => JSON.stringify(entry)))
+    return [
+      ...existing,
+      ...generated.filter((entry) => !known.has(JSON.stringify(entry))),
+    ]
+  }
+  if (isRecord(existing) && isRecord(generated)) {
+    const merged: Record<string, unknown> = { ...existing }
+    for (const [key, value] of Object.entries(generated)) merged[key] = mergeGenerated(existing[key], value)
+    return merged
+  }
+  return generated
+}
+
+/** Launch configurations are matched by `name`, so a project's own version of one is not duplicated. */
+function mergedLaunchConfigurations(existing: Record<string, unknown>, generated: Record<string, unknown>): unknown[] {
+  const existingConfigurations = Array.isArray(existing.configurations) ? existing.configurations : []
+  const names = new Set(existingConfigurations.filter(isRecord).map((entry) => entry.name))
+  const added = (Array.isArray(generated.configurations) ? generated.configurations : []).filter(
+    (entry) => isRecord(entry) && !names.has(entry.name),
+  )
+  return [
+    ...existingConfigurations,
+    ...added,
+  ]
+}
+
+async function readJsonObjectIfPresent(root: string, path: string): Promise<Record<string, unknown>> {
+  const fullPath = join(root, path)
+  if (!(await exists(fullPath))) return {}
+  const value = JSON.parse(await readText(fullPath)) as unknown
+  return isRecord(value) ? value : {}
 }
 
 export function addGithub(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
@@ -470,6 +540,13 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
   vscodeSettings['[python]'] = {
     'editor.defaultFormatter': 'charliermarsh.ruff',
   }
+  const maatoolsPath = 'maatools.config.mts'
+  const maatoolsFullPath = join(root, maatoolsPath)
+  // MaaTools config is `once`: add the debug session to the file the project owns, and only create it
+  // when it is missing. A file with no object to patch is left alone rather than replaced.
+  const maatoolsContent = (await exists(maatoolsFullPath))
+    ? withAgentDebugSession(await readText(maatoolsFullPath))
+    : maatoolsConfigFile(true).content
   const files: ManagedFileInput[] = [
     ...agentFiles({
       slug: config.project.slug,
@@ -498,10 +575,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
       managed: false,
     },
     ...vscodeFiles(templateInputFromConfig(config)).filter((file) => file.path === '.vscode/tasks.json'),
-    maatoolsConfigFile(
-      enabledResourcePacks(config).map((pack) => `./${pack.path}`),
-      true,
-    ),
+    ...(maatoolsContent === undefined ? [] : [{ path: maatoolsPath, content: maatoolsContent, managed: false }]),
     configFile(config),
   ]
   if (config.features.vscode.enabled && !(await exists(join(root, '.vscode/launch.json')))) {
@@ -566,9 +640,16 @@ async function addResourcePackLocked(options: CliOptions, root: string): Promise
     enabled: true,
   })
   const interfaceJson = await readInterfaceJson(root)
-  const resources = enabledResourcePacks(config)
-  interfaceJson.resource = interfaceResourceItems(resources)
-  const resourcePaths = resources.map((pack) => `./${pack.path}`)
+  // `interface.json` is hand-tuned, so the new pack is appended to the resource entries the project
+  // already has instead of the whole array being regenerated from the config.
+  const existingResource = (Array.isArray(interfaceJson.resource) ? interfaceJson.resource : []).filter(isRecord)
+  const knownResourceNames = new Set(existingResource.map((entry) => entry.name))
+  interfaceJson.resource = [
+    ...existingResource,
+    ...interfaceResourceItems([
+      { slug, label, path: `resource/${slug}` },
+    ]).filter((entry) => !knownResourceNames.has(entry.name)),
+  ]
   const files: ManagedFileInput[] = [
     {
       path: 'interface.json',
@@ -585,7 +666,6 @@ async function addResourcePackLocked(options: CliOptions, root: string): Promise
       content: emptyPng(),
       managed: false,
     },
-    maatoolsConfigFile(resourcePaths, Boolean(config.python)),
     configFile(config),
   ]
 

@@ -90,6 +90,8 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 
 未启用该 add-on 时项目没有 `.vscode/`，`--doctor` 会把 `vscode-settings` 检查标记为 skipped 而不是失败。
 
+这三个 `once` 文件由 add-on 合并写入：`settings.json` 与 `extensions.json` 保留项目已有的键（`--add vscode` 再跑一次不会丢掉你自己加的 `editor.rulers` 或扩展推荐），`launch.json` 按 `name` 合并 `configurations`；只有 `managed` 的 `tasks.json` 会被整体刷新。`maatools.config.mts` 同样是 `once`，`--add agent` 只把 `vscode.agents.uv` 调试会话补进已有文件，其余内容保持不变，`--sync` 与 `--add resource-pack` 都不会重写它。
+
 `package.json` 中的脚本按启用的 add-on 组合：`check` 始终包含 `format:check`、`check:schema`、
 `check:maa`；`github` 追加 `release:dry-run`、`sync:runtime`，`schema-sync` 追加 `sync:schema`，
 `optimize-images` 追加 `optimize:images`，Agent 项目追加 `format:py`、`lint:py`、`typecheck:py`、
@@ -116,6 +118,7 @@ create-maa-project --sync network --network official
 - 资源包同理：配置已知的包就地刷新并保持配置顺序，配置里关掉的包会被移除，配置不认识的包保留。
 - `github` 只在 `maa-project.json` 里记了仓库地址时才会写入；没有记录时手工写的那条保留，`--doctor` 给出 `[INFO]` 提示可用 `--sync github-url` 记录，不再当作错误。
 - `agent` 块只在项目是 Python Agent 时重新生成，否则保留。
+- `maatools.config.mts` 与 `.vscode/` 下标记为 `once` 的文件完全不写：它们创建后归项目所有，`--sync`（任何 target）都不再重写。
 
 因此 `--sync metadata` 依然是把控制器漂移修回上游枚举的修复命令，但它不会替你丢弃没用配置表达过的东西。
 

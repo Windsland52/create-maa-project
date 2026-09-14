@@ -342,7 +342,7 @@ export function interfaceController(
     return {
       name: metadata.name,
       label: metadata.label,
-      // `type` is MaaFW's controller enum, not the CLI's --controller kind.
+      // `type` is MaaFW's controller enum; the CLI kind is that same enum.
       type: metadata.type,
       display_short_side: 720,
     }
@@ -352,11 +352,12 @@ export function interfaceController(
 /**
  * `name` is the controller ID and `label` is the text MaaFW clients display, so the platform
  * wording belongs in `label` only — a project can carry several Adb controllers (a device and
- * a cloud client, say), none of which is necessarily "Android". `type` must stay inside the
- * `controller[].type` enum of the synced upstream `tools/schema/interface.schema.json`: MaaFW
- * calls the wlroots target `Linux`, while the CLI keeps the more descriptive `WlRoots` kind.
- * tests/scaffold.test.ts runs the generated project's own schema check over every kind, so a
- * kind without a valid type fails there.
+ * a cloud client, say), none of which is necessarily "Android". The controller kind is MaaFW's own
+ * controller enum, so `type` repeats it for every row and always stays inside the
+ * `controller[].type` enum of the synced upstream `tools/schema/interface.schema.json`; the table
+ * spells `type` out so a kind MaaFW names differently has one place to say so.
+ * tests/scaffold.test.ts runs the generated project's own schema check over every kind, so a kind
+ * without a valid type fails there.
  */
 function controllerMetadata(kind: ControllerKind): { name: string; label: string; type: string } {
   switch (kind) {
@@ -370,8 +371,8 @@ function controllerMetadata(kind: ControllerKind): { name: string; label: string
       return { name: 'PlayCover', label: 'PlayCover iOS app', type: 'PlayCover' }
     case 'Gamepad':
       return { name: 'Gamepad', label: 'Gamepad (Windows)', type: 'Gamepad' }
-    case 'WlRoots':
-      return { name: 'WlRoots', label: 'wlroots app (Linux)', type: 'Linux' }
+    case 'Linux':
+      return { name: 'Linux', label: 'wlroots app (Linux)', type: 'Linux' }
   }
 }
 

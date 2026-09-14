@@ -1,14 +1,7 @@
+import { CONTROLLER_KIND_INPUTS, parseControllerKind } from './controllers.js'
 import { isValidSemVer } from './semver.js'
 import type { ControllerKind, MaaProjectConfig, ReleaseChannel } from './types.js'
 
-const CONTROLLER_KINDS = [
-  'Adb',
-  'Win32',
-  'MacOS',
-  'PlayCover',
-  'Gamepad',
-  'WlRoots',
-] as const satisfies readonly ControllerKind[]
 const RELEASE_CHANNELS = [
   'stable',
   'beta',
@@ -123,10 +116,11 @@ function validateFeatures(features: Record<string, unknown>): void {
 function validateController(controller: Record<string, unknown>): void {
   const kinds = requireArray(controller.kinds, 'controller.kinds')
   if (kinds.length === 0) invalid('controller.kinds', 'must include at least one controller')
-  const seen = new Set<string>()
+  const seen = new Set<ControllerKind>()
   for (let index = 0; index < kinds.length; index += 1) {
     const path = `controller.kinds[${index}]`
-    const kind = requireChoice(kinds[index], path, CONTROLLER_KINDS)
+    const kind = parseControllerKind(requireChoice(kinds[index], path, CONTROLLER_KIND_INPUTS))
+    // A legacy spelling names the same target as its replacement, so both count as one kind.
     if (seen.has(kind)) invalid(path, `duplicates controller ${JSON.stringify(kind)}`)
     seen.add(kind)
   }

@@ -1,5 +1,5 @@
 export type TemplateName = 'pipeline' | 'agent'
-export type ControllerKind = 'Adb' | 'Win32' | 'MacOS' | 'PlayCover' | 'Gamepad' | 'WlRoots'
+export type ControllerKind = 'Adb' | 'Win32' | 'MacOS' | 'PlayCover' | 'Gamepad' | 'Linux'
 export type LicenseKind = 'AGPL-3.0-or-later' | 'MIT' | 'None'
 export type NetworkMode = 'auto' | 'official'
 export type CliLanguage = 'auto' | 'en' | 'zh-CN'

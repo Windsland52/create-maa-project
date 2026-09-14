@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseArgs } from '../src/args.js'
+import { projectControllerKinds } from '../src/controllers.js'
 import { runDoctor } from '../src/doctor.js'
 import { readProjectConfig } from '../src/project.js'
 import { syncProject } from '../src/sync.js'
+import { interfaceController } from '../src/templates.js'
 
 const tempRoots: string[] = []
 
@@ -27,6 +29,34 @@ describe('project config validation', () => {
         },
       },
     })
+  })
+
+  it('reads a config that still spells the wlroots kind WlRoots', async () => {
+    const config = validConfig()
+    config.controller.kinds = [
+      'WlRoots',
+    ]
+    const root = await projectRoot(config)
+
+    const read = await readProjectConfig(root)
+
+    expect(projectControllerKinds(read)).toEqual([
+      'Linux',
+    ])
+    expect(interfaceController(projectControllerKinds(read))).toEqual([
+      { name: 'Linux', label: 'wlroots app (Linux)', type: 'Linux', display_short_side: 720 },
+    ])
+  })
+
+  it('treats the legacy spelling and its replacement as one controller', async () => {
+    const config = validConfig()
+    config.controller.kinds = [
+      'Linux',
+      'WlRoots',
+    ]
+    const root = await projectRoot(config)
+
+    await expect(readProjectConfig(root)).rejects.toThrow('controller.kinds[1] duplicates controller "Linux"')
   })
 
   it('validates required structure and semantic values with JSON paths', async () => {
@@ -51,7 +81,7 @@ describe('project config validation', () => {
         mutate: (config) => (config.project.version = '1.0'),
       },
       {
-        expected: 'controller.kinds[0] must be one of: Adb, Win32, MacOS, PlayCover, Gamepad, WlRoots',
+        expected: 'controller.kinds[0] must be one of: Adb, Win32, MacOS, PlayCover, Gamepad, Linux, WlRoots',
         mutate: (config) =>
           (config.controller.kinds = [
             'Win3',

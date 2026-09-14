@@ -16,12 +16,13 @@ create-maa-project [name] --git
 create-maa-project [name] --no-git
 ```
 
-Supported `--controller` targets: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`,
-`WlRoots`. Comma-separated for multiple targets. Default is `Adb`.
+Supported `--controller` targets: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `Linux`
+(a wlroots desktop app on Linux). Comma-separated for multiple targets, case-insensitive.
+Default is `Adb`. The pre-rename spelling `WlRoots` is still accepted and normalizes to `Linux`.
 
-The generated `interface.json` carries MaaFW's own controller types: `Adb`, `Win32`, `MacOS`,
-`PlayCover`, `Gamepad` and `Linux` for the `WlRoots` target (a wlroots desktop app on Linux).
-Each target becomes one entry: `name` is the controller ID (e.g. `Adb`), `label` the display text
+The generated `interface.json` carries the same MaaFW controller types: `Adb`, `Win32`, `MacOS`,
+`PlayCover`, `Gamepad` and `Linux`. Each target becomes one entry: `name` is the controller ID
+(`Adb`, `Windows`, `macOS`, `PlayCover`, `Gamepad`, `Linux`), `label` the display text
 (e.g. `Android / Emulator`), and `type` the value above.
 
 Git initialization is enabled by default: when the target is outside an existing Git repository, project creation (including non-interactive paths like `--yes`/`--no-interactive` and MCP without `git`) automatically runs `git init` and creates the initial commit; pass `--no-git` to disable it. If Git is not installed or `git init` fails, creation still succeeds and the reason is recorded in the `git` field of the JSON report.

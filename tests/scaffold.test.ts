@@ -2253,8 +2253,8 @@ export default defineConfig({
     await createProject(defaultOptions({ name: 'maa-controller-type-test', controllers: [...CONTROLLER_KINDS] }))
     const projectRoot = join(root, 'maa-controller-type-test')
 
-    // `name` is the controller ID, `label` the display text, and `type` MaaFW's enum: the CLI
-    // kind names the target, so `Adb` must not become "Android" and wlroots becomes `Linux`.
+    // `name` is the controller ID, `label` the display text, and `type` MaaFW's enum. The CLI kind
+    // is that same enum, so `Adb` must not become "Android" and the wlroots target is `Linux`.
     // The generated project's own check:schema validates this file against the synced
     // upstream interface.schema.json, so an unknown type fails there too.
     expect(await readJson(join(projectRoot, 'interface.json'))).toMatchObject({
@@ -2264,7 +2264,7 @@ export default defineConfig({
         { name: 'macOS', label: 'macOS app', type: 'MacOS', display_short_side: 720 },
         { name: 'PlayCover', label: 'PlayCover iOS app', type: 'PlayCover', display_short_side: 720 },
         { name: 'Gamepad', label: 'Gamepad (Windows)', type: 'Gamepad', display_short_side: 720 },
-        { name: 'WlRoots', label: 'wlroots app (Linux)', type: 'Linux', display_short_side: 720 },
+        { name: 'Linux', label: 'wlroots app (Linux)', type: 'Linux', display_short_side: 720 },
       ],
     })
 

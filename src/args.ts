@@ -1,6 +1,6 @@
 import type { CliOptions, ControllerKind, LicenseKind, NetworkMode, TemplateName } from './types.js'
 import { ADDON_ORDER, addonDependencyLines } from './addons.js'
-import { controllerUnavailableMessage, normalizeControllerKind, uniqueControllerKinds } from './controllers.js'
+import { parseControllerKind, uniqueControllerKinds } from './controllers.js'
 import { parseCliLanguage } from './lang.js'
 import { UPDATE_TARGETS } from './update-targets.js'
 
@@ -450,13 +450,7 @@ Examples:
 }
 
 function parseControllerOption(value: string): ControllerKind[] {
-  const kinds: ControllerKind[] = []
-  for (const item of value.split(',')) {
-    const kind = normalizeControllerKind(item)
-    if (!kind) throw new Error(controllerUnavailableMessage(item.trim() || value))
-    kinds.push(kind)
-  }
-  return kinds
+  return value.split(',').map((item) => parseControllerKind(item))
 }
 
 function readValue(argv: string[], index: number, option: string): string {

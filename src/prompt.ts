@@ -960,7 +960,7 @@ function controllerChoiceLabel(kind: ControllerKind, language: PromptLanguage): 
       return choice(language, 'PlayCover iOS app', 'PlayCover iOS 应用')
     case 'Gamepad':
       return choice(language, 'Gamepad (Windows)', 'Windows 手柄（Gamepad）')
-    case 'WlRoots':
+    case 'Linux':
       return choice(language, 'wlroots app (Linux)', 'wlroots 应用（Linux）')
   }
 }

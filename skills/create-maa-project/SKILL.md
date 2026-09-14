@@ -106,10 +106,13 @@ create-maa-project maa-helper --template agent --slug maa-helper \
   what was actually enabled.
 - `.vscode/` is optional: `--add dev-tools` no longer writes it. Pass `--add vscode` when the
   project should carry editor integration; `--template agent` implies it.
-- `--controller` kinds: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `WlRoots`. Each
-  generated `interface.json` entry carries the controller ID as `name` (`Adb`, `Windows`,
-  `macOS`, `PlayCover`, `Gamepad`, `WlRoots`) plus a display `label`; the `type` uses MaaFW's
-  enum, where `WlRoots` is written as `"type": "Linux"`.
+- `--controller` kinds: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `Linux`. These are
+  MaaFW's own controller types, so `maa-project.json` and the generated `interface.json` use the
+  same word: the kind is written to `controller.kinds`, and as the `type` of the matching
+  `interface.json` entry, which also carries the controller ID as `name` (`Adb`, `Windows`,
+  `macOS`, `PlayCover`, `Gamepad`, `Linux`) plus a display `label`. Values are case-insensitive,
+  and `WlRoots` is still accepted as the pre-rename spelling of `Linux`; it normalizes to `Linux`
+  on read, in both `--controller` and `maa-project.json`.
 - `--license` is `AGPL-3.0-or-later`, `MIT`, or `None`.
 - A resource pack takes a positional slug: `--add resource-pack extra --label "Extra Resource"`.
 - Git repository initialization is enabled by default: creation (including non-interactive paths

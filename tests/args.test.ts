@@ -41,6 +41,28 @@ describe('parseArgs', () => {
     ])
   })
 
+  it('accepts the controller kind MaaFW writes into interface.json', () => {
+    const options = parseArgs([
+      '--controller',
+      'Linux',
+    ])
+
+    expect(options.controllers).toEqual([
+      'Linux',
+    ])
+  })
+
+  it('still accepts the pre-rename WlRoots spelling', () => {
+    const options = parseArgs([
+      '--controller',
+      'WlRoots',
+    ])
+
+    expect(options.controllers).toEqual([
+      'Linux',
+    ])
+  })
+
   it('rejects unknown options', () => {
     expect(() =>
       parseArgs([

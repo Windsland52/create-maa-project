@@ -1,16 +1,32 @@
 import type { ControllerKind, MaaProjectConfig } from './types.js'
 
+/** MaaFW's controller enum: `--controller`, `maa-project.json` and `interface.json` all use it. */
 export const CONTROLLER_KINDS: ControllerKind[] = [
   'Adb',
   'Win32',
   'MacOS',
   'PlayCover',
   'Gamepad',
-  'WlRoots',
+  'Linux',
 ]
 
 export const DEFAULT_CONTROLLER_KINDS: ControllerKind[] = [
   'Adb',
+]
+
+/**
+ * Spellings accepted from projects and scripts written before the kind was renamed to MaaFW's own
+ * `Linux`. They normalize to it on read, so an existing `maa-project.json` keeps working, but the
+ * CLI only ever writes `CONTROLLER_KINDS` back.
+ */
+export const LEGACY_CONTROLLER_KINDS = [
+  'WlRoots',
+] as const
+
+/** Everything `controller.kinds` and the MCP tool accept, canonical kinds first. */
+export const CONTROLLER_KIND_INPUTS: string[] = [
+  ...CONTROLLER_KINDS,
+  ...LEGACY_CONTROLLER_KINDS,
 ]
 
 export function normalizeControllerKind(value: string): ControllerKind | undefined {
@@ -29,9 +45,12 @@ export function normalizeControllerKind(value: string): ControllerKind | undefin
       return 'PlayCover'
     case 'gamepad':
       return 'Gamepad'
+    case 'linux':
+      return 'Linux'
+    // Spellings from projects created before the rename.
     case 'wlroots':
     case 'wl-roots':
-      return 'WlRoots'
+      return 'Linux'
     default:
       return undefined
   }
@@ -53,6 +72,13 @@ export function assertControllerKinds(kinds: ControllerKind[], label = '--contro
 
 export function controllerUnavailableMessage(value: string): string {
   return `Unsupported controller: ${value}. Supported controllers: ${CONTROLLER_KINDS.join(', ')}.`
+}
+
+/** Normalizes one controller value, throwing for a target the CLI does not know. */
+export function parseControllerKind(value: string): ControllerKind {
+  const kind = normalizeControllerKind(value)
+  if (kind === undefined) throw new Error(controllerUnavailableMessage(value.trim() || value))
+  return kind
 }
 
 export function projectControllerKinds(config: MaaProjectConfig): ControllerKind[] {

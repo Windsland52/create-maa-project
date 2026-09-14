@@ -13,7 +13,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import { ADDON_ORDER, addonDependencyText } from './addons.js'
 import { resolveOcrManifestFromEnvironment, resolveProductAssetManifest } from './assets.js'
 import { spawnCommand } from './command.js'
-import { CONTROLLER_KINDS } from './controllers.js'
+import { CONTROLLER_KINDS, CONTROLLER_KIND_INPUTS, parseControllerKind } from './controllers.js'
 import { runDoctor } from './doctor.js'
 import { applyIncrementalAddons } from './incremental-addons.js'
 import { cleanCache, inspectProjectBackup, listProjectBackups, restoreBackup, withProjectLock } from './project.js'
@@ -1066,7 +1066,11 @@ function projectContextToolResult(output: JsonObject, isError = false): CallTool
 
 function createProjectOptions(args: JsonObject): CliOptions {
   const template = requiredEnum(args, 'template', TEMPLATE_NAMES)
-  const controllers = requiredStringArray(args, 'controllers', CONTROLLER_KINDS)
+  // The schema advertises the canonical kinds; validation also takes the pre-rename spellings so a
+  // client holding the older enum keeps working.
+  const controllers = requiredStringArray(args, 'controllers', CONTROLLER_KIND_INPUTS).map((value) =>
+    parseControllerKind(value),
+  )
   if (new Set(controllers).size !== controllers.length) {
     throw new Error('controllers must not contain duplicate values.')
   }

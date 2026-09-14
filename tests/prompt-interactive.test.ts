@@ -311,7 +311,7 @@ describe('interactive prompt flow', () => {
         { value: 'MacOS', label: 'macOS app (MacOS)' },
         { value: 'PlayCover', label: 'PlayCover iOS app' },
         { value: 'Gamepad', label: 'Gamepad (Windows)' },
-        { value: 'WlRoots', label: 'wlroots app (Linux)' },
+        { value: 'Linux', label: 'wlroots app (Linux)' },
       ],
       0,
       new Set(['Adb']),

@@ -435,7 +435,7 @@ describe('MCP server', () => {
       expect(toolByName(tools, 'create_project').inputSchema.properties?.controllers).toMatchObject({
         type: 'array',
         items: {
-          enum: ['Adb', 'Win32', 'MacOS', 'PlayCover', 'Gamepad', 'WlRoots'],
+          enum: ['Adb', 'Win32', 'MacOS', 'PlayCover', 'Gamepad', 'Linux'],
         },
       })
       expect(toolByName(tools, 'sync').inputSchema.required).toEqual([

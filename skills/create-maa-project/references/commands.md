@@ -25,7 +25,7 @@ create-maa-project --mcp [--root <path>]
 | `--template <pipeline\|agent>`             | Initial template; `agent` adds Python scaffolding (uv, Ruff, Pyright)                                                  |
 | `--slug <project-id>`                      | ASCII project identifier used in package/interface files                                                               |
 | `--name <display-name>`                    | Human-readable project name                                                                                            |
-| `--controller <kind[,kind...]>`            | MaaFW controllers: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `WlRoots` (default `Adb`)                          |
+| `--controller <kind[,kind...]>`            | MaaFW controllers: `Adb`, `Win32`, `MacOS`, `PlayCover`, `Gamepad`, `Linux` (default `Adb`)                            |
 | `--license <AGPL-3.0-or-later\|MIT\|None>` | Project license                                                                                                        |
 | `--network <auto\|official>`               | Asset download network mode                                                                                            |
 | `--add <addon>`                            | Include an add-on during creation (repeatable)                                                                         |
@@ -38,10 +38,10 @@ create-maa-project --mcp [--root <path>]
 | `--no-interactive`                         | Disable interactive creation prompts                                                                                   |
 | `--version <semver>`                       | Project version (distinct from `-V`, the CLI version)                                                                  |
 
-`--controller` writes MaaFW's own controller types to `interface.json`: `Adb`, `Win32`, `MacOS`,
-`PlayCover`, `Gamepad`, and `Linux` for the `WlRoots` target (a wlroots desktop app on Linux).
-Each entry carries a `name` (controller ID, e.g. `Adb`) and a `label` (display text, e.g.
-`Android / Emulator`).
+`--controller` writes the same MaaFW controller types to `interface.json`: `Adb`, `Win32`, `MacOS`,
+`PlayCover`, `Gamepad`, and `Linux` (a wlroots desktop app on Linux). Each entry carries a `name`
+(controller ID: `Adb`, `Windows`, `macOS`, `PlayCover`, `Gamepad`, `Linux`) and a `label` (display
+text, e.g. `Android / Emulator`). `WlRoots` is accepted as the pre-rename spelling of `Linux`.
 
 ## Maintenance options
 

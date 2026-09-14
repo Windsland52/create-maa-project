@@ -56,20 +56,6 @@ export function normalizeControllerKind(value: string): ControllerKind | undefin
   }
 }
 
-export function parseControllerKinds(value: string): ControllerKind[] {
-  const kinds = value
-    .split(',')
-    .map((item) => normalizeControllerKind(item))
-    .filter((item): item is ControllerKind => item !== undefined)
-  return uniqueControllerKinds(kinds)
-}
-
-export function assertControllerKinds(kinds: ControllerKind[], label = '--controller'): void {
-  if (kinds.length === 0) {
-    throw new Error(`${label} must include at least one control target.`)
-  }
-}
-
 export function controllerUnavailableMessage(value: string): string {
   return `Unsupported controller: ${value}. Supported controllers: ${CONTROLLER_KINDS.join(', ')}.`
 }

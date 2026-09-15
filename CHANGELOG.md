@@ -4,6 +4,25 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 > 维护方式：条目由人工精炼（合并同类项、以用户视角描述），可用 `pnpm run changelog:draft` 生成 git-cliff 草稿作为参考；完整逐提交历史见 `git log`。
 
+## [3.5.1] - 2026-09-15
+
+### 新增
+
+- `--doctor` 会指出 `interface.json` 里 `type` 不是 MaaFW 控制器类型的条目（例如 3.5.0 之前生成的项目里的 `"type": "WlRoots"`）—— 这类条目本来就会被项目自身的 `check:schema` 与编辑器拒绝，而此前 doctor 不做任何提示。提示执行 `--sync metadata` 就地修好；项目自行扩展、`type` 合法的控制器不受影响
+
+### 变更
+
+- 控制器 kind 改用 MaaFW 自己的叫法 `Linux`。此前 CLI 自造了 `WlRoots`，它是六个 kind 里唯一与上游枚举不一致的一个，也是 `maa-project.json` 与 `interface.json` 口径对不上的唯一来源。`--controller`、`maa-project.json` 的 `controller.kinds` 与 MCP 的 `controllers` 参数都仍接受 `WlRoots` 并归一化为 `Linux`，新项目两边都写 `Linux`，已有项目执行 `--sync metadata` 即完成迁移。反向不成立：3.5.1 生成的项目其 `controller.kinds` 为 `Linux`，更早版本的 CLI 会拒绝该值
+
+### 修复
+
+- `--sync` 不再删除 `interface.json` 里手写的内容。此前每条 sync 命令都会把 `controller` 与 `resource` 整段替换成 CLI 生成的版本，导致：控制器上的 `attach_resource_path`、`icon`、`option`、按类型的子块与调过的 `display_short_side` 被重置；`label` 被改回默认值；配置表达不出的控制器（例如第二个 Adb 客户端）被删除；`maa-project.json` 未记录仓库地址时手写的 `github` 被删除（现在 `--doctor` 由报错改为 `[INFO]`，并提示用 `--sync github-url` 记录）；非 Agent 项目手写的 `agent` 块被删除。现在只修由配置派生的部分：控制器的标识（含早期写出的 `Android`、`WlRoots`，就地改名而不再多出一条）与 `type`
+- `--sync` 与 `--add` 不再重写归项目所有的文件。`maatools.config.mts` 与 `.vscode/` 下标记为 `once` 的 `settings.json`、`extensions.json`、`launch.json` 此前会被整体重生成，自定义的键、扩展推荐、嵌套配置与调试配置都会丢。现在只合并 CLI 自己生成的部分：`--add vscode` 保留其余键并按 `name` 合并调试配置，`--add agent` 只把 `vscode.agents.uv` 补进已有的 MaaTools 配置（已配好则完全不写），`--sync` 只在 `maatools.config.mts` 缺失时重建它
+- `--add resource-pack` 不再按配置重生成 `interface.json` 的 `resource` 数组，改为追加新资源包，`hash`、`description`、`icon` 等字段以及手工添加的资源包都会保留
+- `--doctor` 的修复提示不再指向做不到的命令。此前 `maatools.config.mts` 的三类问题、以及 `interface.json` 的 `import` 路径问题都提示执行 `--sync metadata`，而该命令并不会改写它们（`import` 列表从来不由 CLI 写入）；现在按问题给出可执行的修复路径
+
+[3.5.1]: https://github.com/Windsland52/create-maa-project/compare/v3.5.0...v3.5.1
+
 ## [3.5.0] - 2026-09-13
 
 ### 新增

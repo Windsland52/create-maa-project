@@ -608,6 +608,38 @@ describe('MCP server', () => {
   )
 
   it(
+    'accepts the pre-rename controller spelling and stores the canonical kind',
+    async () => {
+      const root = await tempRoot()
+      const session = await startSession(root)
+      await initialize(session)
+
+      const response = await session.request('tools/call', {
+        name: 'create_project',
+        arguments: {
+          name: 'maa-mcp-legacy-controller',
+          template: 'pipeline',
+          controllers: ['WlRoots'],
+          skipDownload: true,
+        },
+      })
+      const { result, report } = parseToolReport(response)
+      const config = JSON.parse(
+        await readFile(join(root, 'maa-mcp-legacy-controller', 'maa-project.json'), 'utf8'),
+      ) as { controller: { kinds: string[] } }
+
+      // `WlRoots` is what this CLI used to write; a client holding that older enum keeps working and
+      // the project it creates carries `Linux`.
+      expect(result.isError).toBeFalsy()
+      expect(report).toMatchObject({ command: 'create', ok: true })
+      expect(config.controller.kinds).toEqual([
+        'Linux',
+      ])
+    },
+    MCP_TEST_TIMEOUT_MS,
+  )
+
+  it(
     'returns a successful CliJsonReport for doctor on a valid project',
     async () => {
       const projectRoot = await createValidProject('maa-mcp-doctor')
@@ -1155,6 +1187,17 @@ describe('MCP server', () => {
             name: 'duplicate-controllers',
             template: 'pipeline',
             controllers: ['Adb', 'Adb'],
+            skipDownload: true,
+          },
+          message: 'controllers must not contain duplicate values',
+        },
+        {
+          // The pre-rename spelling normalizes to `Linux` before the duplicate check, so a client
+          // cannot sneak the same controller in twice by naming it both ways.
+          arguments: {
+            name: 'duplicate-controller-spellings',
+            template: 'pipeline',
+            controllers: ['Linux', 'WlRoots'],
             skipDownload: true,
           },
           message: 'controllers must not contain duplicate values',

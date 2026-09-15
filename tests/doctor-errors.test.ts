@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { parseArgs } from '../src/args.js'
 import { runDoctor } from '../src/doctor.js'
 import { createProject } from '../src/scaffold.js'
+import { syncProject } from '../src/sync.js'
 
 const originalCwd = process.cwd()
 const tempRoots: string[] = []
@@ -136,7 +137,62 @@ describe('doctor malformed JSON diagnostics', () => {
       ]),
     )
   })
+  it('reports a controller type MaaFW does not define, and names the repair that works', async () => {
+    const projectRoot = await createTempProject('stale-controller-type')
+    await setController(projectRoot, [
+      { name: 'WlRoots', label: 'wlroots app (Linux)', type: 'WlRoots' },
+    ])
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(output).toContain(
+      '[ERR] interface.json controller "WlRoots" has type "WlRoots", which is not a MaaFW controller type.',
+    )
+    expect(output).toContain('To fix: create-maa-project --sync metadata')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-metadata', status: 'fail' }),
+      ]),
+    )
+
+    // The hint has to be a repair, not just advice: `--sync metadata` renames the entry in place.
+    await syncProject(parseArgs(['--sync', 'metadata']), { root: projectRoot })
+
+    expect((await runDoctor(projectRoot)).lines.join('\n')).toContain('[OK] Interface metadata matches project config.')
+  })
+
+  it('only warns about a hand-tuned controller type on an unmanaged interface.json', async () => {
+    const projectRoot = await createTempProject('unmanaged-controller-type')
+    await setController(projectRoot, [
+      { name: 'MyWlr', label: 'Mine', type: 'WlRoots' },
+    ])
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, any>
+    config.project.interfaceUnmanaged = true
+    await writeFile(configPath, JSON.stringify(config, null, 4) + '\n', 'utf8')
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(output).toContain(
+      '[INFO] interface.json controller "MyWlr" has type "WlRoots", which is not a MaaFW controller type.',
+    )
+    expect(output).not.toContain('[ERR] interface.json controller')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-metadata', status: 'pass' }),
+      ]),
+    )
+  })
 })
+
+async function setController(projectRoot: string, controller: unknown[]): Promise<void> {
+  const interfacePath = join(projectRoot, 'interface.json')
+  const interfaceJson = JSON.parse(await readFile(interfacePath, 'utf8')) as Record<string, unknown>
+  interfaceJson.controller = controller
+  await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+}
 
 async function setInterfaceGithub(projectRoot: string, github: string): Promise<void> {
   const interfacePath = join(projectRoot, 'interface.json')

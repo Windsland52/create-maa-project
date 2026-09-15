@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
 import { readProjectConfig } from './project.js'
 import type { MaaProjectConfig } from './types.js'
+import { normalizeControllerKind } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { pinsSupportedNode, SUPPORTED_NODE_MAJOR } from './node-support.js'
 import { exists, readText } from './utils.js'
@@ -206,7 +207,9 @@ function recordSkippedCheck(checks: DoctorCheck[], id: string, summary: string):
 async function readInterfaceJson(
   root: string,
   lines: string[],
-): Promise<{ name?: unknown; github?: unknown; import?: unknown; resource?: unknown } | undefined> {
+): Promise<
+  { name?: unknown; github?: unknown; controller?: unknown; import?: unknown; resource?: unknown } | undefined
+> {
   const interfacePath = join(root, 'interface.json')
   if (!(await exists(interfacePath))) {
     lines.push('[ERR] interface.json is missing.')
@@ -227,7 +230,7 @@ async function readInterfaceJson(
 
 function checkInterfaceMetadata(
   config: MaaProjectConfig,
-  interfaceJson: { name?: unknown; github?: unknown },
+  interfaceJson: { name?: unknown; github?: unknown; controller?: unknown },
   lines: string[],
 ): boolean {
   let ok = true
@@ -259,8 +262,34 @@ function checkInterfaceMetadata(
       ok = false
     }
   }
+  const controllerIssue = firstControllerTypeIssue(interfaceJson.controller)
+  if (controllerIssue !== undefined) {
+    if (unmanaged) {
+      lines.push(`[INFO] ${controllerIssue} interface.json is unmanaged so this is allowed.`)
+    } else {
+      lines.push(`[ERR] ${controllerIssue}`)
+      lines.push('      To fix: create-maa-project --sync metadata')
+      ok = false
+    }
+  }
   if (ok) lines.push('[OK] Interface metadata matches project config.')
   return ok
+}
+
+/**
+ * MaaFW's schema pins `controller[].type` to its own enum, so a project created before the kind was
+ * renamed carries a value the synced schema — and the project's own `check:schema` — rejects.
+ */
+function firstControllerTypeIssue(controller: unknown): string | undefined {
+  for (const entry of Array.isArray(controller) ? controller.filter(isRecord) : []) {
+    const type = entry.type
+    if (typeof type === 'string' && normalizeControllerKind(type) === type) continue
+    const name = typeof entry.name === 'string' ? entry.name : '(unnamed)'
+    return typeof type === 'string'
+      ? `interface.json controller ${JSON.stringify(name)} has type ${JSON.stringify(type)}, which is not a MaaFW controller type.`
+      : `interface.json controller ${JSON.stringify(name)} has no MaaFW controller type.`
+  }
+  return undefined
 }
 
 async function checkNodeLockfile(root: string, lines: string[]): Promise<boolean> {
@@ -514,7 +543,7 @@ async function checkReferencedPaths(
   for (const reference of references) {
     if (reference.path.includes('\\')) {
       lines.push(`[ERR] interface.json ${reference.kind} path uses backslashes: ${reference.path}`)
-      lines.push('      To fix: create-maa-project --sync metadata')
+      lines.push(`      ${interfacePathRepairHint('slash', reference.kind)}`)
       ok = false
       continue
     }
@@ -526,12 +555,27 @@ async function checkReferencedPaths(
     }
     if (!(await exists(join(root, stripDotSlash(reference.path))))) {
       lines.push(`[ERR] interface.json ${reference.kind} path is missing: ${reference.path}`)
-      lines.push('      To fix: restore the path or run create-maa-project --sync metadata')
+      lines.push(`      ${interfacePathRepairHint('missing', reference.kind)}`)
       ok = false
     }
   }
   if (ok) lines.push('[OK] Interface referenced paths are present.')
   return ok
+}
+
+/**
+ * `--sync metadata` rewrites the paths of the resource packs the config knows, so it is only a repair
+ * for those: nothing in the CLI writes `interface.json`'s `import` list.
+ */
+function interfacePathRepairHint(issue: 'slash' | 'missing', kind: string): string {
+  if (kind !== 'resource') {
+    return issue === 'slash'
+      ? 'To fix: use forward slashes in interface.json'
+      : 'To fix: restore the path in interface.json'
+  }
+  return issue === 'slash'
+    ? 'To fix: create-maa-project --sync metadata'
+    : 'To fix: restore the path or run create-maa-project --sync metadata'
 }
 
 async function checkMaatoolsConfig(root: string, _config: MaaProjectConfig, lines: string[]): Promise<boolean> {
@@ -541,16 +585,19 @@ async function checkMaatoolsConfig(root: string, _config: MaaProjectConfig, line
     lines.push('      To fix: create-maa-project --sync metadata')
     return false
   }
+  // The file is `once`: the CLI recreates it when it is gone but never overwrites what is there, so a
+  // wrong file is the project's to repair.
   const content = await readText(configPath)
   if (content.includes('defineConfig')) {
     lines.push('[ERR] maatools.config.mts must not use @nekosu/maa-tools defineConfig.')
-    lines.push('      To fix: create-maa-project --sync metadata')
+    lines.push('      To fix: export a plain object instead, or delete the file and run')
+    lines.push('      create-maa-project --sync metadata')
     return false
   }
   if (!hasMaatoolsRequiredFields(content)) {
     lines.push('[ERR] maatools.config.mts is missing maa-tools check fields.')
     lines.push("      Expected maaVersion, interfacePath: 'interface.json', and check: {}.")
-    lines.push('      To fix: create-maa-project --sync metadata')
+    lines.push('      To fix: add them, or delete the file and run create-maa-project --sync metadata')
     return false
   }
   lines.push('[OK] Maa tools config fields are present.')

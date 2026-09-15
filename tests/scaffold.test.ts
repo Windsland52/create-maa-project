@@ -1897,6 +1897,64 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
   })
 
+  it('recreates a missing MaaTools config without touching an existing one', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-maatools-once' }))
+    const projectRoot = join(root, 'maa-maatools-once')
+    const maatoolsPath = join(projectRoot, 'maatools.config.mts')
+    process.chdir(projectRoot)
+
+    // Doctor points at `--sync metadata` for a missing config, so the repair has to recreate it.
+    await rm(maatoolsPath)
+    await syncProject(defaultOptions({ sync: 'metadata' }))
+    expect(await readFile(maatoolsPath, 'utf8')).toContain("interfacePath: 'interface.json'")
+
+    // Recreating is all it does: an existing file belongs to the project.
+    await writeFile(
+      maatoolsPath,
+      `// kept\nexport default {\n  maaVersion: 'v5.11.0',\n  interfacePath: 'interface.json',\n  check: {},\n}\n`,
+      'utf8',
+    )
+    await syncProject(defaultOptions({ sync: 'metadata' }))
+    const kept = await readFile(maatoolsPath, 'utf8')
+    expect(kept).toContain('// kept')
+    expect(kept).toContain("maaVersion: 'v5.11.0'")
+  })
+
+  it('leaves a MaaTools config that already has a debug session untouched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-agent-configured',
+        add: [
+          'dev-tools',
+          'vscode',
+        ],
+      }),
+    )
+    const projectRoot = join(root, 'maa-agent-configured')
+    const maatoolsPath = join(projectRoot, 'maatools.config.mts')
+    process.chdir(projectRoot)
+
+    // The project wired the agent debug session itself. Nothing to add means nothing to write, so the
+    // add-on leaves the file alone entirely — no rewrite, and no backup of an identical copy either.
+    const configured = `export default {\n  maaVersion: 'v5.11.0',\n  interfacePath: 'interface.json',\n  check: {},\n  vscode: { agents: { uv: 'My Own Session' } },\n}\n`
+    await writeFile(maatoolsPath, configured, 'utf8')
+
+    const result = await addAgent(
+      defaultOptions({
+        add: [
+          'agent',
+        ],
+      }),
+    )
+
+    expect(await readFile(maatoolsPath, 'utf8')).toBe(configured)
+    expect(result.written).not.toContain('maatools.config.mts')
+  })
+
   it('adds the agent debug session to a hand-tuned MaaTools config without replacing it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

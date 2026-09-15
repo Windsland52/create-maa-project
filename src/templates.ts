@@ -252,12 +252,14 @@ export function maatoolsConfigFile(includeAgent = false): ManagedFileInput {
 
 /**
  * MaaTools config is `once`, so the agent add-on patches its debug session into the file the project
- * owns instead of regenerating it. Returns the content unchanged when the session is already there,
- * and `undefined` when there is no object to patch — the caller leaves the file alone rather than
- * replacing something it cannot merge with.
+ * owns instead of regenerating it. Returns the patched content, or `undefined` when there is nothing
+ * to add — the session is already configured, or the file exposes no object to patch — and the caller
+ * then leaves the file untouched, so a project's own config is never rewritten.
  */
 export function withAgentDebugSession(content: string): string | undefined {
-  if (/^[ \t]*vscode\s*:/m.test(content)) return content
+  // A blank file holds nothing to preserve, so it is filled in rather than left without a session.
+  if (content.trim() === '') return maatoolsConfig(true)
+  if (/^[ \t]*vscode\s*:/m.test(content)) return undefined
   const closing = content.lastIndexOf('}')
   if (closing < 0) return undefined
   const head = content.slice(0, closing).replace(/\s+$/, '')

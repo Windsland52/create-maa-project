@@ -9,7 +9,13 @@ import {
   writeProjectState,
 } from './project.js'
 import type { ProjectWriteOperation } from './project.js'
-import { interfaceAgent, interfaceController, interfaceResourceItems, licenseText } from './templates.js'
+import {
+  interfaceAgent,
+  interfaceController,
+  interfaceResourceItems,
+  licenseText,
+  maatoolsConfigFile,
+} from './templates.js'
 import type { CliOptions, ControllerKind, LicenseKind, ManagedFileInput, NetworkMode, ScaffoldResult } from './types.js'
 import { normalizeControllerKind, projectControllerKinds } from './controllers.js'
 import { enabledResourcePacks, hasDevTools } from './features.js'
@@ -123,6 +129,11 @@ export async function syncProject(options: CliOptions, environment: SyncEnvironm
   const pyproject = await syncedPyproject(root, config)
   throwIfAborted(environment.signal)
 
+  // MaaTools config is `once`: recreate it when it is gone, never overwrite what is there. Doctor
+  // points at `--sync metadata` for a missing one, so the repair has to exist.
+  if (!(await exists(join(root, 'maatools.config.mts')))) {
+    files.push(maatoolsConfigFile(config.python !== undefined))
+  }
   files.push({ path: CONFIG_FILE, content: stableJson(config), managed: false })
   // interface.json is intentionally unmanaged: projects may carry a hand-tuned
   // controller/resource layout (e.g. multi-server packs) that the template-

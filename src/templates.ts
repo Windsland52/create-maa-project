@@ -592,7 +592,13 @@ function gitCliffWorkflowJob(): string {
             exit 1
           fi
           echo "[INFO] Generating release notes for $previous_stable_tag..$GITHUB_REF_NAME"
-          "$git_cliff" --config .github/cliff.toml "$previous_stable_tag..HEAD" --strip header --output CHANGES.md
+          # Remote metadata needs the GitHub API, and git-cliff exits 101 when it cannot read it;
+          # a repository with pull requests disabled answers 404 for the pull list. Notes are not
+          # worth failing a release over, so retry the same range without remote data.
+          if ! "$git_cliff" --config .github/cliff.toml "$previous_stable_tag..HEAD" --strip header --output CHANGES.md; then
+            echo "::warning::GitHub metadata is unavailable; generating release notes without pull request and contributor data."
+            "$git_cliff" --config .github/cliff.toml --offline "$previous_stable_tag..HEAD" --strip header --output CHANGES.md
+          fi
       - name: Upload release notes
         uses: actions/upload-artifact@v7
         with:

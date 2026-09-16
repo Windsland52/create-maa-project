@@ -1210,7 +1210,9 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
         '.github/dependabot.yml',
       ]),
     )
-    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
+    // The `[git.github] commits` table never reached the pinned git-cliff build; the release
+    // job enables remote data through GITHUB_REPO, so the config no longer claims a switch.
+    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).not.toContain('[git.github]')
     expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
       '问题修复 | Bug Fixes',
     )
@@ -4758,7 +4760,7 @@ export default defineConfig({
     )
     expect(gitCliffResult.skipped).not.toContain('CHANGELOG.md')
     expect(await readFile(join(root, 'maa-addon-test', 'CHANGELOG.md'), 'utf8')).toBe('# User Changelog\n')
-    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('[git.github]')
+    expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).not.toContain('[git.github]')
     expect(await readFile(join(root, 'maa-addon-test', '.github/cliff.toml'), 'utf8')).toContain('新功能 | Features')
     expect(await readFile(join(root, 'maa-addon-test', '.github/workflows/release.yml'), 'utf8')).toContain(
       'body_path: release-assets/CHANGES.md',

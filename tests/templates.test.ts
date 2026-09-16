@@ -215,6 +215,10 @@ describe('workflow templates', () => {
     expect(content).toContain("--exclude '*-*' HEAD^")
     expect(content).toContain('"$previous_stable_tag..HEAD"')
     expect(content).not.toContain('--latest')
+    // Notes must not be what fails a release: the first run keeps pull request and contributor
+    // data, and the offline retry still writes them when that data is unreachable.
+    expect(content).toContain('--offline "$previous_stable_tag..HEAD"')
+    expect(content).toContain('::warning::GitHub metadata is unavailable')
   })
 })
 

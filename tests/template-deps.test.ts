@@ -2,7 +2,13 @@ import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { minimumNodeVersion, planPin } from '../scripts/sync-template-deps.js'
+import {
+  LOCKFILE_REFRESH_ARGV,
+  minimumNodeVersion,
+  parseReleaseAge,
+  planPin,
+  RELEASE_AGE_DEFAULT_MINUTES,
+} from '../scripts/sync-template-deps.js'
 import { TEMPLATE_DEV_DEPENDENCIES, TEMPLATE_PNPM_VERSION } from '../src/template-deps.js'
 import { devToolFiles, type ProjectTemplateInput } from '../src/templates.js'
 
@@ -177,6 +183,60 @@ describe('dependency sync policy', () => {
     ).toMatchObject({
       action: 'update',
     })
+  })
+
+  it('holds a candidate that is still inside the release-age window', () => {
+    // pnpm refuses to resolve a release younger than `minimumReleaseAge` and records an exemption in
+    // `pnpm-workspace.yaml` instead. The sync workflow owns only the pin files, so a pin that needs
+    // an exemption waits for a later run rather than failing the job on a file it may not commit.
+    const fresh = {
+      name: 'prettier',
+      current: '1.2.3',
+      latest: '1.2.4',
+      allowMajor: false,
+    }
+    expect(
+      planPin({
+        ...fresh,
+        freshness: {
+          publishedAt: '2026-09-16T08:23:07.844Z',
+          now: Date.parse('2026-09-16T09:00:00.000Z'),
+          windowMinutes: 1440,
+        },
+      }),
+    ).toMatchObject({
+      action: 'hold-fresh',
+    })
+    expect(
+      planPin({
+        ...fresh,
+        freshness: {
+          publishedAt: '2026-09-16T08:23:07.844Z',
+          now: Date.parse('2026-09-17T08:24:00.000Z'),
+          windowMinutes: 1440,
+        },
+      }),
+    ).toMatchObject({
+      action: 'update',
+    })
+  })
+
+  it('reads the release-age window, falling back to the pnpm default', () => {
+    expect(parseReleaseAge('60')).toBe(60)
+    // Zero is a project turning the window off, not a missing value.
+    expect(parseReleaseAge('0')).toBe(0)
+    expect(parseReleaseAge(undefined)).toBe(RELEASE_AGE_DEFAULT_MINUTES)
+    expect(parseReleaseAge('  ')).toBe(RELEASE_AGE_DEFAULT_MINUTES)
+    // `pnpm config get minimumReleaseAge` prints this when the project sets nothing.
+    expect(parseReleaseAge('undefined\n')).toBe(RELEASE_AGE_DEFAULT_MINUTES)
+    expect(parseReleaseAge('nonsense')).toBe(RELEASE_AGE_DEFAULT_MINUTES)
+  })
+
+  it('refreshes the lockfile without inheriting the frozen default CI implies', () => {
+    // Regression guard: the install that follows a pin rewrite exists to move the lockfile, and `CI`
+    // turns pnpm's `frozen-lockfile` default on wherever this script runs, which is a workflow.
+    expect(LOCKFILE_REFRESH_ARGV).toContain('--no-frozen-lockfile')
+    expect(LOCKFILE_REFRESH_ARGV).not.toContain('--frozen-lockfile')
   })
 
   it('reads the lowest concrete Node version out of an engines range', () => {

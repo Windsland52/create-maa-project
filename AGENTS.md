@@ -117,9 +117,11 @@ CLI formats its templates with the same Prettier plugins a generated project use
 Node floor and commits only when `pnpm check` passes; it refuses to commit when the run touched files
 outside the pin set, because a formatter bump can reflow generated templates and that is a contract
 change for a human to land with a changelog entry. Only same-major moves are automatic: `--major` is
-a human decision, and a same-major pnpm bump is held when its published `engines.node` would outgrow
-the floor — best-effort, since pnpm does not publish its real requirement, which leaves the floor CI
-run as the backstop. `tests/template-deps.test.ts` fails if a pin reappears as a literal in the
+a human decision, and two holds sit beside it — a same-major pnpm bump whose published `engines.node`
+would outgrow the floor (best-effort, since pnpm does not publish its real requirement, which leaves
+the floor CI run as the backstop), and a candidate still inside pnpm's release-age window, which pnpm
+would only resolve by recording an exemption in `pnpm-workspace.yaml` that this workflow owns no part
+of. `tests/template-deps.test.ts` fails if a pin reappears as a literal in the
 template, if this repository's pins drift from the source, or if a document states the pnpm patch
 version.
 

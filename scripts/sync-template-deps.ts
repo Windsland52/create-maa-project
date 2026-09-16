@@ -10,7 +10,8 @@
 // major can raise the Node floor declared in `src/node-support.ts`, so both are reported and skipped
 // unless `--major` is passed. A same-major pnpm bump is also held when its published `engines.node`
 // would outgrow that floor — best-effort only, because pnpm does not state its real requirement in
-// that field, which is why CI runs the suite on the floor as the backstop.
+// that field, which is why CI runs the suite on the floor as the backstop. A candidate younger than
+// pnpm's release-age window is held too, for the reason in `holdFreshPins`.
 //
 // Driven by `.github/workflows/deps-sync.yml`; run it by hand with `pnpm sync:deps`.
 
@@ -26,6 +27,9 @@ const TEMPLATE_DEPS_FILE = join(repoRoot, 'src/template-deps.json')
 const REPO_PACKAGE_FILE = join(repoRoot, 'package.json')
 const REGISTRY_URL = 'https://registry.npmjs.org'
 const REQUEST_TIMEOUT_MS = 30_000
+// A package document carries every published version, so it is far larger than a manifest: the
+// biggest pin here (TypeScript) is around 15 MB.
+const PACKAGE_DOCUMENT_TIMEOUT_MS = 60_000
 
 /** What the npm registry returns for `/<name>/latest`. */
 export type LatestManifest = {
@@ -44,8 +48,11 @@ export type PinPlan = {
   name: string
   current: string
   latest: string
-  /** `update` moves the pin, `hold-major` waits for a human, `current` is already newest. */
-  action: 'update' | 'hold-major' | 'current'
+  /**
+   * `update` moves the pin, `hold-major` waits for a human, `hold-fresh` waits for the candidate to
+   * leave pnpm's release-age window, `current` is already newest.
+   */
+  action: 'update' | 'hold-major' | 'hold-fresh' | 'current'
   /** Why a newer candidate was rejected. */
   note?: string
 }
@@ -57,6 +64,25 @@ type Options = {
   install: boolean
   only: string[]
 }
+
+/**
+ * The install that follows a pin rewrite has to be allowed to move the lockfile: `package.json` was
+ * just rewritten, so the frozen default would fail with ERR_PNPM_OUTDATED_LOCKFILE. That default
+ * turns itself on wherever `CI` is set, which is exactly where this runs, so the flag is explicit
+ * here instead of relying on the caller's environment. Pinning the lockfile belongs to the
+ * workflow's own pre-install, not to the refresh that exists to change it.
+ */
+export const LOCKFILE_REFRESH_ARGV = [
+  'install',
+  '--no-frozen-lockfile',
+]
+
+/**
+ * pnpm 11 resolves with supply-chain protection on by default: a release younger than
+ * `minimumReleaseAge` is not resolved unless the project exempts it. This mirrors the default pnpm
+ * applies when a project does not set the option itself (`pnpm config get` reports `undefined`).
+ */
+export const RELEASE_AGE_DEFAULT_MINUTES = 1440
 
 const USAGE = `Usage: pnpm sync:deps [options]
 
@@ -82,7 +108,7 @@ async function main(): Promise<void> {
     if (!names.includes(name)) fail(`Unknown pin "${name}". Known pins: ${names.join(', ')}.`)
   }
 
-  const plans: PinPlan[] = []
+  const inputs: PinInput[] = []
   for (const name of selected) {
     const current = name === 'pnpm' ? deps.pnpm : requiredVersion(deps, name)
     const manifest = await fetchLatest(name)
@@ -90,17 +116,17 @@ async function main(): Promise<void> {
     if (typeof latest !== 'string' || !isValidSemVer(latest)) {
       fail(`${REGISTRY_URL}/${name}/latest did not report a plain SemVer version.`)
     }
-    plans.push(
-      planPin({
-        name,
-        current,
-        latest,
-        allowMajor: options.major,
-        manifest,
-      }),
-    )
+    inputs.push({
+      name,
+      current,
+      latest,
+      allowMajor: options.major,
+      manifest,
+    })
   }
 
+  const plans = inputs.map((input) => planPin(input))
+  await holdFreshPins(inputs, plans)
   report(plans)
   const pending = plans.filter((plan) => plan.action === 'update')
   if (options.check) {
@@ -124,9 +150,7 @@ async function main(): Promise<void> {
   console.log(`Updated ${pending.length} pin(s) in src/template-deps.json${repoChanged ? ' and package.json' : ''}.`)
 
   if (!options.install) return
-  run('pnpm', [
-    'install',
-  ])
+  run('pnpm', LOCKFILE_REFRESH_ARGV)
   // A Prettier or sort-plugin bump can reflow templates, so land the formatter's own consequences
   // in the same change instead of leaving `pnpm check` red for the workflow.
   run('pnpm', [
@@ -134,20 +158,29 @@ async function main(): Promise<void> {
   ])
 }
 
-/**
- * Decide one pin. Pure so the policy stays testable: a newer candidate only moves a pin when it
- * stays inside the current major (or `--major` was passed), and a pnpm candidate is additionally
- * held when its published `engines.node` asks for a newer Node than this project and every generated
- * project declare. That second check is best-effort: pnpm does not express its real requirement
- * (`node:sqlite` and friends) in the published `engines` field.
- */
-export function planPin(input: {
+export type PinInput = {
   name: string
   current: string
   latest: string
   allowMajor: boolean
   manifest?: LatestManifest
-}): PinPlan {
+  /** Publish time of `latest`; when given, a candidate still inside the window is held. */
+  freshness?: {
+    publishedAt: string
+    now: number
+    windowMinutes: number
+  }
+}
+
+/**
+ * Decide one pin. Pure so the policy stays testable: a newer candidate only moves a pin when it
+ * stays inside the current major (or `--major` was passed), and a pnpm candidate is additionally
+ * held when its published `engines.node` asks for a newer Node than this project and every generated
+ * project declare. That second check is best-effort: pnpm does not express its real requirement
+ * (`node:sqlite` and friends) in the published `engines` field. A candidate inside the release-age
+ * window is held last, so the more specific hold still explains itself.
+ */
+export function planPin(input: PinInput): PinPlan {
   const { name, current, latest, allowMajor } = input
   if (!isSemVerGreaterThan(latest, current)) {
     return {
@@ -181,12 +214,29 @@ export function planPin(input: {
       }
     }
   }
+  const freshness = input.freshness
+  if (freshness !== undefined) {
+    const ageMinutes = (freshness.now - Date.parse(freshness.publishedAt)) / 60_000
+    if (ageMinutes < freshness.windowMinutes) {
+      return {
+        name,
+        current,
+        latest,
+        action: 'hold-fresh',
+        note: `${latest} is ${formatAge(ageMinutes)} old; pnpm's release-age window is ${String(freshness.windowMinutes)} minutes`,
+      }
+    }
+  }
   return {
     name,
     current,
     latest,
     action: 'update',
   }
+}
+
+function formatAge(minutes: number): string {
+  return minutes < 60 ? `${minutes.toFixed(0)} minutes` : `${(minutes / 60).toFixed(1)} hours`
 }
 
 /** Lowest concrete version an npm `engines.node` range admits, for `>=22.13.0 <23`, `^22.13`, ... */
@@ -227,12 +277,95 @@ function report(plans: PinPlan[]): void {
   for (const plan of plans) {
     if (plan.action === 'update') {
       console.log(`  ${plan.name}: ${plan.current} -> ${plan.latest}`)
-    } else if (plan.action === 'hold-major') {
-      console.log(`  ${plan.name}: ${plan.current} (held: ${plan.note ?? 'major bump'})`)
-    } else {
+    } else if (plan.action === 'current') {
       console.log(`  ${plan.name}: ${plan.current} (current)`)
+    } else {
+      console.log(`  ${plan.name}: ${plan.current} (held: ${plan.note ?? plan.action})`)
     }
   }
+}
+
+/**
+ * Hold a candidate that pnpm would not resolve on its own. pnpm 11 quarantines a release younger
+ * than `minimumReleaseAge`, and installing one anyway makes it append an exemption to
+ * `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` — a supply-chain exemption this run would then
+ * have to commit or abort over, and one a generated project could inherit. Waiting a run instead
+ * costs nothing: the pin lands as soon as the candidate has aged out of the window.
+ */
+async function holdFreshPins(inputs: PinInput[], plans: PinPlan[]): Promise<void> {
+  if (!plans.some((plan) => plan.action === 'update')) return
+  const windowMinutes = releaseAgeMinutes()
+  const now = Date.now()
+  await Promise.all(
+    inputs.map(async (input, index) => {
+      if (plans[index]?.action !== 'update') return
+      const publishedAt = await fetchPublishedAt(input.name, input.latest)
+      if (publishedAt === undefined) return
+      plans[index] = planPin({
+        ...input,
+        freshness: {
+          publishedAt,
+          now,
+          windowMinutes,
+        },
+      })
+    }),
+  )
+}
+
+/**
+ * When the registry published one version. A publish time is only stated in the package document,
+ * never in the `/latest` manifest the plan is built from, so this is the one extra request per
+ * candidate that would otherwise move a pin.
+ */
+async function fetchPublishedAt(name: string, version: string): Promise<string | undefined> {
+  const url = `${REGISTRY_URL}/${encodePackageName(name)}`
+  let response: Response
+  try {
+    response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(PACKAGE_DOCUMENT_TIMEOUT_MS),
+    })
+  } catch (error) {
+    fail(`Could not reach ${url}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!response.ok) fail(`${url} responded ${String(response.status)} ${response.statusText}`)
+  const document = (await response.json()) as {
+    time?: Record<string, unknown>
+  }
+  const publishedAt = document.time?.[version]
+  return typeof publishedAt === 'string' ? publishedAt : undefined
+}
+
+/** The release-age window pnpm will actually apply here, in minutes. */
+function releaseAgeMinutes(): number {
+  const result = spawnSync(
+    'pnpm',
+    [
+      'config',
+      'get',
+      'minimumReleaseAge',
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+    },
+  )
+  return parseReleaseAge(result.status === 0 ? result.stdout : undefined)
+}
+
+/**
+ * Read what `pnpm config get minimumReleaseAge` printed. pnpm prints `undefined` when the project
+ * leaves the option alone, which is when its own default is the effective one.
+ */
+export function parseReleaseAge(configValue: string | undefined): number {
+  const trimmed = configValue?.trim()
+  if (trimmed === undefined || trimmed === '' || trimmed === 'undefined') return RELEASE_AGE_DEFAULT_MINUTES
+  const minutes = Number(trimmed)
+  return Number.isFinite(minutes) && minutes >= 0 ? minutes : RELEASE_AGE_DEFAULT_MINUTES
 }
 
 async function fetchLatest(name: string): Promise<LatestManifest> {

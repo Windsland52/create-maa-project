@@ -44,8 +44,9 @@
 
 > 生成项目的依赖版本不需要手动 bump：`src/template-deps.json` 是唯一来源，`pnpm sync:deps` 从 npm
 > registry 取最新版（默认只升同 major，跨 major 用 `--major`），每日由 `Deps Sync` workflow 跑完
-> `pnpm check` 后自动提交。发布前确认该 workflow 最近一次运行是绿的即可；要立刻生效就本地跑一次
-> `pnpm sync:deps`。
+> `pnpm check` 后自动提交。发布不满 pnpm release-age 窗口（默认 1 天）的版本会先挂起，等它过期后的
+> 下一轮再落地，免得为它写一条 `minimumReleaseAgeExclude` 豁免。发布前确认该 workflow 最近一次运行
+> 是绿的即可；要立刻生效就本地跑一次 `pnpm sync:deps`。
 
 ## CHANGELOG
 

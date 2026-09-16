@@ -2,7 +2,17 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-> 维护方式：条目由人工精炼（合并同类项、以用户视角描述），可用 `pnpm run changelog:draft` 生成 git-cliff 草稿作为参考；完整逐提交历史见 `git log`。
+## [3.5.2] - 2026-09-16
+
+### 修复
+
+- `--update maafw` 以及 `--update runtime:mfa` / `runtime:mxu` 不再要求版本 pin 写成上游 tag 的 `v` 前缀。此前把 `maafw.version` 写成 `5.13.0` 会原样拼进 `.../releases/tags/5.13.0`，拿到一个不解释任何原因的 404 并终止更新，而上游的标签其实是 `v5.13.0`；现在先按原样查，查不到再试另一种拼法，两种都不存在时才按你写下的那个报错。日期型 tag（如 python-build-standalone 的 `20260610`）仍在第一次查询就命中，不会多发请求。`docs/commands.md` 与 `docs/commands.en.md` 已写明前缀可省略
+- 生成的 release 工作流能在 macOS 上打包了。`Package` 步骤此前用 bash 4 的大小写展开给产物命名，而 macOS runner 的 `shell: bash` 指的是系统自带的 bash 3.2，不认识这个语法，于是两个 macOS 目标都在写出产物之前以 `bad substitution` 失败——Linux 与 Windows 正常，所以发布包里只缺 macOS。改用 `tr` 展开后六个目标一致
+- 发布说明不再因为取不到 GitHub 元数据而卡住整次发布。仓库关掉 Pull Requests 时拉取 PR 列表会返回 404，git-cliff 对此直接 panic（退出 101），而 notes job 是发布 job 的依赖，于是包全部构建成功却一直发不出 Release；现在在线取不到元数据时会自动改用 `--offline` 重跑同一区间，照样写出发布说明（少 PR 号、`@用户名` 与新贡献者段落），并在运行页面留一条 warning。两次都失败时依旧是失败，不会被吞掉。同时删掉了生成的 `cliff.toml` 里无效的 `[git.github] commits = true`：git-cliff 从没有这个配置项，它一直被静默忽略，真正打开远端数据的是工作流里的 `GITHUB_REPO`
+
+已有项目想拿到上面后两条（生成物修复）：只装了 github add-on 的项目执行 `create-maa-project --add github`，它会重写 `.github/workflows/release.yml`；装了 git-cliff add-on 的项目执行 `create-maa-project --add git-cliff`，它会一并重写 `.github/cliff.toml` 与 release 工作流。不刷新也能继续用，只是上面两个发布相关的问题要到刷新之后才修好
+
+[3.5.2]: https://github.com/Windsland52/create-maa-project/compare/v3.5.1...v3.5.2
 
 ## [3.5.1] - 2026-09-15
 

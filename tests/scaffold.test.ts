@@ -778,7 +778,8 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('pnpm check:py')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
-    expect(releaseWorkflow).toContain('-${gui^^}.${{ matrix.ext }}"')
+    expect(releaseWorkflow).toContain('-${gui_upper}.${{ matrix.ext }}"')
+    expect(releaseWorkflow).not.toContain('gui^^')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
     expect(releaseWorkflow).not.toContain('package_paths=')
@@ -2425,7 +2426,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
     expect(await readJson(join(root, 'MaaXX', 'interface.json'))).not.toHaveProperty('icon')
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
+      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.${{ matrix.ext }}"',
     )
     expect(await readFile(join(root, 'MaaXX', 'README.md'), 'utf8')).toContain('# MaaXX')
   })
@@ -4524,7 +4525,7 @@ export default defineConfig({
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).toContain(
-      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui^^}.${{ matrix.ext }}"',
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.${{ matrix.ext }}"',
     )
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')

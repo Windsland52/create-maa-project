@@ -612,10 +612,46 @@ function isIgnoredArchiveEntry(path: string): boolean {
   return lower === '.ds_store' || lower.endsWith('/.ds_store') || lower.startsWith('__macosx/')
 }
 
+/**
+ * Upstream tags are v-prefixed (`v5.13.1`) while a pinned version is often written without it, so a
+ * tag that does not resolve is retried with the other spelling. The first failure is the one that
+ * surfaces when neither resolves, which keeps the message tied to what the config asked for.
+ */
 async function fetchGithubReleaseByTag(
   config: ProductReleaseConfig,
   tag: string,
   fetchJson: GithubReleaseJsonFetcher = defaultGithubReleaseJsonFetch,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const candidates = releaseTagCandidates(tag)
+  let failure: unknown
+  for (const candidate of candidates) {
+    try {
+      return await fetchTaggedGithubRelease(config, candidate, fetchJson, signal)
+    } catch (error) {
+      failure ??= error
+    }
+  }
+  throw failure
+}
+
+function releaseTagCandidates(tag: string): string[] {
+  const pinned = tag.trim()
+  const alternate = /^v/i.test(pinned) ? pinned.slice(1) : `v${pinned}`
+  return alternate
+    ? [
+        pinned,
+        alternate,
+      ]
+    : [
+        pinned,
+      ]
+}
+
+function fetchTaggedGithubRelease(
+  config: ProductReleaseConfig,
+  tag: string,
+  fetchJson: GithubReleaseJsonFetcher,
   signal?: AbortSignal,
 ): Promise<unknown> {
   return fetchJson(

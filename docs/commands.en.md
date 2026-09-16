@@ -168,9 +168,13 @@ create-maa-project --update python-runtime
 logs stay clear.
 
 `maafw.channel` / `maafw.version` in `maa-project.json` decide how MaaFramework runtime assets
-resolve: a non-empty `version` fetches that exact release, while an empty one selects the newest
-release the `channel` (default `stable`) allows — `stable` accepts final releases only, `beta` also
-accepts rc and beta builds (rc counts as beta), and `alpha` also accepts alpha builds.
+resolve. A non-empty `version` fetches that release, and its `v` prefix is optional: upstream tags
+read `v5.13.1`, so `5.13.1` is looked up as written and then as `v5.13.1`, and a pin that neither
+spelling resolves still fails with the spelling written in the config. An empty `version` selects the
+newest release
+the `channel` (default `stable`) allows — `stable` accepts final releases only, `beta` also accepts
+rc and beta builds (rc counts as beta), and `alpha` also accepts alpha builds.
+`runtime.mfa.version` and `runtime.mxu.version` behave the same way.
 
 ### The two OCR provisioning modes
 

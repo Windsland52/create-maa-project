@@ -138,8 +138,10 @@ create-maa-project --update python-runtime
 `--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
 
 `maa-project.json` 的 `maafw.channel` / `maafw.version` 决定 MaaFramework runtime 资产如何解析：
-`version` 非空时按该精确版本获取；为空时按 `channel`（缺省 `stable`）取通道内最新的发布，其中
-`stable` 只接受正式版，`beta` 额外接受 rc 与 beta（rc 归入 beta），`alpha` 再额外接受 alpha。
+`version` 非空时按该版本取发布，`v` 前缀可省略——上游标签写作 `v5.13.1`，因此 `5.13.1` 会先按原样查、
+再按 `v5.13.1` 查；两种拼法都不存在时报错仍指向你写下的那个。为空时按 `channel`（缺省 `stable`）取通道内
+最新的发布，其中 `stable` 只接受正式版，`beta` 额外接受 rc 与 beta（rc 归入 beta），`alpha` 再额外接受 alpha。
+`runtime.mfa.version` 与 `runtime.mxu.version` 同理。
 
 ### OCR 模型的两种供应方式
 

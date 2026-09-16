@@ -3325,6 +3325,67 @@ export default defineConfig({
     )
   })
 
+  it('resolves a pinned MaaFramework release written without the v prefix', async () => {
+    const requested: string[] = []
+    const manifest = await resolveProductAssetManifestFromGithubRelease(
+      { product: 'MaaFramework', channel: 'stable', version: '5.10.5', platform: 'linux-x64' },
+      {
+        fetchJson: async (url) => {
+          requested.push(url)
+          if (!url.endsWith('/tags/v5.10.5')) {
+            throw new Error(`Failed to resolve GitHub release ${url}: HTTP 404`)
+          }
+          return {
+            tag_name: 'v5.10.5',
+            assets: [
+              {
+                name: 'MAA-linux-x86_64-v5.10.5.zip',
+                browser_download_url:
+                  'https://github.com/MaaXYZ/MaaFramework/releases/download/v5.10.5/MAA-linux-x86_64-v5.10.5.zip',
+                digest: `sha256:${'c'.repeat(64)}`,
+                size: 70450783,
+              },
+            ],
+          }
+        },
+      },
+    )
+
+    expect(requested).toEqual([
+      'https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/5.10.5',
+      'https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/v5.10.5',
+    ])
+    expect(manifest).toMatchObject({
+      product: 'MaaFramework',
+      tag: 'v5.10.5',
+      platform: 'linux-x64',
+      assets: [
+        {
+          path: 'plugins/linux-x64/MAA-linux-x86_64-v5.10.5.zip',
+        },
+      ],
+    })
+  })
+
+  it('reports the pinned spelling when neither a tag nor its v-prefixed form resolves', async () => {
+    const requested: string[] = []
+    await expect(
+      resolveProductAssetManifestFromGithubRelease(
+        { product: 'MaaFramework', channel: 'stable', version: '5.10.5', platform: 'linux-x64' },
+        {
+          fetchJson: async (url) => {
+            requested.push(url)
+            throw new Error(`Failed to resolve GitHub release ${url}: HTTP 404`)
+          },
+        },
+      ),
+    ).rejects.toThrow('releases/tags/5.10.5: HTTP 404')
+    expect(requested).toEqual([
+      'https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/5.10.5',
+      'https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/v5.10.5',
+    ])
+  })
+
   it('extracts MFAAvalonia archives into the GUI release input layout and preserves executable bits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

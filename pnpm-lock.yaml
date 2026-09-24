@@ -36,11 +36,11 @@ importers:
         specifier: 1.0.0-alpha.6
         version: 1.0.0-alpha.6
       prettier:
-        specifier: 3.9.8
-        version: 3.9.8
+        specifier: 3.9.9
+        version: 3.9.9
       prettier-plugin-multiline-arrays:
         specifier: 4.1.11
-        version: 4.1.11(prettier@3.9.8)
+        version: 4.1.11(prettier@3.9.9)
       tsx:
         specifier: 4.20.3
         version: 4.20.3
@@ -1267,9 +1267,9 @@ packages:
     peerDependencies:
       prettier: ">=3.0.0 <4.0.0"
 
-  prettier@3.9.8:
+  prettier@3.9.9:
     resolution:
-      {integrity: sha512-WRFq3Wn3WId7LLROfMLdH7xaFr2jR62wU8nLO6rQUOLOxNZUviyJQs1M0iIhLexSFy+L+w0ch66wtoO2jRjG0A==}
+      {integrity: sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==}
     engines: {node: ">=14"}
     hasBin: true
 
@@ -2396,14 +2396,14 @@ snapshots:
     dependencies:
       commander: 9.5.0
 
-  prettier-plugin-multiline-arrays@4.1.11(prettier@3.9.8):
+  prettier-plugin-multiline-arrays@4.1.11(prettier@3.9.9):
     dependencies:
       "@augment-vir/assert": 32.2.4
       "@augment-vir/common": 32.2.4
-      prettier: 3.9.8
+      prettier: 3.9.9
       proxy-vir: 2.0.4
 
-  prettier@3.9.8: {}
+  prettier@3.9.9: {}
 
   proxy-addr@2.0.7:
     dependencies:

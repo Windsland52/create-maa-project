@@ -2,6 +2,31 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.6.0] - 2026-09-26
+
+### 新增
+
+- Agent 项目新增 `agent/maafw_paths.py`：在 `agent_runtime` 之前解析客户端那份 MaaFramework 原生库并把 `MAAFW_BINARY_PATH` 指过去，因为 `utils` 一导入就连带 import `maa`、库目录在那一刻已经定死，解析必须更早。进程自己设过该变量的一律不动（Android runner 会指向 APK 的 nativeLibraryDir），候选目录按发行包布局排序（`runtimes/<平台>/native`、`maafw/`、包根），且要求两个库文件都在——开发机上空的 `runtimes/<tag>/native` 不会被当成可用副本。`--doctor` 已把它列入必需文件，缺失会报 `[ERR]`
+- 生成的 `check` workflow 增加 `pnpm release:dry-run`：`interface.json` 的路径写错、发布引用的文件缺失这类问题在 push / PR 阶段就会失败，不必等到推了 tag 才发现
+- 发布构建会校验并打包 `interface.json` 的 `languages` 翻译文件，缺失时构建失败，不再让客户端把 `$Key` 原样显示出来
+
+### 变更
+
+- Agent 发布包不再重复携带 MaaFramework 运行时。客户端包本来就已经带了同一份（MFAA 在 `runtimes/<平台>/native`、MXU 在 `maafw/`、CLI 壳平铺在包根），而包内解释器的 `maa` wheel 里还压着第二份，每个包因此多出几十 MiB；现在构建时剥离解释器里那份，Agent 通过 `MAAFW_BINARY_PATH` 复用客户端那份。包校验（`package-smoke`）改为先解析运行时、注册全部自定义动作与识别，再确认解释器里已无副本、客户端侧的 `MaaFramework` / `MaaAgentServer` 两个库与 `plugins/` 目录都在，于是接不上运行时的包会在构建阶段失败，而不是等到用户手里
+- 客户端原生库目录下现在总有 `plugins/`（空目录也算）。MaaFramework 的 PluginMgr 把「目录不存在」当成加载失败，每次启动刷 4 行 ERR，空目录不会
+- 发布构建开始前清空 `dist/package-*`：发布 workflow 会归档所有 `dist/package-*`，此前上一轮构建遗留的包（例如当时还启用、现在已经关掉的 GUI）会被一并发出去
+- MXU 包标题不再带空白的 `label`：`label` 为空或只有空白时回退到项目 slug
+
+### 修复
+
+- 发布前对 `interface.json` 的 `resource` 校验此前只检查对象形式的条目，写成字符串的（`"resource/base"`）整个被跳过，而这两种写法实际都会被打包。现在两种都检查，且校验与打包共用同一份路径列表
+- 找不到可剥离的原生库副本时发布直接失败，不再只留一条 warning：包内解释器每次都是新拷贝且已装好 Agent 依赖，找不到 `site-packages/maa/bin` 说明 wheel 布局变了，必须失败，否则重复的原生库会再次悄悄发出去
+- 客户端原生库的存在性校验改为按 MaaFramework 的命名约定（`<name>.<dll|so|dylib>`）匹配，不再维护一份平台清单：清单会漏掉库名不同的平台，现在库改名会让构建失败，而不是发布一个运行时缺失的包
+
+已有项目：改动都在 CLI 与生成文件里，不重跑 add-on 的项目行为不变（仍旧用旧的发布脚本，包内仍自带原生库）。要启用新行为，Agent 项目执行 `create-maa-project --add agent`，装 github add-on 的执行 `create-maa-project --add github`。**Agent 项目请先 `--add agent` 再 `--add github`**：顺序反了会先换上新发布脚本、而项目里还是没有 `maafw_paths.py` 的旧 Agent，包内原生库被剥离后 Agent 起不来（新的 `package-smoke` workflow 会在 CI 里先失败，不会静默发出去）。受管文件是整体重写，手改过的话先确认一下；已发布的 tag 不受影响，下次发版生效。
+
+[3.6.0]: https://github.com/Windsland52/create-maa-project/compare/v3.5.2...v3.6.0
+
 ## [3.5.2] - 2026-09-16
 
 ### 修复

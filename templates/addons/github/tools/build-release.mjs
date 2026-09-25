@@ -5,41 +5,17 @@ import {
     mkdirSync,
     readFileSync,
     readdirSync,
+    realpathSync,
     renameSync,
     rmSync,
     statSync,
     writeFileSync,
 } from "node:fs";
 import {basename, dirname, join} from "node:path";
+import {fileURLToPath} from "node:url";
 
-const dryRun = process.argv.includes("--dry-run");
-const releaseTagOverride = commandLineValue("--release-tag");
 const projectSlug = {{projectSlug}};
 const releaseArtifactName = {{releaseArtifactName}};
-mkdirSync("dist", {recursive: true});
-
-const project = readJson("maa-project.json");
-const interfaceJson = readJson("interface.json");
-if (interfaceJson.name !== projectSlug) {
-    throw new Error("interface.json name must match release artifact slug");
-}
-
-const sourceVersion = String(interfaceJson.version ?? "");
-if (!isReleaseVersion(sourceVersion)) {
-    throw new Error("interface.json version must be a release tag such as v0.1.0");
-}
-
-const releaseTag = releaseTagOverride ?? detectReleaseTag();
-if (!dryRun && !releaseTag) {
-    throw new Error("release build requires a SemVer Git tag such as v0.1.0");
-}
-
-const version = releaseTag ?? sourceVersion;
-if (!isReleaseVersion(version)) {
-    throw new Error("release tag must be a SemVer tag such as v0.1.0");
-}
-
-const runtimePlatform = detectRuntimePlatform();
 
 // --- GUI type registry (extensible for future GUIs) ---
 
@@ -78,7 +54,13 @@ const GUI_TYPES = {
         flatLayout: false,
         modifyInterface(iface, slug, ver) {
             const modified = {...iface};
-            modified.title = `${iface.label ?? slug} ${ver} | MXU`;
+            const displayName =
+                typeof modified.label === "string" && modified.label.trim() ? modified.label.trim() : slug;
+            modified.title = `${displayName} ${ver} | MXU`;
+            // The MXU build is a separate Mirrorchyan product, so it gets its own id.
+            if (typeof modified.mirrorchyan_rid === "string" && modified.mirrorchyan_rid) {
+                modified.mirrorchyan_rid = `${modified.mirrorchyan_rid}-MXU`;
+            }
             // Deliberately no agent override: prepareReleaseInterface already sets the
             // platform-correct command (the bundled interpreter running agent/main.py), and
             // MXU resolves relative child_exec paths against the project root on its own.
@@ -87,107 +69,132 @@ const GUI_TYPES = {
     },
 };
 
-const enabledGuis = [];
-if (project.runtime?.mfa?.enabled !== false) {
-    enabledGuis.push("mfaa");
-}
-if (project.runtime?.mxu?.enabled) {
-    enabledGuis.push("mxu");
-}
+function main() {
+    const dryRun = process.argv.includes("--dry-run");
+    const releaseTagOverride = commandLineValue("--release-tag");
+    mkdirSync("dist", {recursive: true});
 
-if (enabledGuis.length === 0) {
-    throw new Error("no GUI runtime enabled in maa-project.json");
-}
-
-for (const path of [
-    ...(typeof interfaceJson.icon === "string" ? [interfaceJson.icon] : []),
-    ...strings(interfaceJson.resource),
-    ...strings(interfaceJson.import),
-]) {
-    if (path.includes("\\")) {
-        throw new Error(`release paths must use forward slashes: ${path}`);
+    const project = readJson("maa-project.json");
+    const interfaceJson = readJson("interface.json");
+    if (interfaceJson.name !== projectSlug) {
+        throw new Error("interface.json name must match release artifact slug");
     }
-    if (!isProjectRelativePath(path)) {
-        throw new Error(`release paths must stay within the project root: ${path}`);
+
+    const sourceVersion = String(interfaceJson.version ?? "");
+    if (!isReleaseVersion(sourceVersion)) {
+        throw new Error("interface.json version must be a release tag such as v0.1.0");
     }
-    const relativePath = path.startsWith("./") ? path.slice(2) : path;
-    if (!existsSync(relativePath)) {
-        throw new Error(`release referenced path does not exist: ${path}`);
+
+    const releaseTag = releaseTagOverride ?? detectReleaseTag();
+    if (!dryRun && !releaseTag) {
+        throw new Error("release build requires a SemVer Git tag such as v0.1.0");
     }
-}
 
-const artifacts = [];
+    const version = releaseTag ?? sourceVersion;
+    if (!isReleaseVersion(version)) {
+        throw new Error("release tag must be a SemVer tag such as v0.1.0");
+    }
 
-for (const guiKey of enabledGuis) {
-    const gui = GUI_TYPES[guiKey];
-    console.log(`\n--- Building ${gui.suffix} package ---`);
-    const packagePaths = releasePackagePaths(interfaceJson, guiKey);
+    const runtimePlatform = detectRuntimePlatform();
 
-    const guiInterface = gui.modifyInterface(
-        prepareReleaseInterface(interfaceJson, version, runtimePlatform),
-        projectSlug,
-        version,
-        runtimePlatform,
-    );
+    const enabledGuis = [];
+    if (project.runtime?.mfa?.enabled !== false) {
+        enabledGuis.push("mfaa");
+    }
+    if (project.runtime?.mxu?.enabled) {
+        enabledGuis.push("mxu");
+    }
 
-    if (!dryRun) {
-        const guiPath = guiRuntimePath(gui.runtimeDir, runtimePlatform);
-        if (!existsSync(guiPath)) {
-            console.warn(`[WARN] ${gui.suffix} runtime not found at ${guiPath}, skipping.`);
-            continue;
+    if (enabledGuis.length === 0) {
+        throw new Error("no GUI runtime enabled in maa-project.json");
+    }
+
+    for (const path of [
+        ...(typeof interfaceJson.icon === "string" ? [interfaceJson.icon] : []),
+        ...strings(interfaceJson.resource),
+        ...strings(interfaceJson.import),
+        ...interfaceLanguagePaths(interfaceJson.languages),
+    ]) {
+        if (path.includes("\\")) {
+            throw new Error(`release paths must use forward slashes: ${path}`);
         }
-        for (const path of packagePaths) {
-            if (!existsSync(path)) {
-                throw new Error(`release package path is missing: ${path}`);
+        if (!isProjectRelativePath(path)) {
+            throw new Error(`release paths must stay within the project root: ${path}`);
+        }
+        const relativePath = path.startsWith("./") ? path.slice(2) : path;
+        if (!existsSync(relativePath)) {
+            throw new Error(`release referenced path does not exist: ${path}`);
+        }
+    }
+
+    const artifacts = [];
+
+    for (const guiKey of enabledGuis) {
+        const gui = GUI_TYPES[guiKey];
+        console.log(`\n--- Building ${gui.suffix} package ---`);
+        const packagePaths = releasePackagePaths(interfaceJson, guiKey);
+
+        const guiInterface = releaseGuiInterface(guiKey, interfaceJson, version, runtimePlatform);
+
+        if (!dryRun) {
+            const guiPath = guiRuntimePath(gui.runtimeDir, runtimePlatform);
+            if (!existsSync(guiPath)) {
+                console.warn(`[WARN] ${gui.suffix} runtime not found at ${guiPath}, skipping.`);
+                continue;
             }
-        }
-        if (packageHasAgent(interfaceJson)) {
-            const pythonPath = pythonRuntimePath(runtimePlatform);
-            if (!existsSync(pythonPath)) {
-                throw new Error(`release package path is missing: ${pythonPath}`);
+            for (const path of packagePaths) {
+                if (!existsSync(path)) {
+                    throw new Error(`release package path is missing: ${path}`);
+                }
             }
+            if (packageHasAgent(interfaceJson)) {
+                const pythonPath = pythonRuntimePath(runtimePlatform);
+                if (!existsSync(pythonPath)) {
+                    throw new Error(`release package path is missing: ${pythonPath}`);
+                }
+            }
+            prepareReleasePackage(guiKey, gui, packagePaths, guiInterface, runtimePlatform);
+            smokeReleasePackage(gui, `dist/package-${guiKey}`, packagePaths, runtimePlatform);
         }
-        prepareReleasePackage(guiKey, gui, packagePaths, guiInterface, runtimePlatform);
-        smokeReleasePackage(gui, `dist/package-${guiKey}`, packagePaths, runtimePlatform);
-    }
 
-    const releaseTargets = [
+        const releaseTargets = [
 {{releaseTargetArtifactTuples}}
-    ];
-    for (const [
-        os,
-        arch,
-        ext,
-    ] of releaseTargets) {
-        artifacts.push(`${releaseArtifactName}-${os}-${arch}-${version}-${gui.suffix}.${ext}`);
+        ];
+        for (const [
+            os,
+            arch,
+            ext,
+        ] of releaseTargets) {
+            artifacts.push(`${releaseArtifactName}-${os}-${arch}-${version}-${gui.suffix}.${ext}`);
+        }
     }
-}
 
-const suffixPattern = enabledGuis.map((g) => GUI_TYPES[g].suffix).join("|");
-for (const artifact of artifacts) {
-    if (
-        !new RegExp(
-            "^" +
-                escapeRegExp(releaseArtifactName) +
-                "-(win|linux|macos)-(x86_64|aarch64)-v.+-(" +
-                suffixPattern +
-                ")\\.(zip|tar\\.gz)$",
-        ).test(artifact)
-    ) {
-        throw new Error(`invalid artifact name: ${artifact}`);
+    const suffixPattern = enabledGuis.map((g) => GUI_TYPES[g].suffix).join("|");
+    for (const artifact of artifacts) {
+        if (
+            !new RegExp(
+                "^" +
+                    escapeRegExp(releaseArtifactName) +
+                    "-(win|linux|macos)-(x86_64|aarch64)-v.+-(" +
+                    suffixPattern +
+                    ")\\.(zip|tar\\.gz)$",
+            ).test(artifact)
+        ) {
+            throw new Error(`invalid artifact name: ${artifact}`);
+        }
+        console.log(`[OK] artifact name: ${artifact}`);
     }
-    console.log(`[OK] artifact name: ${artifact}`);
-}
 
-if (!existsSync("runtimes")) {
-    console.warn("[WARN] Runtime assets are not present yet; run pnpm sync:runtime before a real release.");
-}
+    if (!existsSync("runtimes")) {
+        console.warn("[WARN] Runtime assets are not present yet; run pnpm sync:runtime before a real release.");
+    }
 
-console.log(
-    dryRun
-        ? `[OK] release dry-run smoke check completed for ${projectSlug}`
-        : `[OK] release build placeholder completed for ${projectSlug}`,
-);
+    console.log(
+        dryRun
+            ? `[OK] release dry-run smoke check completed for ${projectSlug}`
+            : `[OK] release build placeholder completed for ${projectSlug}`,
+    );
+}
 
 function readJson(path) {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -205,6 +212,12 @@ function interfaceResourcePaths(value) {
     return Array.isArray(value) ? value.flatMap((item) => (isRecord(item) ? strings(item.path) : [])) : [];
 }
 
+// interface.json `languages` maps a language code to its translation file. If one of
+// those files is missing from the package the client renders raw `$Key` strings.
+function interfaceLanguagePaths(value) {
+    return isRecord(value) ? Object.values(value).filter((item) => typeof item === "string") : [];
+}
+
 function isProjectRelativePath(path) {
     const stripped = path.startsWith("./") ? path.slice(2) : path;
     return (
@@ -220,6 +233,8 @@ function releasePackagePaths(interfaceJson, guiKey) {
     const paths = [
         "tasks",
         "resource",
+        // translation files are only required when interface.json declares `languages`
+        ...interfaceLanguagePaths(interfaceJson.languages),
     ];
     if (guiKey === "mfaa") {
         paths.push("runtimes", "libs/MaaAgentBinary", "plugins");
@@ -258,17 +273,29 @@ function prepareReleaseInterface(interfaceJson, version, runtimePlatform) {
                 ? {
                       ...agent,
                       child_exec: releaseAgentChildExec(runtimePlatform),
-                      // Every package ships its own interpreter with the Agent dependencies
-                      // preinstalled, so the Agent always starts through agent/main.py.
                       child_args: [
-                          "-u",
-                          "agent/main.py",
+                          ...RELEASE_AGENT_CHILD_ARGS,
                       ],
                   }
                 : agent,
         );
     }
     return releaseInterface;
+}
+
+// GUI tweaks always run on top of the per-platform release interface, so a GUI can never
+// replace the platform-correct Agent command set up by prepareReleaseInterface.
+function releaseGuiInterface(guiKey, interfaceJson, version, runtimePlatform) {
+    const gui = GUI_TYPES[guiKey];
+    if (!gui) {
+        throw new Error(`unknown GUI runtime: ${guiKey}`);
+    }
+    return gui.modifyInterface(
+        prepareReleaseInterface(interfaceJson, version, runtimePlatform),
+        projectSlug,
+        version,
+        runtimePlatform,
+    );
 }
 
 function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtimePlatform) {
@@ -299,6 +326,11 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
         removeFiles(pkgDir, (name) => name.toLowerCase().endsWith(".pdb"));
     }
     ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform);
+    // Windows packages can ship game-side helper files straight from tools/registry/.
+    if (runtimePlatform.startsWith("win-") && existsSync("tools/registry")) {
+        copyDirectoryContents("tools/registry", pkgDir);
+    }
+
     ensureUnixExecutablePermissions(pkgDir, runtimePlatform);
 }
 
@@ -310,9 +342,9 @@ function stripAgentNativeRuntime(pkgDir) {
     findAgentNativeRuntimes(join(pkgDir, "python"), (path) => rmSync(path, {recursive: true, force: true}));
 }
 
-// MaaFramework\'s PluginMgr treats a missing plugin directory as a failed library load and logs four
-// ERR lines on every start; an existing but empty directory stays quiet. This is the load root the
-// Agent and the GUI share.
+// MaaFramework's PluginMgr treats a missing plugin directory as a failed library load and logs
+// four ERR lines on every start; an existing but empty directory stays quiet. This is the load root
+// the Agent and the GUI share.
 function ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform) {
     mkdirSync(join(clientNativeRuntimePath(pkgDir, gui, runtimePlatform), "plugins"), {recursive: true});
 }
@@ -361,7 +393,7 @@ function prepareMxuMaafwRuntime(pkgDir, runtimePlatform) {
     if (!existsSync(nativeRuntime)) {
         throw new Error(`release package path is missing: ${nativeRuntime}`);
     }
-    copyDirectoryContents(nativeRuntime, maafwDest);
+    copyDirectoryContents(nativeRuntime, maafwDest, {filter: shouldCopyMxuMaafwPath});
 
     if (existsSync("libs/MaaAgentBinary")) {
         copyDirectoryContents("libs/MaaAgentBinary", join(maafwDest, "MaaAgentBinary"));
@@ -414,6 +446,15 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         if (pdbFiles.length > 0) {
             throw new Error(`release package smoke failed: MXU package includes pdb files: ${pdbFiles.join(", ")}`);
         }
+        const forbiddenMaafwFiles = [];
+        walkFiles(join(root, "maafw"), (path, name) => {
+            if (isMxuMaafwExcludedName(name)) forbiddenMaafwFiles.push(path);
+        });
+        if (forbiddenMaafwFiles.length > 0) {
+            throw new Error(
+                `release package smoke failed: MXU maafw includes excluded files: ${forbiddenMaafwFiles.join(", ")}`,
+            );
+        }
     }
 
     assertAgentNativeRuntimeStripped(root);
@@ -440,6 +481,7 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         ...(typeof packagedInterface.icon === "string" ? [packagedInterface.icon] : []),
         ...interfaceResourcePaths(packagedInterface.resource),
         ...strings(packagedInterface.import),
+        ...interfaceLanguagePaths(packagedInterface.languages),
     ]) {
         if (path.includes("\\")) {
             throw new Error(`release package smoke failed: package path uses backslashes: ${path}`);
@@ -456,7 +498,7 @@ function assertAgentNativeRuntimeStripped(root) {
     findAgentNativeRuntimes(join(root, "python"), (path) => found.push(path));
     if (found.length > 0) {
         throw new Error(
-            "release package smoke failed: Agent must reuse the client MaaFramework runtime, " +
+            "release package smoke failed: Agent must reuse the client MaaFW runtime, " +
                 `but the bundled interpreter still ships one: ${found.join(", ")}`,
         );
     }
@@ -495,10 +537,10 @@ function copyPath(source, target, options = {}) {
     cpSync(source, target, {recursive: true, force: true, filter: options.filter});
 }
 
-function copyDirectoryContents(source, target) {
+function copyDirectoryContents(source, target, options = {}) {
     mkdirSync(target, {recursive: true});
     for (const entry of readdirSync(source)) {
-        copyPath(join(source, entry), join(target, entry));
+        copyPath(join(source, entry), join(target, entry), options);
     }
 }
 
@@ -507,6 +549,25 @@ function shouldCopyAgentPath(source) {
     return name !== "__pycache__" && !name.endsWith(".pyc") && !name.endsWith(".pyo");
 }
 
+function shouldCopyMxuMaafwPath(source) {
+    return !isMxuMaafwExcludedName(basename(source));
+}
+
+function isMxuMaafwExcludedName(name) {
+    const lower = name.toLowerCase();
+    return (
+        lower.includes("maadbgcontrolunit") ||
+        lower.includes("maathriftcontrolunit") ||
+        lower.includes("maarpc") ||
+        lower.includes("maahttp") ||
+        lower.includes("maapicli") ||
+        lower.endsWith(".node") ||
+        lower.endsWith(".pdb")
+    );
+}
+
+// Windows hosts cannot represent Unix permission bits, so cross-building a non-Windows
+// package there must skip the executable-bit checks instead of failing the smoke test.
 function ensureUnixExecutablePermissions(root, runtimePlatform) {
     if (process.platform === "win32" || runtimePlatform.startsWith("win-")) return;
     for (const path of findUnixExecutableFiles(root)) {
@@ -639,6 +700,11 @@ function releaseAgentChildExec(runtimePlatform) {
     return runtimePlatform.startsWith("win-") ? "python/python.exe" : "python/bin/python3";
 }
 
+const RELEASE_AGENT_CHILD_ARGS = [
+    "-u",
+    "agent/main.py",
+];
+
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -669,3 +735,20 @@ function isReleaseVersion(value) {
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${|}()|[\]\\]/g, "\\$&");
 }
+
+function isMainModule() {
+    if (!process.argv[1]) {
+        return false;
+    }
+    try {
+        return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+    } catch {
+        return false;
+    }
+}
+
+if (isMainModule()) {
+    main();
+}
+
+export {releaseAgentChildExec, releaseGuiInterface};

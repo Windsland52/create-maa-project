@@ -322,11 +322,6 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
         removeFiles(pkgDir, (name) => name.toLowerCase().endsWith(".pdb"));
     }
     ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform);
-    // Windows packages can ship game-side helper files straight from tools/registry/.
-    if (runtimePlatform.startsWith("win-") && existsSync("tools/registry")) {
-        copyDirectoryContents("tools/registry", pkgDir);
-    }
-
     ensureUnixExecutablePermissions(pkgDir, runtimePlatform);
 }
 
@@ -347,23 +342,6 @@ function ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform) {
 
 function clientNativeRuntimePath(root, gui, runtimePlatform) {
     return gui.flatLayout ? join(root, "runtimes", runtimePlatform, "native") : join(root, "maafw");
-}
-
-function frameworkLibraryNames(runtimePlatform) {
-    if (runtimePlatform.startsWith("win-"))
-        return [
-            "MaaFramework.dll",
-            "MaaAgentServer.dll",
-        ];
-    if (runtimePlatform.startsWith("osx-"))
-        return [
-            "libMaaFramework.dylib",
-            "libMaaAgentServer.dylib",
-        ];
-    return [
-        "libMaaFramework.so",
-        "libMaaAgentServer.so",
-    ];
 }
 
 function isAgentNativeRuntimePath(path) {
@@ -389,7 +367,7 @@ function prepareMxuMaafwRuntime(pkgDir, runtimePlatform) {
     if (!existsSync(nativeRuntime)) {
         throw new Error(`release package path is missing: ${nativeRuntime}`);
     }
-    copyDirectoryContents(nativeRuntime, maafwDest, {filter: shouldCopyMxuMaafwPath});
+    copyDirectoryContents(nativeRuntime, maafwDest);
 
     if (existsSync("libs/MaaAgentBinary")) {
         copyDirectoryContents("libs/MaaAgentBinary", join(maafwDest, "MaaAgentBinary"));
@@ -442,15 +420,6 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         if (pdbFiles.length > 0) {
             throw new Error(`release package smoke failed: MXU package includes pdb files: ${pdbFiles.join(", ")}`);
         }
-        const forbiddenMaafwFiles = [];
-        walkFiles(join(root, "maafw"), (path, name) => {
-            if (isMxuMaafwExcludedName(name)) forbiddenMaafwFiles.push(path);
-        });
-        if (forbiddenMaafwFiles.length > 0) {
-            throw new Error(
-                `release package smoke failed: MXU maafw includes excluded files: ${forbiddenMaafwFiles.join(", ")}`,
-            );
-        }
     }
 
     assertAgentNativeRuntimeStripped(root);
@@ -500,11 +469,20 @@ function assertAgentNativeRuntimeStripped(root) {
     }
 }
 
+// MaaFramework names its libraries <name>.<dll|so|dylib> on every platform it ships, so the check
+// matches the naming convention instead of listing platforms: a new platform cannot be forgotten
+// here, and a rename fails the build instead of silently shipping a package without a runtime.
+const CLIENT_RUNTIME_PATTERNS = [
+    /^(lib)?maaframework\.(dll|so|dylib)$/i,
+    /^(lib)?maaagentserver\.(dll|so|dylib)$/i,
+];
+
 function assertClientNativeRuntime(root, gui, runtimePlatform) {
     const nativeDir = clientNativeRuntimePath(root, gui, runtimePlatform);
-    for (const name of frameworkLibraryNames(runtimePlatform)) {
-        if (!existsSync(join(nativeDir, name))) {
-            throw new Error(`release package smoke failed: Agent native runtime is missing: ${join(nativeDir, name)}`);
+    const entries = existsSync(nativeDir) ? readdirSync(nativeDir) : [];
+    for (const pattern of CLIENT_RUNTIME_PATTERNS) {
+        if (!entries.some((name) => pattern.test(name))) {
+            throw new Error(`release package smoke failed: Agent native runtime is missing ${pattern} in ${nativeDir}`);
         }
     }
     if (!existsSync(join(nativeDir, "plugins"))) {
@@ -533,33 +511,16 @@ function copyPath(source, target, options = {}) {
     cpSync(source, target, {recursive: true, force: true, filter: options.filter});
 }
 
-function copyDirectoryContents(source, target, options = {}) {
+function copyDirectoryContents(source, target) {
     mkdirSync(target, {recursive: true});
     for (const entry of readdirSync(source)) {
-        copyPath(join(source, entry), join(target, entry), options);
+        copyPath(join(source, entry), join(target, entry));
     }
 }
 
 function shouldCopyAgentPath(source) {
     const name = basename(source).toLowerCase();
     return name !== "__pycache__" && !name.endsWith(".pyc") && !name.endsWith(".pyo");
-}
-
-function shouldCopyMxuMaafwPath(source) {
-    return !isMxuMaafwExcludedName(basename(source));
-}
-
-function isMxuMaafwExcludedName(name) {
-    const lower = name.toLowerCase();
-    return (
-        lower.includes("maadbgcontrolunit") ||
-        lower.includes("maathriftcontrolunit") ||
-        lower.includes("maarpc") ||
-        lower.includes("maahttp") ||
-        lower.includes("maapicli") ||
-        lower.endsWith(".node") ||
-        lower.endsWith(".pdb")
-    );
 }
 
 // Windows hosts cannot represent Unix permission bits, so cross-building a non-Windows

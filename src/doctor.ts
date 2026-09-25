@@ -375,6 +375,7 @@ async function checkPythonTooling(root: string, config: MaaProjectConfig, lines:
     'pyproject.toml',
     'agent/main.py',
     'agent/agent_runtime.py',
+    'agent/maafw_paths.py',
   ]) {
     if (await exists(join(root, path))) continue
     lines.push(`[ERR] Required Python Agent file is missing: ${path}`)

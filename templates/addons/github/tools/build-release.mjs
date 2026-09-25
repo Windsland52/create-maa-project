@@ -292,12 +292,65 @@ function prepareReleasePackage(guiKey, gui, packagePaths, interfaceJson, runtime
     }
     if (packageHasAgent(interfaceJson)) {
         copyPath(pythonRuntimePath(runtimePlatform), join(pkgDir, "python"));
+        stripAgentNativeRuntime(pkgDir);
     }
     if (!gui.flatLayout) {
         prepareMxuMaafwRuntime(pkgDir, runtimePlatform);
         removeFiles(pkgDir, (name) => name.toLowerCase().endsWith(".pdb"));
     }
+    ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform);
     ensureUnixExecutablePermissions(pkgDir, runtimePlatform);
+}
+
+// The client packages already carry the same MaaFramework libraries (MFAA under
+// runtimes/<platform>/native, MXU under maafw/, CLI shells flat at the package root), and the
+// Agent reuses that copy through MAAFW_BINARY_PATH, so the bundled interpreter must not ship a
+// second one (tens of MiB per package).
+function stripAgentNativeRuntime(pkgDir) {
+    findAgentNativeRuntimes(join(pkgDir, "python"), (path) => rmSync(path, {recursive: true, force: true}));
+}
+
+// MaaFramework\'s PluginMgr treats a missing plugin directory as a failed library load and logs four
+// ERR lines on every start; an existing but empty directory stays quiet. This is the load root the
+// Agent and the GUI share.
+function ensureClientNativePluginsDir(pkgDir, gui, runtimePlatform) {
+    mkdirSync(join(clientNativeRuntimePath(pkgDir, gui, runtimePlatform), "plugins"), {recursive: true});
+}
+
+function clientNativeRuntimePath(root, gui, runtimePlatform) {
+    return gui.flatLayout ? join(root, "runtimes", runtimePlatform, "native") : join(root, "maafw");
+}
+
+function frameworkLibraryNames(runtimePlatform) {
+    if (runtimePlatform.startsWith("win-"))
+        return [
+            "MaaFramework.dll",
+            "MaaAgentServer.dll",
+        ];
+    if (runtimePlatform.startsWith("osx-"))
+        return [
+            "libMaaFramework.dylib",
+            "libMaaAgentServer.dylib",
+        ];
+    return [
+        "libMaaFramework.so",
+        "libMaaAgentServer.so",
+    ];
+}
+
+function isAgentNativeRuntimePath(path) {
+    return (
+        basename(path) === "bin" &&
+        basename(dirname(path)) === "maa" &&
+        basename(dirname(dirname(path))) === "site-packages"
+    );
+}
+
+function findAgentNativeRuntimes(root, visit) {
+    if (!existsSync(root)) return;
+    walkDirectories(root, (path) => {
+        if (isAgentNativeRuntimePath(path)) visit(path);
+    });
 }
 
 function prepareMxuMaafwRuntime(pkgDir, runtimePlatform) {
@@ -363,6 +416,9 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         }
     }
 
+    assertAgentNativeRuntimeStripped(root);
+    assertClientNativeRuntime(root, gui, runtimePlatform);
+
     const packagedInterface = readJson(join(root, "interface.json"));
     if (!isRecord(packagedInterface)) {
         throw new Error("release package smoke failed: interface.json must be an object");
@@ -392,6 +448,29 @@ function smokeReleasePackage(gui, root, packagePaths, runtimePlatform) {
         if (!existsSync(join(root, relativePath))) {
             throw new Error(`release package smoke failed: referenced path is missing: ${path}`);
         }
+    }
+}
+
+function assertAgentNativeRuntimeStripped(root) {
+    const found = [];
+    findAgentNativeRuntimes(join(root, "python"), (path) => found.push(path));
+    if (found.length > 0) {
+        throw new Error(
+            "release package smoke failed: Agent must reuse the client MaaFramework runtime, " +
+                `but the bundled interpreter still ships one: ${found.join(", ")}`,
+        );
+    }
+}
+
+function assertClientNativeRuntime(root, gui, runtimePlatform) {
+    const nativeDir = clientNativeRuntimePath(root, gui, runtimePlatform);
+    for (const name of frameworkLibraryNames(runtimePlatform)) {
+        if (!existsSync(join(nativeDir, name))) {
+            throw new Error(`release package smoke failed: Agent native runtime is missing: ${join(nativeDir, name)}`);
+        }
+    }
+    if (!existsSync(join(nativeDir, "plugins"))) {
+        throw new Error(`release package smoke failed: plugins directory is missing: ${join(nativeDir, "plugins")}`);
     }
 }
 
@@ -471,6 +550,16 @@ function walkFiles(root, visit) {
         } else if (entry.isFile()) {
             visit(path, entry.name);
         }
+    }
+}
+
+function walkDirectories(root, visit) {
+    for (const entry of readdirSync(root, {withFileTypes: true})) {
+        if (!entry.isDirectory()) continue;
+        const path = join(root, entry.name);
+        visit(path, entry.name);
+        // visit may already have removed this directory (that is how the Agent native runtime is stripped)
+        if (existsSync(path)) walkDirectories(path, visit);
     }
 }
 

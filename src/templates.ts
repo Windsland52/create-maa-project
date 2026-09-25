@@ -226,6 +226,7 @@ export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version' 
     managed('requirements.txt', agentRequirements()),
     managed('agent/__init__.py', agentTemplate('__init__.py')),
     managed('agent/agent_runtime.py', agentTemplate('agent_runtime.py')),
+    managed('agent/maafw_paths.py', agentTemplate('maafw_paths.py')),
     managed('agent/main.py', agentMainPy()),
     managed('agent/custom/__init__.py', agentTemplate('custom/__init__.py')),
     managed('agent/custom/action/__init__.py', agentTemplate('custom/action/__init__.py')),

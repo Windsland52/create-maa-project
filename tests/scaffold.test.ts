@@ -579,6 +579,7 @@ describe('scaffold', () => {
     expect(result.written).toEqual(
       expect.arrayContaining([
         'agent/agent_runtime.py',
+        'agent/maafw_paths.py',
         'agent/custom/action/general.py',
         'agent/custom/reco/general.py',
         'agent/custom/sink/__init__.py',
@@ -2709,6 +2710,9 @@ export default defineConfig({
       const nativeRuntimeRoot = join(projectRoot, 'runtimes', runtimePlatform, 'native')
       await mkdir(nativeRuntimeRoot, { recursive: true })
       await writeFile(join(nativeRuntimeRoot, 'MaaPiCli'), 'cli', { mode: 0o666 })
+      for (const name of frameworkLibraryNamesForTest(runtimePlatform)) {
+        await writeFile(join(nativeRuntimeRoot, name), 'maafw', 'utf8')
+      }
       const guiRoot = join(projectRoot, '.create-maa-project/runtime/mfaa', runtimePlatform)
       await mkdir(guiRoot, { recursive: true })
       await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'MFAAvalonia.exe' : 'MFAAvalonia'), 'gui', {
@@ -2805,7 +2809,9 @@ export default defineConfig({
     ]) {
       const nativeRuntimeRoot = join(projectRoot, 'runtimes', runtimePlatform, 'native')
       await mkdir(nativeRuntimeRoot, { recursive: true })
-      await writeFile(join(nativeRuntimeRoot, 'MaaFramework.dll'), 'maafw', 'utf8')
+      for (const name of frameworkLibraryNamesForTest(runtimePlatform)) {
+        await writeFile(join(nativeRuntimeRoot, name), 'maafw', 'utf8')
+      }
       await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
       const guiRoot = join(projectRoot, '.create-maa-project/runtime/mxu', runtimePlatform)
       await mkdir(guiRoot, { recursive: true })
@@ -4892,6 +4898,9 @@ export default defineConfig({
     await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
     await mkdir(join(projectRoot, 'plugins'), { recursive: true })
     await writeFile(join(projectRoot, 'runtimes', runtimePlatform, 'native', 'libMaaCore.so'), 'maafw-fw', 'utf8')
+    for (const name of frameworkLibraryNamesForTest(runtimePlatform)) {
+      await writeFile(join(projectRoot, 'runtimes', runtimePlatform, 'native', name), 'maafw-fw', 'utf8')
+    }
     await writeFile(join(projectRoot, 'logo.ico'), 'icon', 'utf8')
     await expect(
       execFileAsync(
@@ -5766,6 +5775,14 @@ function currentRuntimePlatformForTest(): string {
 
 function mfaaEntrypointForTest(slug: string, runtimePlatform: string): string {
   return runtimePlatform.startsWith('win-') ? `${slug}.exe` : slug
+}
+
+// The release smoke requires both libraries the Agent loads; the names follow the platform, so a
+// per-platform fixture has to spell them out instead of writing MaaFramework.dll everywhere.
+function frameworkLibraryNamesForTest(runtimePlatform: string): string[] {
+  if (runtimePlatform.startsWith('win-')) return ['MaaFramework.dll', 'MaaAgentServer.dll']
+  if (runtimePlatform.startsWith('osx-')) return ['libMaaFramework.dylib', 'libMaaAgentServer.dylib']
+  return ['libMaaFramework.so', 'libMaaAgentServer.so']
 }
 
 function defaultOptions(overrides: Partial<CliOptions> = {}): CliOptions {

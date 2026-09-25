@@ -57,10 +57,6 @@ const GUI_TYPES = {
             const displayName =
                 typeof modified.label === "string" && modified.label.trim() ? modified.label.trim() : slug;
             modified.title = `${displayName} ${ver} | MXU`;
-            // The MXU build is a separate Mirrorchyan product, so it gets its own id.
-            if (typeof modified.mirrorchyan_rid === "string" && modified.mirrorchyan_rid) {
-                modified.mirrorchyan_rid = `${modified.mirrorchyan_rid}-MXU`;
-            }
             // Deliberately no agent override: prepareReleaseInterface already sets the
             // platform-correct command (the bundled interpreter running agent/main.py), and
             // MXU resolves relative child_exec paths against the project root on its own.

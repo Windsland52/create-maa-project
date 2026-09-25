@@ -2802,12 +2802,6 @@ export default defineConfig({
     }
     await writeFile(configPath, JSON.stringify(projectConfig, null, 4) + '\n', 'utf8')
 
-    // A project that declares a MirrorChyan id gets a separate one for the MXU build.
-    const interfacePath = join(projectRoot, 'interface.json')
-    const sourceInterface = (await readJson(interfacePath)) as Record<string, unknown>
-    sourceInterface.mirrorchyan_rid = 'maa-mxu-rid-test'
-    await writeFile(interfacePath, JSON.stringify(sourceInterface, null, 4) + '\n', 'utf8')
-
     for (const runtimePlatform of [
       'win-x64',
       'osx-arm64',
@@ -2857,13 +2851,11 @@ export default defineConfig({
       const packageRoot = join(projectRoot, 'dist/package-mxu')
       const packageInterface = (await readJson(join(packageRoot, 'interface.json'))) as {
         title?: unknown
-        mirrorchyan_rid?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
       }
       const expectedChildExec = runtimePlatform.startsWith('win-') ? 'python/python.exe' : 'python/bin/python3'
 
       expect(packageInterface.title).toContain('| MXU')
-      expect(packageInterface.mirrorchyan_rid).toBe('maa-mxu-rid-test-MXU')
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
       // The MXU GUI config must not re-declare the Agent command: prepareReleaseInterface owns it.
       expect(packageInterface.agent?.[0]?.child_args).toEqual(['-u', 'agent/main.py'])

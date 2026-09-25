@@ -4537,6 +4537,7 @@ export default defineConfig({
     const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
     expect(checkWorkflow).not.toContain('check-project.mjs')
     expect(checkWorkflow).toContain('pnpm audit --audit-level high')
+    expect(checkWorkflow).toContain('pnpm release:dry-run')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).not.toContain('check-project.mjs')
     expect(releaseWorkflow).toContain('pnpm release:dry-run')

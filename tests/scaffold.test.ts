@@ -2726,6 +2726,9 @@ export default defineConfig({
         await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
         await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
       }
+      const wheelMaaBin = wheelMaaBinPath(pythonRuntimeRoot, runtimePlatform)
+      await mkdir(wheelMaaBin, { recursive: true })
+      await writeFile(join(wheelMaaBin, 'MaaFramework.dll'), 'wheel-copy', 'utf8')
 
       await expect(
         execFileAsync(
@@ -2765,6 +2768,10 @@ export default defineConfig({
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa', expectedChildExec))).toBe(true)
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/requirements.txt'))).toBe(false)
       expect(await pathExists(join(projectRoot, 'dist/package-mfaa/deps'))).toBe(false)
+      // The wheel copy is stripped; the Agent loads the copy the GUI ships next to it.
+      expect(await pathExists(wheelMaaBinPath(join(projectRoot, 'dist/package-mfaa/python'), runtimePlatform))).toBe(
+        false,
+      )
       expect(
         await pathExists(join(projectRoot, 'dist/package-mfaa/python/.create-maa-project-requirements.sha256')),
       ).toBe(false)
@@ -2826,6 +2833,9 @@ export default defineConfig({
         await mkdir(join(pythonRuntimeRoot, 'bin'), { recursive: true })
         await writeFile(join(pythonRuntimeRoot, 'bin/python3'), 'python', 'utf8')
       }
+      const wheelMaaBin = wheelMaaBinPath(pythonRuntimeRoot, runtimePlatform)
+      await mkdir(wheelMaaBin, { recursive: true })
+      await writeFile(join(wheelMaaBin, 'MaaFramework.dll'), 'wheel-copy', 'utf8')
 
       await expect(
         execFileAsync(
@@ -2871,6 +2881,7 @@ export default defineConfig({
       expect(await pathExists(join(packageRoot, expectedChildExec))).toBe(true)
       expect(await pathExists(join(packageRoot, 'requirements.txt'))).toBe(false)
       expect(await pathExists(join(packageRoot, 'deps'))).toBe(false)
+      expect(await pathExists(wheelMaaBinPath(join(packageRoot, 'python'), runtimePlatform))).toBe(false)
     }
   })
 
@@ -5779,6 +5790,14 @@ function mfaaEntrypointForTest(slug: string, runtimePlatform: string): string {
 
 // The release smoke requires both libraries the Agent loads; the names follow the platform, so a
 // per-platform fixture has to spell them out instead of writing MaaFramework.dll everywhere.
+// The prepared interpreter carries the Agent dependencies, including the copy of MaaFramework that
+// lives inside the `maa` wheel and that the release build strips.
+function wheelMaaBinPath(pythonRoot: string, runtimePlatform: string): string {
+  return runtimePlatform.startsWith('win-')
+    ? join(pythonRoot, 'Lib/site-packages/maa/bin')
+    : join(pythonRoot, 'lib/python3.13/site-packages/maa/bin')
+}
+
 function frameworkLibraryNamesForTest(runtimePlatform: string): string[] {
   if (runtimePlatform.startsWith('win-')) return ['MaaFramework.dll', 'MaaAgentServer.dll']
   if (runtimePlatform.startsWith('osx-')) return ['libMaaFramework.dylib', 'libMaaAgentServer.dylib']

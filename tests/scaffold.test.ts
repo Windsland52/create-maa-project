@@ -628,6 +628,13 @@ describe('scaffold', () => {
     expect(main).toContain('sys.exit(main())')
     expect(agentRuntime).toContain('custom.register_all()')
     expect(agentRuntime).toContain('AgentServer.start_up(socket_id)')
+    // 版本日志报实际加载的原生库版本（Library.version()），且必须在导入 maa.agent 之后调用，
+    // 否则 API 属性初始化会把 Library 钉死在非 agent 模式；对用户只走 debug。
+    expect(agentRuntime.indexOf('from maa.agent.agent_server import AgentServer')).toBeLessThan(
+      agentRuntime.lastIndexOf('_log_maafw_version()'),
+    )
+    expect(agentRuntime).toContain('Library.version()')
+    expect(agentRuntime).not.toContain('logger.info("maafw')
     expect(custom).toContain('action.register_all()')
     expect(custom).toContain('reco.register_all()')
     expect(action).toContain('@AgentServer.custom_action("DisableNode")')

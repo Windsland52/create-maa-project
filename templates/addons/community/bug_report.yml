@@ -76,28 +76,44 @@ body:
       required: true
 
   - type: textarea
-    id: logs
+    id: related_task
     attributes:
-      label: 日志文件 / Log Files
+      label: 相关任务 / Related Task
       description: |
-        请上传完整日志文件，并说明问题出现的大致时间点。
-        Please attach complete log files and mention the approximate time when the issue occurred.
+        问题发生在哪个任务或功能上？请填写在界面上选择的任务名称，以及进行到哪一步时出错。
+        Which task or feature did the problem occur on? Give the task name as shown in the app and the step where it went wrong.
+        如果是在编写或修改 pipeline / 资源包时遇到的问题，请注明相关节点名称。
+        If you were authoring or modifying a pipeline / resource pack, name the relevant nodes instead.
+      placeholder: |
+        任务名称 / Task name:
+        出错步骤 / Failing step:
+    validations:
+      required: false
 
-        常见位置 / Common locations:
-        - debug/
-        - logs/
-        - MaaFW or GUI exported log archive
+  - type: input
+    id: issue_time
+    attributes:
+      label: 问题出现时间 / When It Happened
+      description: 尽量精确到日期和时间，用于在日志中定位事发记录；每次复现可写“每次” / Date and time as precisely as you can, used to locate the moment in the logs; write "always" if it happens every run.
+      placeholder: "例如 / e.g.: 2026-10-01 14:30"
     validations:
       required: true
 
   - type: textarea
-    id: task_pipeline
+    id: logs
     attributes:
-      label: 相关任务或 Pipeline / Related Task or Pipeline
-      description: 如果问题与任务流程或识别相关，请提供相关 task/pipeline 节点和资源包路径 / If task-flow or recognition related, provide relevant task/pipeline nodes and resource pack paths.
-      render: json
+      label: 日志文件 / Log Files
+      description: |
+        请上传完整的日志文件（体积过大可压缩为 zip），而不是只粘贴片段或截图日志。
+        Please attach complete log files (zip them if too large) instead of snippets or screenshots of logs.
+
+        本地运行：请打包上传整个 debug/ 目录，若启动器或自定义程序还写入了 logs/ 等其他日志目录，请一并打包。至少包含 debug/maafw.log；如果存在 debug/maafw.bak.log，请一并上传，事发记录可能已经轮转进备份文件。
+        Local run: pack and upload the entire debug/ directory, plus any other log directories such as logs/ written by your launcher or custom programs. Include at least debug/maafw.log, and debug/maafw.bak.log as well when it exists — the moment in question may already have rotated into the backup.
+
+        由 GUI 导出：请上传导出的日志压缩包；如果分成多个文件或分卷，请全部上传，缺少任何一部分都可能丢失事发记录。
+        Exported by a GUI: upload the exported log archive; if it is split into multiple files or parts, upload every one of them — a single missing part can lose the moment in question.
     validations:
-      required: false
+      required: true
 
   - type: textarea
     id: screenshots

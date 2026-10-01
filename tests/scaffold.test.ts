@@ -2991,6 +2991,45 @@ export default defineConfig({
     expect(remainingOutput).toContain('create-maa-project --update python-deps')
   })
 
+  it('re-running --add agent rewrites managed files that drifted from the template', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-agent-refresh', template: 'agent', skipDownload: true }))
+    const projectRoot = join(root, 'maa-agent-refresh')
+    await clearPending(projectRoot)
+
+    // A project created before maafw_paths existed: main.py predates the resolver call, the
+    // once-owned custom schema carries a project extension, and pyproject.toml lists an extra
+    // dependency the project added itself.
+    const mainPath = join(projectRoot, 'agent/main.py')
+    const staleMain = (await readFile(mainPath, 'utf8'))
+      .split('\n')
+      .filter((line) => !line.includes('ensure_maafw_binary_path') && !line.includes('from maafw_paths import'))
+      .join('\n')
+    expect(staleMain).not.toContain('ensure_maafw_binary_path')
+    await writeFile(mainPath, staleMain, 'utf8')
+    const customSchemaPath = join(projectRoot, 'tools/schema/custom.action.schema.json')
+    const customSchema = await readFile(customSchemaPath, 'utf8')
+    await writeFile(customSchemaPath, `${customSchema}\n`, 'utf8')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    await writeFile(
+      pyprojectPath,
+      (await readFile(pyprojectPath, 'utf8')).replace('    "maafw",\n', '    "maafw",\n    "requests",\n'),
+      'utf8',
+    )
+
+    process.chdir(projectRoot)
+    const repair = await addAgent(defaultOptions({ add: ['agent'] }))
+
+    expect(repair.written).toContain('agent/main.py')
+    expect(await readFile(mainPath, 'utf8')).toContain('ensure_maafw_binary_path(project_root_dir)')
+    expect(await readFile(pyprojectPath, 'utf8')).toContain('"requests",')
+    expect(await readFile(customSchemaPath, 'utf8')).toBe(`${customSchema}\n`)
+    expect(repair.written).not.toContain('tools/schema/custom.action.schema.json')
+    expect(repair.written).not.toContain('pyproject.toml')
+    expect(repair.written).not.toContain('.python-version')
+  })
+
   it('updates schema files explicitly without creating project lock state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

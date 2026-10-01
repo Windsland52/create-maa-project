@@ -488,15 +488,19 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
         repairFiles.push(file)
         continue
       }
-      if (file.path === '.python-version') {
-        if ((await readText(fullPath)).trim() !== config.python.recommendedPython) repairFiles.push(file)
-        continue
-      }
+      // pyproject.toml also carries project-owned content ([project].dependencies feeds
+      // `--update python-deps`), so only the requires-python drift is repaired in place.
       if (file.path === 'pyproject.toml') {
         const content = await readText(fullPath)
         const repaired = syncRequiresPython(content, config.python.requiresPython)
         if (repaired !== content) repairFiles.push({ ...file, content: repaired })
+        continue
       }
+      // Re-running `--add agent` is the documented way for existing projects to pick up template
+      // changes, so managed files that drifted from the template are rewritten whole (backed up
+      // as managed-files). `once` files stay owned by the project and are only restored when
+      // missing.
+      if (file.managed && (await readText(fullPath)) !== file.content) repairFiles.push(file)
     }
     if (repairFiles.length > 0) return writeAddonFiles(root, config, repairFiles, _options)
     return {

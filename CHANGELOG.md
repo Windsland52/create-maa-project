@@ -2,6 +2,17 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.6.1] - 2026-10-01
+
+### 修复
+
+- 重跑 `--add agent` 现在会把与模板不一致的受管文件整体重写。此前对已启用 agent 的项目，该命令只补缺失的文件、外加两处版本漂移的就地修复，模板更新过的受管文件永远不会刷新——3.6.0 的迁移恰好踩中：旧项目按说明执行 `create-maa-project --add agent` 后，`agent/maafw_paths.py` 写进来了，`agent/main.py` 却还是旧的（没人调用解析器），再 `--add github` 换上剥离原生库的发布脚本后 Agent 起不来（`package-smoke` 会先在 CI 里失败，不会静默发坏包）。现在与模板不一致的受管文件随重跑整体重写（照常进入 managed-files 备份，手改过可用 `--restore` 回退）；`once` 文件仍归项目所有、只在缺失时补回；`pyproject.toml` 仍只就地修 `requires-python`，因为 `[project].dependencies` 是项目自己声明依赖的地方
+- 生成的 `agent_runtime.py` 改为报告实际加载的 MaaFramework 版本。`importlib.metadata.version("maafw")` 读的是 dist-info，而 MFAAvalonia 的增量更新写下新的 dist-info 却不删旧的，两份并存时读到的可能是旧版本——GUI 日志报着旧版本、实际加载的原生库却是新的（实测 maafw-5.12.3 与 5.14.0 并存）。现在优先记 `Library.version()`，原生查询失败才回退 pip 元数据。版本日志同时移到 `maa.agent` 导入之后（`version()` 会初始化 API 属性，`Library.open` 初始化过就提前返回，更早调用会把 Library 钉死在非 agent 模式），两条诊断降为 debug：GUI 日志保持干净，`debug/custom/*.log` 里仍然可见
+
+已有项目：两条都改在生成文件里。3.6.0 之后跑过 `--add agent` 的项目**再跑一次** `create-maa-project --add agent` 即可——上一版的刷新缺口也挡住了第二个修复生效，这次会一并刷回 `agent/main.py` 与 `agent/agent_runtime.py`。受管文件是整体重写，手改过的话先确认一下。
+
+[3.6.1]: https://github.com/Windsland52/create-maa-project/compare/v3.6.0...v3.6.1
+
 ## [3.6.0] - 2026-09-26
 
 ### 新增

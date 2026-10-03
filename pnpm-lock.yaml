@@ -12,8 +12,8 @@ importers:
         version: 1.30.0(zod@4.4.3)
     devDependencies:
       "@nekosu/prettier-plugin-maafw-sort":
-        specifier: 1.0.6
-        version: 1.0.6
+        specifier: 1.1.0
+        version: 1.1.0
       "@types/node":
         specifier: 24.0.0
         version: 24.0.0
@@ -501,9 +501,9 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  "@nekosu/prettier-plugin-maafw-sort@1.0.6":
+  "@nekosu/prettier-plugin-maafw-sort@1.1.0":
     resolution:
-      {integrity: sha512-KuWR3y4pyFx5/3tPryDWyLS9DWiplTZLOhOco/7qxjFWtfvg/eNFwMUr88nrqMfFK6GMh8aw34LDewhG9aGrkw==}
+      {integrity: sha512-txHyLHjC7RcGPpvVIgugbaVx466jSTb9zl59BUGoK7/jHrkamHFsHAaUKotYvvHvcNe7Q9fxn9lEfDyHlKD09A==}
 
   "@noble/hashes@2.4.0":
     resolution:
@@ -1820,7 +1820,7 @@ snapshots:
   "@napi-rs/lzma-linux-x64-gnu@1.5.1":
     optional: true
 
-  "@nekosu/prettier-plugin-maafw-sort@1.0.6":
+  "@nekosu/prettier-plugin-maafw-sort@1.1.0":
     dependencies:
       "@babel/types": 7.29.8
 

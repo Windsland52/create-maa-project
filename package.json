@@ -50,7 +50,7 @@
         "check": "pnpm format:check && pnpm typecheck && pnpm test"
     },
     "devDependencies": {
-        "@nekosu/prettier-plugin-maafw-sort": "1.0.6",
+        "@nekosu/prettier-plugin-maafw-sort": "1.1.0",
         "@types/node": "24.0.0",
         "@vitest/coverage-v8": "4.1.11",
         "ajv": "8.20.0",

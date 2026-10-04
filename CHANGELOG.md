@@ -2,6 +2,20 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.6.2] - 2026-10-04
+
+### 新增
+
+- community add-on 的 bug report 模板重写为收集能定位问题的证据：「相关任务」改问界面上选择的任务名称与进行到哪一步时出错，编写或修改 pipeline / 资源包的作者仍可注明相关节点（普通用户不必再面对 `render: json` 的 JSON 代码块）；新增必填的「问题出现时间」，示例精确到分钟（每次复现可写「每次」），报告从此带有可在日志中定位事发记录的时间窗口；「日志文件」改为必填并写明收集口径——本地运行打包上传整个 `debug/` 目录（至少 `debug/maafw.log`，存在 `debug/maafw.bak.log` 时一并上传，事发记录可能已轮转进备份文件），启动器或自定义程序写入的 `logs/` 等其他日志目录一并打包；由 GUI 导出的日志压缩包若分成多个文件或分卷则需全部上传，缺少任何一部分都可能丢失事发记录
+
+### 变更
+
+- community 的 issue 侧栏（`.github/ISSUE_TEMPLATE/config.yml`）不再提供 MaaFramework 文档链接：issue chooser 是应用项目的入口，不应把应用用户引导去框架开发文档；`blank_issues_enabled: false` 保持不变
+
+已有项目：community 的模板文件是 `once`（创建后归项目所有），重跑 `--add community` 不会覆盖已有版本。想要新版 bug report 的项目删除 `.github/ISSUE_TEMPLATE/bug_report.yml`（侧栏链接则是 `.github/ISSUE_TEMPLATE/config.yml`）后再执行一次 `create-maa-project --add community`，缺失的文件会按新版补回；不更新也完全不影响使用。
+
+[3.6.2]: https://github.com/Windsland52/create-maa-project/compare/v3.6.1...v3.6.2
+
 ## [3.6.1] - 2026-10-01
 
 ### 修复

@@ -2605,6 +2605,36 @@ export default defineConfig({
     }
   })
 
+  it('validates welcome notice paths resolved from the language files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-welcome-notice-test' }))
+    const projectRoot = join(root, 'maa-welcome-notice-test')
+    const interfacePath = join(projectRoot, 'interface.json')
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
+    interfaceJson.languages = { zh_cn: 'locales/zh_cn.json' }
+    interfaceJson.welcome = ['$Welcome.1']
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+    await mkdir(join(projectRoot, 'locales'), { recursive: true })
+    await writeFile(
+      join(projectRoot, 'locales', 'zh_cn.json'),
+      JSON.stringify({ 'Welcome.1': 'announcement/introduction.md' }, null, 4) + '\n',
+      'utf8',
+    )
+    await mkdir(join(projectRoot, 'announcement'), { recursive: true })
+    await writeFile(join(projectRoot, 'announcement', 'introduction.md'), '# notice\n', 'utf8')
+
+    await expect(
+      execFileAsync(process.execPath, ['tools/build-release.mjs', '--dry-run'], { cwd: projectRoot }),
+    ).resolves.toBeDefined()
+
+    await rm(join(projectRoot, 'announcement', 'introduction.md'))
+
+    await expect(
+      execFileAsync(process.execPath, ['tools/build-release.mjs', '--dry-run'], { cwd: projectRoot }),
+    ).rejects.toThrow('release referenced path does not exist: announcement/introduction.md')
+  })
+
   it('generated schema validation script checks local project JSON shape', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

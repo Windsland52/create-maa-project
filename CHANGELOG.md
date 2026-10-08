@@ -2,6 +2,16 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.6.3] - 2026-10-08
+
+### 新增
+
+- 发布构建新增 welcome 公告文件的校验与打包。PI 2.10 的 welcome 协议里 `interface.json` 的 `welcome` 条目是 `$Key`，公告 markdown 的真实路径由各语言的翻译文件解析，既有的 resource / import / languages 校验列表都看不到这些文件——发布脚本漏带公告目录时包是静默缺内容的，用户侧表现为 GUI 欢迎页空白。现在 `$Key` 条目会经**全部**语言文件解析成文件路径（每种语言文件名不同、中文文件名均支持），字面量条目直接透传，带 scheme 的远程公告 URL 不是仓库文件、跳过；仓库预检与打包 smoke 都会校验解析出的公告文件存在，缺失则构建失败而不是发坏包；项目存在 `announcement/` 目录时整目录随包（含被公告引用的 `images/` 等子目录，条件包含、不强制建目录）
+
+已有项目：`tools/build-release.mjs` 为受管文件，执行 `create-maa-project --update` 即可获得该行为；公告不在 `announcement/` 目录的项目把 `releasePackagePaths` 里的目录名改成实际目录即可。
+
+[3.6.3]: https://github.com/Windsland52/create-maa-project/compare/v3.6.2...v3.6.3
+
 ## [3.6.2] - 2026-10-04
 
 ### 新增

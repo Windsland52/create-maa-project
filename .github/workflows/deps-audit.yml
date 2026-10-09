@@ -22,7 +22,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Bump audited overrides and reinstall
-        run: node scripts/update-audit-overrides.mjs
+        run: pnpm audit:deps
       - name: Commit override updates
         run: |
           if git diff --quiet -- pnpm-workspace.yaml pnpm-lock.yaml; then

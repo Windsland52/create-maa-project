@@ -40,6 +40,7 @@
         "release:sbom": "node scripts/create-sbom.mjs",
         "release:prepare-pypi": "node scripts/prepare-pypi-release.mjs",
         "release:sync-version": "node scripts/sync-release-version.mjs",
+        "audit:deps": "tsx scripts/update-audit-overrides.ts",
         "sync:deps": "tsx scripts/sync-template-deps.ts",
         "sync:schema": "node scripts/sync-schema.mjs",
         "typecheck": "tsc --noEmit",

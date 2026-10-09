@@ -142,6 +142,11 @@ create-maa-project maa-helper --template agent --slug maa-helper \
   project a regenerated copy of one of those and call it maintenance.
 - Update (`--update`): `schema`, `maafw`, `runtime:mfa`, `runtime:mxu`, `ocr-models`,
   `node-deps`, `python-deps`, `python-runtime`.
+- Adding a Python dependency to an Agent project is two steps: `uv add <pkg>` (writes
+  `pyproject.toml`, updates `uv.lock`, installs into the local `.venv`), then
+  `create-maa-project --update python-deps` (regenerates `requirements.in` and
+  `requirements.txt`). Release packages preinstall from `requirements.txt`, so skipping the
+  second step ships a package without the new dependency while local runs keep working.
 
 Updates download assets when the network allows. On constrained networks use
 `--skip-download` at create time, or cap downloads with `CREATE_MAA_PROJECT_MAX_DOWNLOAD_BYTES`;

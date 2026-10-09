@@ -22,6 +22,18 @@ VS Code Maa Support 插件通过 `uv run python agent/main.py` 启动 AgentServe
 调试会使用 `.vscode/launch.json` 中的 `Maa Agent: Debug` 配置，映射在
 `maatools.config.mts`。
 
+## 添加 Python 依赖
+
+```bash
+uv add <包名>
+create-maa-project --update python-deps
+```
+
+`uv add` 只更新 `pyproject.toml`、`uv.lock` 和本地 `.venv`；`requirements.in` / `requirements.txt`
+由 `--update python-deps` 从 `pyproject.toml` 重新生成。发布包按 `requirements.txt` 预装依赖，所以
+加完依赖必须跑这一步，并把 `pyproject.toml`、`uv.lock`、`requirements.in`、`requirements.txt` 一起
+提交，否则本地能跑、发布包里缺依赖。
+
 ## 发布
 
 如果存在 `.github/workflows/release.yml`，推送 `v{{version}}` 这样的 tag 会触发发布。

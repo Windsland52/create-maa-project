@@ -122,6 +122,18 @@ Scripts in `package.json` follow the enabled add-ons: `check` always chains `for
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
 
+### Python dependencies (Agent projects)
+
+Changing Python dependencies is two steps: `uv add <pkg>` writes `pyproject.toml`, `uv.lock`,
+and the local `.venv`; `create-maa-project --update python-deps` then regenerates
+`requirements.in` from `pyproject.toml` and refreshes `requirements.txt` via `uv lock` +
+`uv export`. Release packaging preinstalls from `requirements.txt` (`tools/sync-runtime.mjs`
+fails when it is missing), so a dependency added with `uv add` alone ships missing from release
+packages while local runs keep working. `--update python-runtime` downloads the embedded
+interpreter for one platform (`CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>`) into
+`.create-maa-project/runtime/python/<platform>` and reinstalls from `requirements.txt`, so run
+`python-deps` first after a dependency change.
+
 ## Common options
 
 Command modes are mutually exclusive: one mode per invocation. Options below list the modes

@@ -22,6 +22,19 @@ The VS Code Maa Support extension starts AgentServer through
 `uv run python agent/main.py`. Debugging uses the `Maa Agent: Debug` configuration in
 `.vscode/launch.json`, mapped from `maatools.config.mts`.
 
+## Adding Python dependencies
+
+```bash
+uv add <package>
+create-maa-project --update python-deps
+```
+
+`uv add` only updates `pyproject.toml`, `uv.lock`, and the local `.venv`; `requirements.in` /
+`requirements.txt` are regenerated from `pyproject.toml` by `--update python-deps`. Release
+packages preinstall dependencies from `requirements.txt`, so always run that step and commit
+`pyproject.toml`, `uv.lock`, `requirements.in`, and `requirements.txt` together — otherwise local
+runs keep working while release packages ship without the dependency.
+
 ## Release
 
 If `.github/workflows/release.yml` exists, pushing a tag such as `v{{version}}` triggers a release.

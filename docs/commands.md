@@ -137,6 +137,19 @@ create-maa-project --update python-runtime
 
 `--update all` 故意不支持。显式执行具体更新可以让 pending action 和日志更清楚。
 
+Agent 项目的 Python 依赖是一条两级链路，改依赖时两步都要走。`uv add <包名>` 写入
+`pyproject.toml` 的 `[project].dependencies`、更新 `uv.lock` 并装进本地 `.venv`，本地 `uv run`
+到此就能跑；但 `requirements.in` / `requirements.txt` 不会跟着变，需要再跑
+`create-maa-project --update python-deps`，它会从 `pyproject.toml` 重新生成 `requirements.in`，再经
+`uv lock` + `uv export` 刷新 `requirements.txt`。发布包按 `requirements.txt` 预装依赖
+（`tools/sync-runtime.mjs` 发现该文件缺失会直接报错），所以只 `uv add` 的结果是本地一切正常、打出的
+包里没有新依赖。每次改完依赖，把 `pyproject.toml`、`uv.lock`、`requirements.in`、`requirements.txt`
+一起提交。
+
+`--update python-runtime` 用 `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` 指定平台（一次一个），
+把内嵌解释器下载到 `.create-maa-project/runtime/python/<platform>`，并按 `requirements.txt` 重装依赖；
+依赖变更后要先跑 `python-deps`，`python-runtime` 才能装到新版本。
+
 `maa-project.json` 的 `maafw.channel` / `maafw.version` 决定 MaaFramework runtime 资产如何解析：
 `version` 非空时按该版本取发布，`v` 前缀可省略——上游标签写作 `v5.13.1`，因此 `5.13.1` 会先按原样查、
 再按 `v5.13.1` 查；两种拼法都不存在时报错仍指向你写下的那个。为空时按 `channel`（缺省 `stable`）取通道内

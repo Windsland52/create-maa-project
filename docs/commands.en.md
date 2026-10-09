@@ -167,6 +167,22 @@ create-maa-project --update python-runtime
 `--update all` is intentionally unsupported. Run explicit updates so pending actions and
 logs stay clear.
 
+Python dependencies in Agent projects are a two-step chain. `uv add <package>` writes
+`[project].dependencies` in `pyproject.toml`, updates `uv.lock`, and installs into the local
+`.venv` — local `uv run` works at this point — but `requirements.in` / `requirements.txt` do not
+move until you run `create-maa-project --update python-deps`, which regenerates
+`requirements.in` from `pyproject.toml` and refreshes `requirements.txt` through `uv lock` +
+`uv export`. Release packages preinstall their dependencies from `requirements.txt`
+(`tools/sync-runtime.mjs` fails outright when that file is missing), so stopping at `uv add`
+leaves local runs working while the built package ships without the new dependency. After every
+dependency change, commit `pyproject.toml`, `uv.lock`, `requirements.in`, and `requirements.txt`
+together.
+
+`--update python-runtime` takes its platform from `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>`
+(one platform per run), downloads the embedded interpreter into
+`.create-maa-project/runtime/python/<platform>`, and reinstalls from `requirements.txt`; after a
+dependency change, run `python-deps` first so the runtime picks up the new versions.
+
 `maafw.channel` / `maafw.version` in `maa-project.json` decide how MaaFramework runtime assets
 resolve. A non-empty `version` fetches that release, and its `v` prefix is optional: upstream tags
 read `v5.13.1`, so `5.13.1` is looked up as written and then as `v5.13.1`, and a pin that neither

@@ -119,7 +119,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
     once('interface.json', interfaceJson(input)),
     once('tasks/tutorial.json', tutorialTaskJson()),
     once('resource/base/default_pipeline.json', defaultPipelineJson()),
-    once('resource/base/pipeline/tutorial.json', tutorialPipelineJson()),
+    once('resource/base/pipeline/Tutorial/Tutorial.json', tutorialPipelineJson()),
     once('resource/base/image/empty.png', templateBinary('base/resource/base/image/empty.png')),
     ...(input.ocrSubmodule
       ? [
@@ -432,7 +432,7 @@ function defaultPipelineJson(): string {
 }
 
 function tutorialPipelineJson(): string {
-  return template('base/resource/base/pipeline/tutorial.json')
+  return template('base/resource/base/pipeline/Tutorial/Tutorial.json')
 }
 
 function ocrManifestJson(): string {

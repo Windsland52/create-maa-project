@@ -1,0 +1,19 @@
+{
+    "Tutorial_Start": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    0,
+                    0,
+                    1280,
+                    720
+                ],
+                "expected": ".*"
+            }
+        },
+        "action": {
+            "type": "DoNothing"
+        }
+    }
+}

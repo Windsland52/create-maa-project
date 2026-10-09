@@ -150,7 +150,7 @@ describe('scaffold', () => {
         'interface.json',
         'tasks/tutorial.json',
         'resource/base/default_pipeline.json',
-        'resource/base/pipeline/tutorial.json',
+        'resource/base/pipeline/Tutorial/Tutorial.json',
         'maatools.config.mts',
         'maa-project.json',
       ]),
@@ -4426,7 +4426,7 @@ export default defineConfig({
     expect(result.config.project.slug).toBe('maa-test')
     expect(result.written).toContain('interface.json')
     expect(result.written).toContain('tasks/tutorial.json')
-    expect(result.written).toContain('resource/base/pipeline/tutorial.json')
+    expect(result.written).toContain('resource/base/pipeline/Tutorial/Tutorial.json')
     expect(result.written).toContain('tools/schema/interface.schema.json')
     expect(result.written).toContain('tools/schema/schema-manifest.json')
     expect(result.written).not.toContain('tools/sync-schema.mjs')
@@ -4435,7 +4435,7 @@ export default defineConfig({
     expect(result.written).toContain('resource/base/model/ocr/rec.onnx')
     expect(result.written).toContain('resource/base/model/ocr/keys.txt')
     expect(result.written).toContain('resource/base/model/ocr/README.md')
-    const tutorial = await readFile(join(root, 'Maa Test', 'resource/base/pipeline/tutorial.json'), 'utf8')
+    const tutorial = await readFile(join(root, 'Maa Test', 'resource/base/pipeline/Tutorial/Tutorial.json'), 'utf8')
     const defaultPipeline = await readFile(join(root, 'Maa Test', 'resource/base/default_pipeline.json'), 'utf8')
     const readme = await readFile(join(root, 'Maa Test', 'README.md'), 'utf8')
     const readmeEn = await readFile(join(root, 'Maa Test', 'README.en.md'), 'utf8')

@@ -116,6 +116,9 @@ const distCli = join(repoRoot, 'dist/index.js')
 const tempRoots: string[] = []
 const sessions: McpSession[] = []
 const MCP_TEST_TIMEOUT_MS = 40000
+// A cancelled child can stay unkillable for seconds on a loaded runner, because SIGKILL is
+// delivered only once the target is scheduled again; the death check gets its own budget.
+const MCP_CANCEL_PROCESS_TIMEOUT_MS = 15000
 const schemaAjv = new Ajv({ allErrors: true, strict: false })
 
 afterEach(async () => {
@@ -1530,7 +1533,7 @@ describe('MCP server', () => {
           )
         })
 
-        await waitUntil(() => !isProcessAlive(childPid))
+        await waitUntil(() => !isProcessAlive(childPid), MCP_CANCEL_PROCESS_TIMEOUT_MS)
         expect(await pathExists(completedPath)).toBe(false)
         const followup = await session.request('tools/call', {
           name: 'update',

@@ -2,6 +2,25 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.7.0] - 2026-10-12
+
+### 新增
+
+- 新增 `android` add-on：把项目接上 MaaFwApp 外壳（Kotlin/Gradle）并由 CI 出 Android APK。`create-maa-project --add android` 写入二选一的 `Android/profile.yaml`（纯 pipeline / 带 agent，之后手维护）、`Android/README.md`（本地出包、签名 Secrets、升外壳）、`tools/android-packaging.mjs`（解析 MaaFW 版本、内核 tag、资产前缀与 Chaquopy 参数）与 `android.yml` / `android-build.yml` 两个 workflow，并把 `Aliothmoon/MaaFwApp` 以 submodule 浅克隆进 `Android/MaaFwApp`（同时写 `.gitmodules` 与 gitlink，CI 用 `submodules: recursive` 检出）。debug 出 arm64-v8a 单包，release 出 universal + arm64-v8a + x86_64 三包，命名为 `<前缀>-android-<tag>.apk`（universal 刻意不带 ABI 段，应用内更新按资产名选包）与 `<前缀>-android-<abi>-<tag>.apk`，前缀取 `project.displayName`、非 ASCII 或带空白时退回 `project.slug`。该 add-on **不依赖别的 add-on**：入口 workflow 自带，没有 `github` 也能出 debug 包；启用 `github` 时 `release.yml` 多一个与桌面 `package` **并行**的 `android` job，Release 等两者齐再建，资产带上 `release-assets/*.apk`（tag 上缺 `KEYSTORE_BASE64` 直接失败，手动 dispatch 仍出未签名包，未启用 android 时 `release.yml` 逐字节不变）。交互式「全部」预设不含它（要拉一个约 5 MB 的外壳仓库），在「自定义」里勾选或用 `--add android`。`--doctor` 的 `android-packaging` 检查覆盖上述文件、配方的 `assets` 与 `app.id`、外壳的登记/检出/gitlink 状态、`.gitignore` 段落，以及 agent 项目的 maafw 钉版一致性
+- Agent 项目的 Android 出包自带版本配对。Android 的 Python 绑定只随内核（`MaaAgentCoreAndroid` 的 `X-maafwY` tag）发布，所以 APK 需要 `requirements.txt` 里的精确 `maafw==X`：拿不到时登记 `android-version` pending（把 `maa-project.json` 的 `maafw.version` 写成精确版本后重跑 `--add android` 会一并钉住 `pyproject.toml`，再 `--update python-deps` 让 uv 导出）。上游发了补丁版而内核还没跟上时**降级**到不高于固定版本的最高配对并打 `::warning::`（APK 内前后端仍是同版本，只是比 requirements 固定得旧），固定版本比内核所有配对都旧才报错。带原生 `.so` 的 Python 包在 Android 上要按 Chaquopy 索引钉版，这里不再用硬编码降级表：resolver 逐包探测——桌面 pin 在索引上没有当前 CPython 的构建就钉到索引最高可用版，索引上没有该包（纯 Python）不钉，索引有构建但没有当前 CPython 时直接失败，而不是让 pip 在构建中途报错
+
+### 变更
+
+- 教程示例 pipeline 从 `resource/base/pipeline/tutorial.json` 移到 `resource/base/pipeline/Tutorial/Tutorial.json`。MaaFW 加载 pipeline 目录下的所有文件，两处路径都能跑；这是 `once` 文件，只有新建项目拿到新路径，已有项目保留原文件即可
+
+### 修复
+
+- agent 的多行日志不再丢内容。MFAAvalonia 逐行解析 agent 输出、只认带 level 前缀的行，多行消息的第二行起会被丢进 GUI 内部日志；现在逐行补前缀，并丢掉结尾换行造成的空尾行。loguru 与标准 logging 两条控制台路径合并到唯一渲染分支（`_CONSOLE_FORMAT` 走字段值，避免 callable format 的返回值被再当格式串去解析颜色标记），文件 sink 不再挂控制台 filter；MXU 侧补上转义白名单还原，只放行 `<font color="#RRGGBB">`、其余内容保持转义。`agent/utils/logger.py` 现将与上游 M9A 该版本逐字节一致
+
+已有项目：`android` 是独立 add-on，要用就执行 `create-maa-project --add android`——它会浅克隆外壳，克隆失败不阻断创建，只登记 `android-submodule` pending 与恢复命令。Agent 项目按上一条把 `maafw.version` 写成精确版本再 `--update python-deps`，否则会一直挂着 `android-version` pending。logger 修复在受管文件里，执行 `create-maa-project --update` 即可获得；tutorial 路径变更不用处理。
+
+[3.7.0]: https://github.com/Windsland52/create-maa-project/compare/v3.6.3...v3.7.0
+
 ## [3.6.3] - 2026-10-08
 
 ### 新增

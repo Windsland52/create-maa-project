@@ -1,0 +1,508 @@
+name: Build Android APK
+
+# 可复用的 Android 出包流水线：
+# - android.yml 在 push / PR / 手动触发时调用，出 debug 包（手动也可选 release：只出工件、不发布）
+# - release.yml 在 v* tag 上调用，出正式三包（universal + 双 ABI 单包）
+# Release 创建不在这里发生：统一由 release.yml 等所有产物就绪后收口，
+# 保证 Release 页面不会出现"桌面包已就位、APK 还在构建"的窗口期。
+
+on:
+  workflow_call:
+    inputs:
+      assemble:
+        description: "debug 或 release"
+        required: true
+        type: string
+      maafw_tag:
+        description: "MaaFramework release tag；留空按 requirements.txt / maa-project.json 解析（与桌面同源），填 latest 取 GitHub 最新（会破坏 APK 内前后端同版本，一般不用）"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  # 库模块资源校验：verifyReleaseResources 只在库模块自己的 assembleRelease 进任务图时才跑，
+  # app-only 出包（IDE / :app:assembleRelease）和 debug 路径都不带它，于是
+  # "drawable 引用了库内不存在的 attr" 这类问题能一路潜伏到 tag 发版才炸（MaaFwApp#34）。
+  # 不需要 NDK / keystore / agent 运行时，只要 JDK + Android SDK，因此也是三个 job 里最便宜的
+  # 探针：JDK 17 扛不住 compileSdk 37 那套 AGP 时，它会最先炸。
+  library-resources:
+    # 三个 job 统一 ubuntu-latest：缓存 key 自带 scope，不靠 runner.os 分区。
+    # JDK 取外壳 INTEGRATION.md 的基线（JavaVersion.VERSION_17）；扛不住当前 AGP / compileSdk
+    # 时三个 job 一起抬，不要只抬这一个。
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      # INTEGRATION.md 只钉 JDK。NDK / CMake 版本与外壳 app/build.gradle.kts 一致
+      # （当前 29.0.13113456 / 3.22.1）；compileSdk / targetSdk / minSdk 由外壳 gradle 决定。
+      # 本 job 只跑 verifyReleaseResources，用不到 NDK / CMake。
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-libres-${{ hashFiles('Android/MaaFwApp/**/*.gradle.kts', 'Android/MaaFwApp/**/gradle-wrapper.properties', 'Android/MaaFwApp/**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-libres-
+
+      # 根项目没有同名任务，Gradle 会命中所有库模块的 verifyReleaseResources（新增库模块自动纳入）
+      - name: Verify library resources
+        working-directory: Android/MaaFwApp
+        run: |
+          chmod +x ./gradlew
+          ./gradlew verifyReleaseResources
+
+  # debug 包，以及 release 时的 universal（双 ABI）包
+  build:
+    runs-on: ubuntu-latest
+    # debug 与 release 共用一个 job，按较重的 release 取超时
+    timeout-minutes: 90
+    env:
+      PI_PROFILE: ${{ github.workspace }}/Android/profile.yaml
+      ASSEMBLE: ${{ inputs.assemble }}
+      # .maafw（agent 内核）缓存按 ABI 集合分开：本 job 两个 ABI 共用 universal scope，
+      # abi-split 每个矩阵任务是自己的 ABI，互相不会覆盖
+      CACHE_SCOPE: universal
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # 外壳是 submodule，必须递归拉；没拉到时就是空目录，报错会指向 Gradle 而不是 submodule
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK and CMake
+        run: sdkmanager --install "ndk;29.0.13113456" "cmake;3.22.1"
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-universal-${{ hashFiles('Android/MaaFwApp/**/*.gradle.kts', 'Android/MaaFwApp/**/gradle-wrapper.properties', 'Android/MaaFwApp/**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-universal-
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # Node 主版本由 create-maa-project 渲染（与桌面 workflow 同一来源），只为 OCR 同步而装。
+      # 纯 pipeline 且模型已入库的项目不必付这份开销：has_ocr 门控放在 resolver 之后。
+      # resolver 自己跑在 runner 预装的 Node 上（只用 fetch / node: 内建，不依赖 pnpm）。
+      #
+      # MaaFW 版本与资产前缀由 tools/android-packaging.mjs 解析（Node 而不是 Python：
+      # 纯 pipeline 项目不引入 Python，同一份脚本要能给它们用）：
+      # maafw 版本由 requirements.txt / maa-project.json 固定（与桌面同源）；Android 的
+      # Python 绑定只随内核（MaaAgentCoreAndroid）发布，resolver 按固定版本挑 *-maafwX
+      # 配对的 release，client 原生库铺同版本，保证 APK 里前后端一致；上游发了补丁版而内核
+      # 还没跟上时，resolver 降级到不高于固定版本的最高配对并打 warning（APK 内仍是同版本，
+      # 只是比 requirements 固定得旧），固定版本比内核所有配对都旧才报错；救急可用
+      # AGENT_CORE_TAG 指定别的内核 release。
+      # 同时给出 has_agent / has_ocr / chaquopy_index / chaquopy_pins 四个门控与参数来源。
+      - name: Resolve Android packaging
+        id: maafw
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/android-packaging.mjs
+
+      # 顺序不能颠倒：这一步与下面两步都读 resolver 的输出，放在它前面时 steps.maafw 还不存在，
+      # 表达式求值为空串，has_ocr 为 true 的项目会被静默跳过。
+      - name: Set up pnpm
+        if: steps.maafw.outputs.has_ocr == 'true'
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        if: steps.maafw.outputs.has_ocr == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: {{nodeMajor}}
+
+      # has_ocr = OCR 模型没入库（走 submodule），CI 必须重新铺；走 download 时模型已入库，这步可跳过。
+      - name: Sync OCR models
+        if: steps.maafw.outputs.has_ocr == 'true'
+        run: pnpm dlx create-maa-project@latest --update ocr-models
+
+      # 纯 pipeline 项目（resolver 判定无 agent）不碰内核缓存与运行时构建。
+      # 不缓存 MaaFramework zip：脚本按字典序部署缓存里全部 MAA-android-*.zip，
+      # 跨 run 复用会让手动指定的 maafw_tag 被旧版本覆盖
+      - name: Cache agent core
+        if: steps.maafw.outputs.has_agent == 'true'
+        uses: actions/cache@v6
+        with:
+          path: Android/MaaFwApp/.maafw
+          key: maa-agent-core-${{ env.CACHE_SCOPE }}-${{ steps.maafw.outputs.core_tag }}-${{ hashFiles('Android/MaaFwApp/scripts/build_agent_bundle.py') }}
+
+      # debug 只出 arm64（build.debugAbi）；release 的 universal 包两个 ABI 都铺
+      - name: Download and deploy MaaFramework
+        working-directory: Android/MaaFwApp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAAFW_TAG: ${{ inputs.maafw_tag || steps.maafw.outputs.maafw_tag }}
+        run: |
+          TAG_ARG=""
+          if [ -n "$MAAFW_TAG" ] && [ "$MAAFW_TAG" != "latest" ]; then
+            TAG_ARG="--tag $MAAFW_TAG"
+          fi
+          ABIS="arm64-v8a"
+          if [ "$ASSEMBLE" = "release" ]; then ABIS="arm64-v8a x86_64"; fi
+          for abi in $ABIS; do
+            python scripts/setup_maa_framework.py --abi "$abi" $TAG_ARG
+          done
+
+      - name: Build agent runtime
+        if: steps.maafw.outputs.has_agent == 'true'
+        working-directory: Android/MaaFwApp
+        run: |
+          # debug 包只出 arm64（build.debugAbi），运行时也只建 arm64；配方不写死 abi，
+          # bundle.zip 装的就是这里建出来的那几份
+          if [ "$ASSEMBLE" = "release" ]; then
+            ABIS="--abi arm64-v8a --abi x86_64"
+          else
+            ABIS="--abi arm64-v8a"
+          fi
+          # --core-tag 必须显式传（脚本默认 tag 是字面量常量，会随上游漂移）；降级参数
+          # （chaquopy_pins，按 Chaquopy 索引逐包探测）与版本化索引（chaquopy_index）由
+          # tools/android-packaging.mjs 给出，不在 workflow 里写死包与版本。
+          # 注意 --extra-index-url 只是"追加"：脚本里 pypi-upstream 永远在索引列表第一位，
+          # 真正保证装到 ABI 可用版本的是 chaquopy_pins。
+          # 两个参数先落到变量再拼命令行：chaquopy_pins 在 requirements 里没有原生包时是空串。
+          # 空串插在续行中间不会断命令（反斜杠续行与行首空白无关），拼成一行的收益是好读，
+          # 也顺带给 --extra-index-url 带上引号（URL 里出现 & 之类不会被 shell 拆开）。
+          PINS="${{ steps.maafw.outputs.chaquopy_pins }}"
+          ARGS="--out ${GITHUB_WORKSPACE}/Android/agent-dist --core-tag ${{ steps.maafw.outputs.core_tag }} $ABIS --requirements ${GITHUB_WORKSPACE}/requirements.txt"
+          if [ -n "$PINS" ]; then ARGS="$ARGS $PINS"; fi
+          python scripts/build_agent_bundle.py $ARGS \
+            --extra-index-url "${{ steps.maafw.outputs.chaquopy_index }}"
+
+      # pi.profile 必须是绝对路径：它相对 Gradle 根项目解析，不是相对配方文件。
+      # build.debugAbi / build.releaseAbi 只从 local.properties 读（没有 env 兜底），
+      # 所以按 assemble 写：debug 写 debugAbi，abi-split 写 releaseAbi。
+      - name: Write local.properties
+        working-directory: Android/MaaFwApp
+        run: |
+          {
+            echo "sdk.dir=${ANDROID_HOME}"
+            echo "pi.profile=${PI_PROFILE}"
+            if [ "$ASSEMBLE" != "release" ]; then
+              echo "build.debugAbi=arm64-v8a"
+            fi
+          } > local.properties
+
+      # 缺 KEYSTORE_BASE64 时别往构建里塞空 jks：外壳只在 KEYSTORE_PATH 非空时才配签名，
+      # 路径留空即出未签名包。手动 dispatch / fork 可以这样；tag 发版例外——未签名 APK
+      # 装不上、也进不了应用内更新，正式发版缺签名材料就该当场失败。
+      - name: Decode keystore
+        id: keystore
+        if: env.ASSEMBLE == 'release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              echo "::error::tag（${GITHUB_REF_NAME}）缺 KEYSTORE_BASE64：未签名 APK 装不上也进不了应用内更新"
+              exit 1
+            fi
+            echo "::warning::未配置 KEYSTORE_BASE64，release 包不签名（工件仍可下载，只是不能上线）"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Build Debug APK
+        if: env.ASSEMBLE != 'release'
+        working-directory: Android/MaaFwApp
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean assembleDebug
+
+      - name: Build Release APK
+        if: env.ASSEMBLE == 'release'
+        working-directory: Android/MaaFwApp
+        # 签名 Secret 只交给 release 构建
+        env:
+          KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean assembleRelease
+
+      # 预期恰好一个 APK。universal 包不能被误认成单 ABI 包：应用内更新按资产名选包
+      # （GitHubUpdate.selectAsset），带 ABI 标记就会绕过 universal 回退，所以 universal 故意不带 ABI 段。
+      - name: Rename Release APK
+        if: env.ASSEMBLE == 'release'
+        id: apk
+        run: |
+          cd Android/MaaFwApp/app/build/outputs/apk/release
+          TAG="${GITHUB_REF_NAME:-dev}"
+          TAG="${TAG//\//-}"
+          count=$(ls -1 ./*.apk 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" -ne 1 ]; then
+            echo "预期恰好一个 release APK，实际 $count 个；多产物请改用按 ABI 命名"
+            exit 1
+          fi
+          mv ./*.apk "${{ steps.maafw.outputs.artifact_prefix }}-android-${TAG}.apk"
+          # tag 落成 step 输出：下面的自检要拼出同一个文件名，而 github.ref_name 里的 / 会被
+          # 替换成 -（分支名如 feature/x 时两者不一致）
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # 少铺一个 .so 不会让打包失败，要到设备上才发现起不来。外壳声明"缺了这些库 native 侧
+      # 起不来"的三个库无条件校验；libMaaAgentServer.so 只在 has_agent 时校验（纯 pipeline
+      # 的包可能没有它）。universal 包按它宣称的两个 ABI 逐个查。
+      # unzip -Z1 只列条目名，grep -Fx 整行全名匹配：不受 . 当通配符 / 子串命中的影响。
+      - name: Check APK native libraries
+        if: env.ASSEMBLE == 'release'
+        env:
+          APK: Android/MaaFwApp/app/build/outputs/apk/release/${{ steps.maafw.outputs.artifact_prefix }}-android-${{ steps.apk.outputs.tag }}.apk
+        run: |
+          LIBS="libMaaFramework.so libMaaUtils.so libMaaAndroidNativeControlUnit.so"
+          if [ "${{ steps.maafw.outputs.has_agent }}" = "true" ]; then
+            LIBS="$LIBS libMaaAgentServer.so"
+          fi
+          entries=$(unzip -Z1 "$APK")
+          for abi in arm64-v8a x86_64; do
+            for lib in $LIBS; do
+              if ! grep -Fxq "lib/$abi/$lib" <<< "$entries"; then
+                echo "::error::$APK 缺少 lib/$abi/$lib"
+                exit 1
+              fi
+            done
+          done
+          echo "[OK] native 自检通过：$APK"
+
+      - name: Upload Debug APK
+        if: env.ASSEMBLE != 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-apk
+          path: Android/MaaFwApp/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload Release APK
+        if: env.ASSEMBLE == 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-apk-universal
+          path: Android/MaaFwApp/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      # R8 mapping 只上传工件、不进 Release 资产（release.yml 的 files 段只收显式后缀 glob）
+      - name: Upload R8 mapping
+        if: env.ASSEMBLE == 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-apk-mapping
+          path: Android/MaaFwApp/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+
+  # release 时额外出单 ABI 包：每个 job 只铺/只打自己的 ABI，bundle.zip 里也只有这一份运行时，
+  # 包体约为 universal 的一半。debug 只有 arm64 单包，没有单 ABI 的必要，所以整段按 assemble 门控。
+  abi-split:
+    if: inputs.assemble == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    env:
+      ABI: ${{ matrix.abi }}
+      CACHE_SCOPE: ${{ matrix.abi }}
+      PI_PROFILE: ${{ github.workspace }}/Android/profile.yaml
+      ASSEMBLE: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK and CMake
+        run: sdkmanager --install "ndk;29.0.13113456" "cmake;3.22.1"
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ matrix.abi }}-${{ hashFiles('Android/MaaFwApp/**/*.gradle.kts', 'Android/MaaFwApp/**/gradle-wrapper.properties', 'Android/MaaFwApp/**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ matrix.abi }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Resolve Android packaging
+        id: maafw
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/android-packaging.mjs
+
+      # 同 build job：pnpm / Node 与 OCR 同步都必须在 resolver 之后，否则 has_ocr 读不到
+      - name: Set up pnpm
+        if: steps.maafw.outputs.has_ocr == 'true'
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        if: steps.maafw.outputs.has_ocr == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: {{nodeMajor}}
+
+      - name: Sync OCR models
+        if: steps.maafw.outputs.has_ocr == 'true'
+        run: pnpm dlx create-maa-project@latest --update ocr-models
+
+      - name: Cache agent core
+        if: steps.maafw.outputs.has_agent == 'true'
+        uses: actions/cache@v6
+        with:
+          path: Android/MaaFwApp/.maafw
+          key: maa-agent-core-${{ env.CACHE_SCOPE }}-${{ steps.maafw.outputs.core_tag }}-${{ hashFiles('Android/MaaFwApp/scripts/build_agent_bundle.py') }}
+
+      - name: Download and deploy MaaFramework
+        working-directory: Android/MaaFwApp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAAFW_TAG: ${{ inputs.maafw_tag || steps.maafw.outputs.maafw_tag }}
+        run: |
+          TAG_ARG=""
+          if [ -n "$MAAFW_TAG" ] && [ "$MAAFW_TAG" != "latest" ]; then
+            TAG_ARG="--tag $MAAFW_TAG"
+          fi
+          python scripts/setup_maa_framework.py --abi "$ABI" $TAG_ARG
+
+      # 与 build job 一致：这里只有 release 一种模式，所以 --abi 就是矩阵里的本机 ABI
+      - name: Build agent runtime
+        if: steps.maafw.outputs.has_agent == 'true'
+        working-directory: Android/MaaFwApp
+        run: |
+          # 同 build job：chaquopy_pins 可能是空串，先落变量再拼成一行
+          PINS="${{ steps.maafw.outputs.chaquopy_pins }}"
+          ARGS="--out ${GITHUB_WORKSPACE}/Android/agent-dist --core-tag ${{ steps.maafw.outputs.core_tag }} --abi $ABI --requirements ${GITHUB_WORKSPACE}/requirements.txt"
+          if [ -n "$PINS" ]; then ARGS="$ARGS $PINS"; fi
+          python scripts/build_agent_bundle.py $ARGS \
+            --extra-index-url "${{ steps.maafw.outputs.chaquopy_index }}"
+
+      - name: Write local.properties
+        working-directory: Android/MaaFwApp
+        run: |
+          {
+            echo "sdk.dir=${ANDROID_HOME}"
+            echo "pi.profile=${PI_PROFILE}"
+            echo "build.releaseAbi=${ABI}"
+          } > local.properties
+
+      # 同 build job：缺 KEYSTORE_BASE64 时让 KEYSTORE_PATH 留空出未签名包，tag 上仍然失败
+      - name: Decode keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              echo "::error::tag（${GITHUB_REF_NAME}）缺 KEYSTORE_BASE64：未签名 APK 装不上也进不了应用内更新"
+              exit 1
+            fi
+            echo "::warning::未配置 KEYSTORE_BASE64，release 包不签名（工件仍可下载，只是不能上线）"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release APK
+        working-directory: Android/MaaFwApp
+        env:
+          KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean assembleRelease
+
+      # 单 ABI 包必须带本机 ABI 标记，应用内更新才会优先选它
+      - name: Rename Release APK
+        id: apk
+        run: |
+          cd Android/MaaFwApp/app/build/outputs/apk/release
+          TAG="${GITHUB_REF_NAME:-dev}"
+          TAG="${TAG//\//-}"
+          count=$(ls -1 ./*.apk 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" -ne 1 ]; then
+            echo "预期恰好一个 release APK，实际 $count 个"
+            exit 1
+          fi
+          mv ./*.apk "${{ steps.maafw.outputs.artifact_prefix }}-android-${ABI}-${TAG}.apk"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # 同 build job：这里只有本机 ABI，就只查这一个架构
+      - name: Check APK native libraries
+        env:
+          APK: Android/MaaFwApp/app/build/outputs/apk/release/${{ steps.maafw.outputs.artifact_prefix }}-android-${{ matrix.abi }}-${{ steps.apk.outputs.tag }}.apk
+        run: |
+          LIBS="libMaaFramework.so libMaaUtils.so libMaaAndroidNativeControlUnit.so"
+          if [ "${{ steps.maafw.outputs.has_agent }}" = "true" ]; then
+            LIBS="$LIBS libMaaAgentServer.so"
+          fi
+          entries=$(unzip -Z1 "$APK")
+          for lib in $LIBS; do
+            if ! grep -Fxq "lib/$ABI/$lib" <<< "$entries"; then
+              echo "::error::$APK 缺少 lib/$ABI/$lib"
+              exit 1
+            fi
+          done
+          echo "[OK] native 自检通过：$APK"
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-apk-${{ matrix.abi }}
+          path: Android/MaaFwApp/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

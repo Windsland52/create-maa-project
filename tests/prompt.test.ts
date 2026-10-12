@@ -126,7 +126,8 @@ describe('repository feature checkbox indentation', () => {
 describe('interactive feature list order', () => {
   it('places sibling features before a parent, so a parent is followed by its own children', () => {
     // vscode and github both require dev-tools. vscode must come first, otherwise it splits
-    // github from the six features indented beneath it.
+    // github from the six features indented beneath it. android is a root of its own with no
+    // dependents, so the depth-first walk leaves it after the dev-tools tree.
     expect(REPOSITORY_FEATURE_ADDONS).toEqual([
       'dev-tools',
       'vscode',
@@ -137,6 +138,7 @@ describe('interactive feature list order', () => {
       'community',
       'dependabot',
       'schema-sync',
+      'android',
     ])
   })
 

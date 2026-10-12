@@ -262,6 +262,14 @@ runtime, and the generated `pnpm sync:runtime` runs both (agent projects additio
 Python runtime). Default release artifacts cover Windows, Linux, and macOS on `x86_64` and
 `aarch64`; Windows artifacts are `.zip`, Linux and macOS artifacts are `.tar.gz`.
 
+Projects with the `android` add-on additionally produce APKs: the
+[MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) shell is wired in as a Git submodule,
+`Android/profile.yaml` is the hand-maintained packaging recipe, push and pull requests build a debug
+APK, and a tag publishes it into the Release next to the desktop packages (universal plus one package
+per ABI). Agent projects need an exact `maafw==X` in `requirements.txt`, because the Android Python
+binding only ships with the kernel release. See the
+[command reference](./docs/commands.en.md#files-written-by-android).
+
 ## Troubleshooting
 
 **OCR model or asset downloads fail (restricted networks, proxies)**

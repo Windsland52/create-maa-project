@@ -1,0 +1,63 @@
+# Android 打包配方（MaaFwApp 格式）。字段权威说明见 Android/MaaFwApp/pi-profile.sample.yaml。
+# 路径解析分三类：文件系统字段（assets / agent.sourceDir / app.icon）相对本文件；include /
+# exclude / logs.include 是相对 PI 根（assets）的 glob；pi.profile 本身相对 Gradle 根项目。
+# 资源在构建期打进 APK：换任务 / 资源 / agent 代码要重新出包。
+
+assets: ..
+
+# 写了 include 就是整体替换：默认白名单抄全，再加 agent/**（agent 载荷跟资源走）。
+include:
+  - interface.json
+  - tasks/**
+  - resource/**
+  - resource_*/**
+  - data/**
+  - locales/**
+  - CONTACT
+  - LICENSE
+  - agent/**
+
+# exclude:
+#   - resource/announcement/*.md
+
+# agent 运行时由 CI 的 build_agent_bundle.py 产出到 Android/agent-dist/<abi>/bundle/。
+# 本地手动构建（在 Android/MaaFwApp 下执行；--core-tag 与 Chaquopy 参数见 tools/android-packaging.mjs 的输出）：
+#   python scripts/build_agent_bundle.py \
+#     --out ../agent-dist --abi arm64-v8a \
+#     --requirements ../../requirements.txt \
+#     --core-tag <MaaAgentCoreAndroid tag> \
+#     --extra-index-url https://chaquo.com/pypi-13.1/
+#   # --exclude / --require 以 tools/android-packaging.mjs 的 chaquopy_pins 为准（按索引探测）
+agent:
+  sourceDir: agent-dist
+  # 这里不写死 abi：省略时外壳按 ["*"] 打包，也就是"agent-dist 里实际建出来的那几份运行时"。
+  # 建哪些 ABI 由上面那条 build_agent_bundle 的 --abi 决定，必须与 APK 的 build.debugAbi /
+  # build.releaseAbi 对齐，否则 APK 会宣称支持一个不带运行时的架构。
+  runtimes:
+    - location: bundle
+      executable: bin/python3
+      args: [-u, agent/main.py]
+      env:
+        PYTHONHOME: "{bundle}/prefix"
+        PYTHONPATH: "{bundle}/site-packages/pure.zip:{bundle}/site-packages"
+        LD_LIBRARY_PATH: "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{nativeLibs}"
+        MAAFW_BINARY_PATH: "{nativeLibs}"
+
+app:
+  # 包段规则由外壳校验：小写字母 / 数字 / 下划线，每段以字母开头，拼成 com.aliothmoon.maafw.<id>；
+  # 项目 ID 里的连字符在这里换成下划线（maa-helper → maa_helper），数字开头会加前缀 p。
+  id: {{appId}}
+  label: {{displayName}}
+  # icon: ../logo.png
+
+# 前台模式跑在手机主屏上；比例对不上资源时改用后台虚拟屏并自带分辨率预设：
+# display:
+#   foreground: false
+#   presets:
+#     - label: 720P
+#       width: 1280
+#       height: 720
+#       dpi: 240
+
+# update:
+#   mirrorchyanRid: {{slug}}_exec

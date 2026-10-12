@@ -12,6 +12,16 @@ import {
 import { SUPPORTED_NODE_MAJOR, SUPPORTED_NODE_RANGE } from './node-support.js'
 import { TEMPLATE_DEV_DEPENDENCIES, TEMPLATE_PNPM_VERSION } from './template-deps.js'
 import { addV, prettyJson, stableJson } from './utils.js'
+import {
+  ANDROID_BUILD_WORKFLOW,
+  ANDROID_ENTRY_WORKFLOW,
+  ANDROID_GITIGNORE_COMMENT,
+  ANDROID_GITIGNORE_LINE,
+  ANDROID_PACKAGING_SCRIPT,
+  ANDROID_PROFILE_PATH,
+  androidAppId,
+  androidProfileTemplate,
+} from './android.js'
 
 const TEMPLATE_ROOT = resolveTemplateRoot()
 const UPSTREAM_MAAFW_SCHEMA_FILES = [
@@ -91,6 +101,14 @@ export type ProjectTemplateInput = {
   includeAutoFormat: boolean
   includeOptimizeImages: boolean
   includeSchemaSync: boolean
+  /** Android APK packaging: the MaaFwApp submodule, the recipe and the two workflows. */
+  includeAndroid?: boolean
+  /**
+   * Exact MaaFW version the project targets. An Android package that carries an agent needs one:
+   * the Android Python binding only ships with the MaaAgentCoreAndroid kernel release, so the pin
+   * is what pairs the kernel with the native client libraries inside the APK.
+   */
+  maafwVersion?: string | undefined
   pythonDevCommand?: string[] | undefined
   resources?: Pick<ResourcePackConfig, 'slug' | 'label' | 'path'>[]
   ocrSubmodule?: boolean
@@ -114,7 +132,7 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
   const generatedLicense = licenseText(input)
   const files: ManagedFileInput[] = [
     managed('.editorconfig', template('base/.editorconfig')),
-    once('.gitignore', projectGitignore(input.ocrSubmodule === true)),
+    once('.gitignore', gitignoreContent(input)),
     managed('.gitattributes', template('base/.gitattributes')),
     once('interface.json', interfaceJson(input)),
     once('tasks/tutorial.json', tutorialTaskJson()),
@@ -152,6 +170,10 @@ export function baseProjectFiles(input: ProjectTemplateInput): ManagedFileInput[
 
   if (input.includeGithub) {
     files.push(...githubFiles(input))
+  }
+
+  if (input.includeAndroid === true) {
+    files.push(...androidFiles(input))
   }
 
   if (input.includeGitCliff) {
@@ -217,13 +239,63 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   ]
 }
 
-export function agentFiles(input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>): ManagedFileInput[] {
+/**
+ * Android APK packaging.
+ *
+ * `Android/profile.yaml` and `Android/README.md` are `once`: the recipe is hand-maintained from the
+ * first build on (MaaFwApp owns its schema), and the README is where a project documents its own
+ * secrets and shell pin. The resolver and the two workflows are `managed` so a probe rule, a pinned
+ * toolchain version or a workflow fix reaches the project without re-creating anything.
+ *
+ * The submodule itself is handled by the scaffolder: a template cannot clone a repository.
+ */
+export function androidFiles(
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeAgent'>,
+): ManagedFileInput[] {
+  return [
+    once(
+      ANDROID_PROFILE_PATH,
+      template(androidProfileTemplate(input.includeAgent), {
+        slug: input.slug,
+        appId: androidAppId(input.slug),
+        displayName: input.displayName,
+      }),
+    ),
+    once(
+      'Android/README.md',
+      template('addons/android/Android/README.md', { slug: input.slug, appId: androidAppId(input.slug) }),
+    ),
+    managed(ANDROID_PACKAGING_SCRIPT, template(`addons/android/${ANDROID_PACKAGING_SCRIPT}`)),
+    managed(ANDROID_ENTRY_WORKFLOW, template(`addons/android/${ANDROID_ENTRY_WORKFLOW}`)),
+    managed(
+      ANDROID_BUILD_WORKFLOW,
+      trimTrailingWhitespace(template(`addons/android/${ANDROID_BUILD_WORKFLOW}`, { nodeMajor: SUPPORTED_NODE_MAJOR })),
+    ),
+  ]
+}
+
+/**
+ * The `.gitignore` line for locally built agent runtimes. The file is `once`, so `--add android`
+ * appends the section to the project's own file instead of regenerating it; the generated content
+ * carries the same two lines from creation.
+ */
+export function withAndroidGitignoreSection(content: string, enabled = true): string {
+  const lines = content.split(/\r?\n/u)
+  if (lines.some((line) => line.trim() === ANDROID_GITIGNORE_LINE)) return content
+  if (!enabled) return content
+  const prefix = content.length === 0 || content.endsWith('\n') ? content : `${content}\n`
+  return `${prefix}${ANDROID_GITIGNORE_COMMENT}\n${ANDROID_GITIGNORE_LINE}\n`
+}
+
+export function agentFiles(
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion'>,
+): ManagedFileInput[] {
   return [
     managed('.python-version', '3.13\n'),
     managed('pyproject.toml', agentPyproject(input)),
     managed('uv.lock', generatedUvLockPlaceholder()),
-    managed('requirements.in', agentRequirementsIn()),
-    managed('requirements.txt', agentRequirements()),
+    managed('requirements.in', agentRequirementsIn(input)),
+    managed('requirements.txt', agentRequirements(input)),
     managed('agent/__init__.py', agentTemplate('__init__.py')),
     managed('agent/agent_runtime.py', agentTemplate('agent_runtime.py')),
     managed('agent/maafw_paths.py', agentTemplate('maafw_paths.py')),
@@ -292,7 +364,7 @@ export function dependabotFile(includeAgent = false): ManagedFileInput {
 }
 
 export function releaseWorkflowFile(
-  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>,
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff' | 'includeAndroid'>,
 ): ManagedFileInput {
   return managed('.github/workflows/release.yml', releaseWorkflow(input))
 }
@@ -446,13 +518,27 @@ function projectGitignore(ocrSubmodule: boolean): string {
     : base
 }
 
-export function ocrSubmodulesFile(name = DEFAULT_OCR_SUBMODULE_PATH): string {
+/** The generated `.gitignore`: the base list plus the sections the add-ons need to ignore. */
+function gitignoreContent(input: Pick<ProjectTemplateInput, 'ocrSubmodule' | 'includeAndroid'>): string {
+  return withAndroidGitignoreSection(projectGitignore(input.ocrSubmodule === true), input.includeAndroid === true)
+}
+
+/**
+ * One `.gitmodules` section, tab-indented the way `git submodule add` writes it. `branch` is what
+ * `git submodule update --remote` follows, so a shell that moves on `main` records it.
+ */
+export function gitmodulesSection(name: string, spec: { path: string; url: string; branch?: string }): string {
   return [
     `[submodule "${name}"]`,
-    `\tpath = ${DEFAULT_OCR_SUBMODULE_PATH}`,
-    `\turl = ${DEFAULT_OCR_SUBMODULE_URL}`,
+    `\tpath = ${spec.path}`,
+    `\turl = ${spec.url}`,
+    ...(spec.branch === undefined ? [] : [`\tbranch = ${spec.branch}`]),
     '',
   ].join('\n')
+}
+
+export function ocrSubmodulesFile(name = DEFAULT_OCR_SUBMODULE_PATH): string {
+  return gitmodulesSection(name, { path: DEFAULT_OCR_SUBMODULE_PATH, url: DEFAULT_OCR_SUBMODULE_URL })
 }
 
 export function projectCustomSchemaFiles(includeAgent: boolean): ManagedFileInput[] {
@@ -540,7 +626,10 @@ function packageSmokeWorkflow(): string {
   )
 }
 
-function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff'>): string {
+function releaseWorkflow(
+  input: Pick<ProjectTemplateInput, 'slug' | 'displayName' | 'includeGitCliff' | 'includeAndroid'>,
+): string {
+  const includeAndroid = input.includeAndroid === true
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/release.yml', {
       nodeMajor: SUPPORTED_NODE_MAJOR,
@@ -548,12 +637,46 @@ function releaseWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName
       releaseArtifactName: releaseArtifactName(input),
       releaseTargetMatrix: releaseTargetMatrixYaml(),
       gitCliffJob: input.includeGitCliff ? `  ${gitCliffWorkflowJob()}\n` : '',
-      releaseNeeds: input.includeGitCliff ? '[package, git_cliff]' : 'package',
+      androidPackageJob: includeAndroid ? `  ${androidPackageWorkflowJob()}\n` : '',
+      releaseNeeds: releaseNeeds(input),
+      releaseApkAssets: includeAndroid ? '\n            release-assets/*.apk' : '',
       releaseNotesInput: input.includeGitCliff
         ? 'body_path: release-assets/CHANGES.md'
         : 'generate_release_notes: true',
     }),
   )
+}
+
+/**
+ * The release job waits for every package it uploads. Android is only a waiter when the add-on is
+ * enabled, and it is listed before git-cliff to keep the generated `needs` stable.
+ */
+function releaseNeeds(input: Pick<ProjectTemplateInput, 'includeGitCliff' | 'includeAndroid'>): string {
+  const needs = [
+    'package',
+    ...(input.includeAndroid === true ? ['android'] : []),
+    ...(input.includeGitCliff ? ['git_cliff'] : []),
+  ]
+  return needs.length === 1 ? 'package' : `[${needs.join(', ')}]`
+}
+
+/**
+ * Release hook for the Android add-on: the reusable workflow already builds the three release
+ * packages, so the release job only has to wait for it and let the upload step pick up `*.apk`.
+ *
+ * The job is a sibling of `package`, not a waiter: desktop and APK builds run together, and the
+ * release job is what blocks until both are ready. The tag gate matters because `release.yml` also
+ * runs on `workflow_dispatch`, where nothing publishes an APK.
+ */
+function androidPackageWorkflowJob(): string {
+  return `android:
+    name: Build Android APK
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/android-build.yml
+    with:
+      assemble: release
+    secrets: inherit
+`
 }
 
 function gitCliffWorkflowJob(): string {
@@ -642,7 +765,7 @@ function buildReleaseScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayN
   })
 }
 
-function releaseArtifactName(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
+export function releaseArtifactName(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
   const sanitized = [
     ...input.displayName.trim().normalize('NFKC'),
   ]
@@ -774,12 +897,17 @@ function packageLicense(license: LicenseKind): string {
   return license === 'None' ? 'UNLICENSED' : license
 }
 
-function agentPyproject(input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName'>): string {
-  return template('agent/pyproject.toml', {
-    slug: input.slug,
-    version: input.version,
-    displayName: input.displayName,
-  })
+function agentPyproject(
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion'>,
+): string {
+  return pinnedMaafw(
+    template('agent/pyproject.toml', {
+      slug: input.slug,
+      version: input.version,
+      displayName: input.displayName,
+    }),
+    input.maafwVersion,
+  )
 }
 
 function generatedUvLockPlaceholder(): string {
@@ -794,12 +922,43 @@ function agentTemplate(path: string): string {
   return template(`agent/agent/${path}`)
 }
 
-function agentRequirements(): string {
-  return template('agent/requirements.txt')
+function agentRequirements(input: Pick<ProjectTemplateInput, 'maafwVersion'>): string {
+  return pinnedMaafw(template('agent/requirements.txt'), input.maafwVersion, { quoted: false })
 }
 
-function agentRequirementsIn(): string {
-  return template('agent/requirements.in')
+function agentRequirementsIn(input: Pick<ProjectTemplateInput, 'maafwVersion'>): string {
+  return pinnedMaafw(template('agent/requirements.in'), input.maafwVersion, { quoted: false })
+}
+
+/**
+ * Pins an unpinned `maafw` dependency to an exact version, in the shape `[project].dependencies`
+ * uses. Anything already carrying a version or a range is left alone — a project that pinned its
+ * own version keeps it.
+ */
+export function pinnedMaafwRequirement(content: string, version: string): string {
+  const normalized = version.trim()
+  if (normalized === '') return content
+  return content.replace(/^(\s*)"maafw"(\s*,?\s*)$/m, `$1"maafw==${normalized}"$2`)
+}
+
+/**
+ * `maafw` is unpinned by default: the desktop project follows whatever uv resolves. An Android
+ * package that carries an agent cannot: the Android binding only ships inside the
+ * MaaAgentCoreAndroid kernel release, so the version the kernel pairs with has to be the version
+ * this project installs. Pinning here, in the source that `uv export` reads, is what makes
+ * `requirements.txt` (the resolver's input) agree with the kernel.
+ */
+function pinnedMaafw(
+  content: string,
+  version: string | undefined,
+  options: { quoted?: boolean } = { quoted: true },
+): string {
+  const normalized = version?.trim() ?? ''
+  if (normalized === '') return content
+  if (options.quoted === false) {
+    return content.replace(/^(maafw)(\s*)$/m, `maafw==${normalized}$2`)
+  }
+  return pinnedMaafwRequirement(content, normalized)
 }
 
 function template(path: string, values: Record<string, string> = {}): string {

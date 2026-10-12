@@ -59,6 +59,7 @@ describe('supported Node floor', () => {
     // Regression guard: the floor used to be written literally in five workflow templates, the
     // dev-tools manifest and four doctor messages, so lowering it was easy to do halfway.
     const files = [
+      'templates/addons/android/.github/workflows/android-build.yml',
       'templates/addons/auto-format/.github/workflows/format.yml',
       'templates/addons/github/.github/workflows/check.yml',
       'templates/addons/github/.github/workflows/package-smoke.yml',

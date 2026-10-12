@@ -2,6 +2,7 @@ const CREATE_ADDONS = new Set([
   'dev-tools',
   'vscode',
   'github',
+  'android',
   'agent',
   'resource-pack',
   'git-cliff',
@@ -15,6 +16,7 @@ const INCREMENTAL_ADDONS = new Set([
   'dev-tools',
   'vscode',
   'github',
+  'android',
   'agent',
   'resource-pack',
   'git-cliff',
@@ -39,6 +41,7 @@ export const ADDON_ORDER = [
   'dev-tools',
   'vscode',
   'github',
+  'android',
   'agent',
   'resource-pack',
   'git-cliff',
@@ -62,6 +65,9 @@ export const ADDON_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
   github: [
     'dev-tools',
   ],
+  // Android packaging stands alone: its entry workflow needs no GitHub add-on, and the release hook
+  // is injected only when release.yml exists.
+  android: [],
   agent: [
     'dev-tools',
     'vscode',
@@ -92,6 +98,7 @@ export const ADDON_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'dev-tools': 'devTools',
   vscode: 'vscode',
   github: 'github',
+  android: 'android',
   'git-cliff': 'gitCliff',
   'auto-format': 'autoFormat',
   'optimize-images': 'optimizeImages',

@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import {
   agentFiles,
+  androidFiles,
   autoFormatFiles,
   baseProjectFiles,
   configFile,
@@ -16,17 +17,20 @@ import {
   emptyPng,
   gitCliffFiles,
   githubFiles,
+  gitmodulesSection,
   interfaceAgent,
   interfaceResourceItems,
   maatoolsConfigFile,
-  ocrSubmodulesFile,
   optimizeImagesFiles,
+  pinnedMaafwRequirement,
   projectCustomSchemaFiles,
   releaseWorkflowFile,
   schemaSyncFiles,
   vscodeFiles,
   withAgentDebugSession,
+  withAndroidGitignoreSection,
 } from './templates.js'
+import { ANDROID_SUBMODULE_BRANCH, ANDROID_SUBMODULE_PATH, ANDROID_SUBMODULE_URL } from './android.js'
 import type { ProjectTemplateInput } from './templates.js'
 import type {
   CliOptions,
@@ -70,7 +74,14 @@ import {
   type DownloadProgressReporter,
 } from './assets.js'
 import { DEFAULT_CONTROLLER_KINDS, projectControllerKinds } from './controllers.js'
-import { enabledResourcePacks, hasDevTools, hasGithubAutomation, hasVscode, isAddonEnabled } from './features.js'
+import {
+  enabledResourcePacks,
+  hasAndroidPackaging,
+  hasDevTools,
+  hasGithubAutomation,
+  hasVscode,
+  isAddonEnabled,
+} from './features.js'
 import {
   defaultOcrSubmoduleConfig,
   provisionOcrFromSubmodule,
@@ -132,6 +143,7 @@ export async function createProject(
   const includeDevTools = resolvedAddons.includes('dev-tools')
   const includeVscode = resolvedAddons.includes('vscode')
   const includeGithub = resolvedAddons.includes('github')
+  const includeAndroid = resolvedAddons.includes('android')
   const pythonDevCommand = includeAgent ? defaultAgentDevCommand() : undefined
   const config = createConfig({
     slug,
@@ -164,11 +176,13 @@ export async function createProject(
       includeDevTools,
       includeVscode,
       includeGithub,
+      includeAndroid,
       includeAgent,
       includeGitCliff: resolvedAddons.includes('git-cliff'),
       includeAutoFormat: resolvedAddons.includes('auto-format'),
       includeOptimizeImages: resolvedAddons.includes('optimize-images'),
       includeSchemaSync: resolvedAddons.includes('schema-sync'),
+      maafwVersion: config.maafw.version,
       pythonDevCommand,
       resources: config.resources,
       ocrSubmodule: ocrIntent === 'submodule',
@@ -238,6 +252,36 @@ export async function createProject(
             await checkpoint.dispose()
           }
         }
+        if (includeAndroid) {
+          if (options.skipDownload) {
+            pending = mergePending(pending, [
+              androidSubmodulePending('The Android shell checkout was skipped with --skip-download.'),
+            ])
+          } else {
+            try {
+              const provisioning = await provisionAndroidSubmodule(
+                targetRoot,
+                {
+                  commandRunner: environment.commandRunner ?? runCommand,
+                  ...(environment.signal ? { signal: environment.signal } : {}),
+                },
+                environment.onProgress,
+              )
+              for (const path of provisioning.written) written.add(path)
+              environment.onProgress?.('Android shell ready.')
+            } catch (error) {
+              throwIfAborted(environment.signal)
+              const firstLine = errorMessage(error).split('\n')[0] ?? errorMessage(error)
+              environment.onProgress?.(
+                `Android shell checkout failed (${firstLine}); continuing with a pending action.`,
+              )
+              pending = mergePending(pending, [
+                androidSubmodulePending(`The MaaFwApp checkout failed during project creation: ${errorMessage(error)}`),
+              ])
+            }
+          }
+          pending = mergePending(pending, await androidVersionPending(targetRoot, config))
+        }
         await writeProjectState(targetRoot, config)
 
         const scaffold = {
@@ -268,10 +312,65 @@ export async function createProject(
         environment.gitRunner ?? runGit,
         environment.signal,
       )
-      return git ? { ...managedResult, git } : managedResult
+      const result = git ? { ...managedResult, git } : managedResult
+      if (!includeAndroid) return result
+      return stageAndroidSubmoduleResult(
+        result,
+        targetRoot,
+        environment.gitRunner ?? runGit,
+        { ownRepository: git?.initialized === true },
+        environment.signal,
+      )
     },
     { clearStale: options.clearStaleLock },
   )
+}
+
+/**
+ * Registers the gitlink of an already checked-out shell. Failure is a pending action rather than a
+ * failed creation: the project is complete, only the commit that CI needs is missing.
+ *
+ * A project created inside someone else's repository cannot own a gitlink — its `.gitmodules` lives
+ * in this directory while Git reads the one at the worktree root — so that case is reported instead
+ * of staged somewhere surprising.
+ */
+async function stageAndroidSubmoduleResult(
+  result: ScaffoldResult,
+  root: string,
+  gitRunner: GitRunner,
+  options: { ownRepository: boolean },
+  signal?: AbortSignal,
+): Promise<ScaffoldResult> {
+  if (!(await exists(join(root, ANDROID_SUBMODULE_PATH, '.git')))) return result
+  if (!options.ownRepository) {
+    return {
+      ...result,
+      pending: mergePending(result.pending, [
+        {
+          kind: 'android-submodule',
+          reason:
+            'The project does not own a Git repository (it has none, or it sits inside another one), so the MaaFwApp gitlink was not staged here: register the submodule and stage its path in the repository this project is committed to.',
+          command: `git add .gitmodules ${ANDROID_SUBMODULE_PATH}`,
+        },
+      ]),
+    }
+  }
+  try {
+    await stageAndroidSubmodule(root, gitRunner, signal)
+    return result
+  } catch (error) {
+    throwIfAborted(signal)
+    return {
+      ...result,
+      pending: mergePending(result.pending, [
+        {
+          kind: 'android-submodule',
+          reason: `The MaaFwApp gitlink could not be staged (${errorMessage(error)}). CI checks out submodules recursively and needs the recorded commit.`,
+          command: `git add .gitmodules ${ANDROID_SUBMODULE_PATH}`,
+        },
+      ]),
+    }
+  }
 }
 
 function createOcrUpdateOptions(environment: {
@@ -478,6 +577,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
         slug: config.project.slug,
         version: config.project.version,
         displayName: config.project.displayName,
+        maafwVersion: config.maafw.version,
       }),
       ...projectCustomSchemaFiles(true),
     ].filter((file) => !dependencyPaths.has(file.path))
@@ -556,6 +656,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
       slug: config.project.slug,
       version: config.project.version,
       displayName: config.project.displayName,
+      maafwVersion: config.maafw.version,
     }),
     ...projectCustomSchemaFiles(true),
     {
@@ -591,6 +692,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
         slug: config.project.slug,
         displayName: config.project.displayName,
         includeGitCliff: isAddonEnabled(config, 'gitCliff'),
+        includeAndroid: hasAndroidPackaging(config),
       }),
     )
   }
@@ -801,6 +903,110 @@ async function addCommunityLocked(options: CliOptions, root: string): Promise<Sc
   )
 }
 
+export function addAndroid(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
+  return withAddonProjectLock(options, root, () => addAndroidLocked(options, root))
+}
+
+/**
+ * Adds Android packaging to an existing project.
+ *
+ * The recipe and the README are `once`, so a project that already carries them keeps its own; the
+ * resolver and the workflows are refreshed. Three things happen outside the file set, in this order:
+ * the runtime ignore line is appended to the project's own `.gitignore`, the shell is checked out and
+ * registered as a submodule, and its gitlink is staged — CI checks out submodules recursively, so a
+ * checkout without a staged gitlink is invisible to it.
+ */
+async function addAndroidLocked(options: CliOptions, root: string): Promise<ScaffoldResult> {
+  const config = await readProjectConfig(root)
+  config.addons.android = { enabled: true }
+  const files: ManagedFileInput[] = [
+    ...androidFiles({
+      slug: config.project.slug,
+      displayName: config.project.displayName,
+      includeAgent: config.python !== undefined,
+    }),
+    // The release hook lives in the github add-on's release.yml, which only exists when that add-on
+    // does. `--add github` later writes the same hook, because the input is derived from the config.
+    ...(hasGithubAutomation(config) ? [releaseWorkflowFile(templateInputFromConfig(config))] : []),
+    configFile(config),
+  ]
+  return withProjectWriteLock(
+    root,
+    process.argv.join(' '),
+    async (operation) => {
+      const result = await writeGeneratedFiles(root, files, {
+        force: true,
+        backup: true,
+      })
+      const written = new Set(result.written)
+      const pending: PendingItem[] = []
+      if (await syncAndroidGitignore(root)) written.add('.gitignore')
+      await pinMaafwForAndroid(root, config, written)
+      if (options.skipDownload) {
+        pending.push(androidSubmodulePending('The Android shell checkout was skipped with --skip-download.'))
+      } else {
+        try {
+          const provisioning = await provisionAndroidSubmodule(root, { commandRunner: runCommand }, (message) =>
+            console.log(message),
+          )
+          for (const path of provisioning.written) written.add(path)
+        } catch (error) {
+          pending.push(androidSubmodulePending(`The MaaFwApp checkout failed: ${errorMessage(error)}`))
+        }
+      }
+      pending.push(...(await androidVersionPending(root, config)))
+      await writeProjectState(root, config)
+      const scaffold: ScaffoldResult = {
+        root,
+        config,
+        written: [
+          ...written,
+        ],
+        skipped: result.skipped,
+        pending: mergePending([], pending),
+        backupId: operation.backupId,
+      }
+      return stageAndroidSubmoduleResult(scaffold, root, runGit, {
+        ownRepository: await exists(join(root, '.git')),
+      })
+    },
+    { clearStale: options.clearStaleLock },
+  )
+}
+
+/** Appends the agent-runtime ignore line to a `.gitignore` the project already owns. */
+async function syncAndroidGitignore(root: string): Promise<boolean> {
+  const relativePath = '.gitignore'
+  const fullPath = join(root, relativePath)
+  if (!(await exists(fullPath))) return false
+  const current = await readText(fullPath)
+  const next = withAndroidGitignoreSection(current)
+  if (next === current) return false
+  await trackProjectPathForBackup(root, relativePath)
+  await writeText(fullPath, next)
+  return true
+}
+
+/**
+ * Pins `maafw` in `pyproject.toml` when the project declares an exact version, so `uv` cannot
+ * resolve a different one than the kernel the APK pairs with. `requirements.txt` is what the
+ * resolver and the bundle build read, and it only moves when `uv export` runs again, which is why
+ * this stays a pending action until that export has happened.
+ */
+async function pinMaafwForAndroid(root: string, config: MaaProjectConfig, written: Set<string>): Promise<void> {
+  const version = (config.maafw.version ?? '').trim()
+  if (version === '' || config.python === undefined) return
+  const relativePath = 'pyproject.toml'
+  const fullPath = join(root, relativePath)
+  if (!(await exists(fullPath))) return
+  const current = await readText(fullPath)
+  const next = pinnedMaafwRequirement(current, version)
+  if (next === current) return
+  await trackProjectPathForBackup(root, relativePath)
+  await writeText(fullPath, next)
+  written.add(relativePath)
+}
+
 export function addSchemaSync(options: CliOptions, root = process.cwd()): Promise<ScaffoldResult> {
   return withAddonProjectLock(options, root, () => addSchemaSyncLocked(options, root))
 }
@@ -989,11 +1195,13 @@ function templateInputFromConfig(config: MaaProjectConfig): Parameters<typeof de
     includeDevTools: hasDevTools(config),
     includeVscode: hasVscode(config),
     includeGithub: hasGithubAutomation(config),
+    includeAndroid: hasAndroidPackaging(config),
     includeAgent: config.python !== undefined,
     includeGitCliff: isAddonEnabled(config, 'gitCliff'),
     includeAutoFormat: isAddonEnabled(config, 'autoFormat'),
     includeOptimizeImages: isAddonEnabled(config, 'optimizeImages'),
     includeSchemaSync: isAddonEnabled(config, 'schemaSync'),
+    maafwVersion: config.maafw.version,
     pythonDevCommand: config.python?.devCommand,
     resources: enabledResourcePacks(config),
   }
@@ -1304,42 +1512,110 @@ async function mergeOcrSubmoduleRegistration(
   root: string,
   signal?: AbortSignal,
 ): Promise<{ changed: boolean; url: string }> {
-  const { stdout } = await execFileAsync('git', ['config', '--null', '--file', '.gitmodules', '--list'], {
-    cwd: root,
-    windowsHide: true,
-    ...(signal ? { signal } : {}),
-  })
-  throwIfAborted(signal)
+  return mergeSubmoduleRegistration(root, { path: DEFAULT_OCR_SUBMODULE_PATH, url: DEFAULT_OCR_SUBMODULE_URL }, signal)
+}
+
+/**
+ * Registers a submodule path in `.gitmodules` idempotently: an entry already pointing at the path
+ * keeps its URL (a project that mirrors the upstream keeps the mirror), otherwise a section is
+ * appended under a name that does not collide with the sections already there.
+ */
+async function mergeSubmoduleRegistration(
+  root: string,
+  spec: { path: string; url: string; branch?: string },
+  signal?: AbortSignal,
+): Promise<{ changed: boolean; url: string }> {
   const modules = new Map<string, { path?: string; url?: string }>()
-  for (const record of stdout.split('\0')) {
-    const separator = record.indexOf('\n')
-    const key = separator < 0 ? record : record.slice(0, separator)
-    const value = separator < 0 ? '' : record.slice(separator + 1)
-    const match = /^submodule\.(.+)\.([^.]+)$/u.exec(key)
-    if (!match?.[1]) continue
-    const entry = modules.get(match[1]) ?? {}
-    if (match[2] === 'path') entry.path = value
-    if (match[2] === 'url') entry.url = value
-    modules.set(match[1], entry)
+  // `git config --file` fails on a missing file, and a project without submodules simply has none.
+  if (await exists(join(root, '.gitmodules'))) {
+    const { stdout } = await execFileAsync('git', ['config', '--null', '--file', '.gitmodules', '--list'], {
+      cwd: root,
+      windowsHide: true,
+      ...(signal ? { signal } : {}),
+    })
+    throwIfAborted(signal)
+    for (const record of stdout.split('\0')) {
+      const separator = record.indexOf('\n')
+      const key = separator < 0 ? record : record.slice(0, separator)
+      const value = separator < 0 ? '' : record.slice(separator + 1)
+      const match = /^submodule\.(.+)\.([^.]+)$/u.exec(key)
+      if (!match?.[1]) continue
+      const entry = modules.get(match[1]) ?? {}
+      if (match[2] === 'path') entry.path = value
+      if (match[2] === 'url') entry.url = value
+      modules.set(match[1], entry)
+    }
   }
   for (const [name, entry] of modules) {
-    if (entry.path !== DEFAULT_OCR_SUBMODULE_PATH) continue
+    if (entry.path !== spec.path) continue
     if (!entry.url) {
-      throw new Error(`The existing OCR submodule has no URL. Set submodule.${name}.url in .gitmodules and retry.`)
+      throw new Error(
+        `The existing ${spec.path} submodule has no URL. Set submodule.${name}.url in .gitmodules and retry.`,
+      )
     }
     return { changed: false, url: entry.url }
   }
 
-  let name = DEFAULT_OCR_SUBMODULE_PATH
+  let name = spec.path
   for (let suffix = 1; modules.has(name); suffix += 1) {
-    name = `${DEFAULT_OCR_SUBMODULE_PATH}-${suffix}`
+    name = `${spec.path}-${suffix}`
   }
   const path = join(root, '.gitmodules')
-  const current = await readText(path)
+  const current = (await exists(path)) ? await readText(path) : ''
   await trackProjectPathForBackup(root, '.gitmodules')
   const prefix = current.length === 0 || current.endsWith('\n') ? current : `${current}\n`
-  await writeText(path, `${prefix}${ocrSubmodulesFile(name)}`)
-  return { changed: true, url: DEFAULT_OCR_SUBMODULE_URL }
+  await writeText(path, `${prefix}${gitmodulesSection(name, spec)}`)
+  return { changed: true, url: spec.url }
+}
+
+/**
+ * Checks out the Android shell into `Android/MaaFwApp`.
+ *
+ * The shell is a submodule, so the checkout is a plain shallow clone: `git submodule add` would also
+ * stage a gitlink, but it refuses to run when the directory already exists, and the scaffolder has to
+ * survive a re-run. The `.gitmodules` section is written only after the clone lands, so a failed
+ * clone leaves a repository whose documented recovery (`git submodule add`) still applies.
+ */
+async function provisionAndroidSubmodule(
+  root: string,
+  environment: { commandRunner: CommandRunner; signal?: AbortSignal },
+  onProgress?: ProgressReporter,
+): Promise<{ written: string[] }> {
+  const shellPath = join(root, ANDROID_SUBMODULE_PATH)
+  const written: string[] = []
+  if (!(await exists(join(shellPath, '.git')))) {
+    onProgress?.('Fetching the Android shell (MaaFwApp)...')
+    await environment.commandRunner(root, 'git', [
+      'clone',
+      '--depth',
+      '1',
+      ANDROID_SUBMODULE_URL,
+      ANDROID_SUBMODULE_PATH,
+    ])
+  }
+  throwIfAborted(environment.signal)
+  const registration = await mergeSubmoduleRegistration(
+    root,
+    { path: ANDROID_SUBMODULE_PATH, url: ANDROID_SUBMODULE_URL, branch: ANDROID_SUBMODULE_BRANCH },
+    environment.signal,
+  )
+  if (registration.changed) written.push('.gitmodules')
+  return { written }
+}
+
+/**
+ * Stages the gitlink and `.gitmodules`. The scaffolder's own `git add --all` only runs when nothing
+ * is pending, and almost every project has a pending action, so both are staged explicitly: CI
+ * checks out submodules recursively and needs the recorded commit plus the URL in `.gitmodules`.
+ */
+async function stageAndroidSubmodule(root: string, gitRunner: GitRunner, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal)
+  await gitRunner(root, [
+    'add',
+    '--',
+    '.gitmodules',
+    ANDROID_SUBMODULE_PATH,
+  ])
 }
 
 async function createPathCheckpoint(
@@ -1441,6 +1717,42 @@ function pythonPending(): PendingItem[] {
     {
       kind: 'python-deps',
       reason: 'Agent dependencies are managed by uv and need to be synchronized locally.',
+      command: 'create-maa-project --update python-deps',
+    },
+  ]
+}
+
+/**
+ * Recovery for a shell checkout that did not land. `git submodule add` is the command that does the
+ * whole job the scaffolder would have done — clone, `.gitmodules` section and staged gitlink — and
+ * it still works after a failed clone because the section is written only once the clone is there.
+ */
+function androidSubmodulePending(reason: string): PendingItem {
+  return {
+    kind: 'android-submodule',
+    reason,
+    command: `git submodule add -b ${ANDROID_SUBMODULE_BRANCH} ${ANDROID_SUBMODULE_URL} ${ANDROID_SUBMODULE_PATH}`,
+  }
+}
+
+/**
+ * The Android package that carries an agent needs an exact MaaFW version.
+ *
+ * The Android Python binding only ships inside the MaaAgentCoreAndroid kernel release, so the
+ * resolver pairs a kernel with whatever `requirements.txt` pins; a project that only names a channel
+ * cannot be paired and CI stops with the available pairings. `pyproject.toml` is the source uv
+ * resolves from, but the resolver and the bundle build read `requirements.txt`, so the pending stays
+ * until that export has run.
+ */
+async function androidVersionPending(root: string, config: MaaProjectConfig): Promise<PendingItem[]> {
+  if (config.python === undefined) return []
+  const requirementsPath = join(root, 'requirements.txt')
+  if ((await exists(requirementsPath)) && /^maafw==\S/m.test(await readText(requirementsPath))) return []
+  return [
+    {
+      kind: 'android-version',
+      reason:
+        'Android packaging needs an exact maafw version in requirements.txt, because the Android Python binding only ships with the MaaAgentCoreAndroid kernel release. Export the pin with uv; when maa-project.json carries an exact maafw.version, pyproject.toml is already pinned to it.',
       command: 'create-maa-project --update python-deps',
     },
   ]

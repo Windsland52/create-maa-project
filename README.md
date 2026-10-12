@@ -185,6 +185,8 @@ requirements.txt
 
 默认 runtime profile 面向 [MFAAvalonia](https://github.com/MaaXYZ/MFAAvalonia)：`--update maafw` 同步 MaaFramework 资产，`--update runtime:mfa` 同步 MFAAvalonia GUI runtime，生成的 `pnpm sync:runtime` 执行二者（Agent 项目还会同步 Python runtime）。默认 release artifact 覆盖 Windows、Linux、macOS 的 `x86_64` 与 `aarch64`，Windows 使用 `.zip`，Linux 和 macOS 使用 `.tar.gz`。
 
+带 `android` add-on 的项目额外产出 APK：外壳 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 以 Git submodule 接入，`Android/profile.yaml` 是手维护的打包配方，push / PR 出 debug 包，打 tag 时与桌面包一起进 Release（universal + 双 ABI 单包）。Agent 项目要求 `requirements.txt` 里有精确的 `maafw==X`，因为 Android 的 Python 绑定只随内核 release 发布。详见[命令文档](./docs/commands.md#android-写入的文件)。
+
 ## 常见问题
 
 **OCR 模型或资源下载失败（网络受限、代理环境）**

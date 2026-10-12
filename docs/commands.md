@@ -30,6 +30,7 @@ Git 初始化默认开启：目标不在已有 Git 仓库内时，创建（含 `
 create-maa-project --add dev-tools
 create-maa-project --add vscode
 create-maa-project --add github
+create-maa-project --add android
 create-maa-project --add agent
 create-maa-project --add resource-pack extra --label "额外资源"
 create-maa-project --add git-cliff
@@ -44,7 +45,8 @@ add-on 依赖会被自动补全，无需手动按顺序添加：
 
 - `vscode`、`github`、`agent` 依赖 `dev-tools`；
 - `agent` 还依赖 `vscode`（Agent 项目自带 `Maa Agent: Debug` 调试配置）；
-- `git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`（因而也依赖 `dev-tools`）。
+- `git-cliff`、`auto-format`、`optimize-images`、`community`、`dependabot`、`schema-sync` 依赖 `github`（因而也依赖 `dev-tools`）；
+- `android` 不依赖任何 add-on：它自带入口 workflow，没有 `github` 也能出 debug 包。
 
 例如 `create-maa-project --add community` 实际会启用 `dev-tools`、`github`、`community`。
 人类可读输出会打印 `Add-ons required by dependencies:`，JSON report 的 `addons` 字段给出
@@ -96,6 +98,50 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 `check:maa`；`github` 追加 `release:dry-run`、`sync:runtime`，`schema-sync` 追加 `sync:schema`，
 `optimize-images` 追加 `optimize:images`，Agent 项目追加 `format:py`、`lint:py`、`typecheck:py`、
 `check:py`。
+
+### android 写入的文件
+
+`--add android` 把项目接上 MaaFwApp 外壳（Kotlin/Gradle），由 CI 出 APK：
+
+| 文件                                  | 用途                                                             | 刷新方式 |
+| ------------------------------------- | ---------------------------------------------------------------- | -------- |
+| `Android/profile.yaml`                | 打包配方，按项目形态二选一（纯 pipeline / 带 agent），之后手维护 | once     |
+| `Android/README.md`                   | 本地出包、签名 Secrets、升外壳与常见问题                         | once     |
+| `tools/android-packaging.mjs`         | 解析 MaaFW 版本、内核 tag、资产前缀与 Chaquopy 参数              | managed  |
+| `.github/workflows/android.yml`       | 入口：push / PR 出 debug，手动可选 release                       | managed  |
+| `.github/workflows/android-build.yml` | 可复用流水线：debug / universal / 双 ABI 单包                    | managed  |
+
+`managed` 文件重跑 `--add android` 即刷新（`--update` 没有 android 目标）。除文件之外还有几件事：
+
+- 外壳 `Android/MaaFwApp` 是 Git submodule（`Aliothmoon/MaaFwApp`，记 `branch = main`）：创建/添加时
+  浅克隆一次并把它写进 `.gitmodules`，随后 `git add .gitmodules` 与 gitlink（CI 用
+  `submodules: recursive` 检出，缺任一项就只能拿到空目录）。克隆失败**不阻断**创建，登记
+  `android-submodule` pending，命令是 `git submodule add -b main …`。
+- `.gitignore` 追加 `Android/agent-dist/`（agent 运行时是构建产物，不入库）。
+- **Agent 项目**需要 `requirements.txt` 里的精确 `maafw==X`：Android 的 Python 绑定只随内核
+  （`MaaAgentCoreAndroid` 的 `X-maafwY` tag）发布，CI 按它配对内核与 APK 内的原生库。拿不到精确版本时
+  登记 `android-version` pending；`maa-project.json` 的 `maafw.version` 填了精确版本时，`--add android`
+  会把 `pyproject.toml` 的 `maafw` 一并钉住，再跑 `--update python-deps` 让 uv 把钉版导出到
+  `requirements.txt`。上游发了补丁版而内核还没跟上时，CI 会降级到不高于固定版本的最高配对并打
+  `::warning::`（APK 内仍是同版本，只是比 requirements 固定得旧）；固定版本比内核所有配对都旧才报错。
+- 带 `.so` 的原生 Python 包由 resolver 按 Chaquopy 索引**逐包探测**后给出降级参数：桌面 pin 在索引上
+  没有当前 CPython 的构建就钉到索引最高可用版，索引上没有该包（纯 Python）不钉，索引有构建但没有
+  当前 CPython 时 CI 直接报错，而不是让 pip 在构建中途失败。
+- 启用 `github` 时，`release.yml` 会多一个 `android` job：与桌面 `package` **并行**，Release job
+  的 `needs` 带上它，资产加上 `release-assets/*.apk`，且只在 tag 上触发；没启用 `android` 时
+  `release.yml` 逐字节不变。tag 发版缺 `KEYSTORE_BASE64` 会失败；手动 dispatch 仍可出未签名包。
+- 交互式「全部」预设**不含** `android`（它要拉一个外壳仓库），请在「自定义」里勾选，或用
+  `--add android`。
+- 产物命名：`<前缀>-android-<tag>.apk`（universal，刻意不带 ABI 段）与
+  `<前缀>-android-<abi>-<tag>.apk`（单 ABI）。前缀取 `project.displayName`，非 ASCII 或带空白时退回
+  `project.slug`（应用内更新按资产名选包，前缀必须 ASCII）。
+- 配方里的 `app.id` 由外壳校验：只收小写包段（字母 / 数字 / 下划线，每段以字母开头），拼成
+  `com.aliothmoon.maafw.<id>`。项目 ID 的连字符会换成下划线（`maa-helper` → `maa_helper`），数字开头
+  加前缀 `p`；手改配方写回连字符时 `--doctor` 会先报出来，而不是等 Gradle 构建失败。
+- `--doctor` 的 `android-packaging` 检查覆盖这五个文件、配方 `assets` 与 `app.id`、外壳的登记/
+  检出/gitlink 状态、`.gitignore` 段落，以及 agent 项目的 maafw 钉版一致性。
+
+规格与字段权威说明在外壳仓库里：`Android/MaaFwApp/INTEGRATION.md` 与 `pi-profile.sample.yaml`。
 
 元数据同步：
 

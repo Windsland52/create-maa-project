@@ -101,6 +101,7 @@ create-maa-project maa-helper --template agent --slug maa-helper \
   `github`, and `agent` require `dev-tools`; `agent` also requires `vscode`; `git-cliff`,
   `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync` require `github`
   (and therefore `dev-tools`). So `--add community` alone also enables `dev-tools` and `github`.
+  `android` requires nothing and gives the project a debug-APK workflow even without `github`.
   Do not assume the resolved set equals your arguments: the `Add-ons required by dependencies:`
   output line and the `addons` field of the report (`requested` / `enabled` / `autoEnabled`) list
   what was actually enabled.
@@ -124,7 +125,7 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 
 ## Maintenance targets
 
-- Add-ons (`--add`): `dev-tools`, `vscode`, `github`, `agent`, `resource-pack`, `git-cliff`,
+- Add-ons (`--add`): `dev-tools`, `vscode`, `github`, `android`, `agent`, `resource-pack`, `git-cliff`,
   `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 - Sync (`--sync`): `config`, `metadata`, `display-name`, `version`, `license`,
   `github-url`, `network`.

@@ -1,0 +1,84 @@
+name: Build Android APK
+
+# push / PR 出 debug 包，手动 dispatch 可选 release（只出签名工件，不建 Release）；
+# 正式发布由 release.yml 在 v* tag 上再调一次 android-build.yml 出三包并收口进 Release。
+# 本文件是静态的：真正的版本单一来源（Node 主版本）在 android-build.yml 里由 create-maa-project 渲染。
+
+on:
+  push:
+    branches: [main, master]
+    # 触发列表 = 进包内容 + 版本来源的并集：
+    # Android/**（外壳与配方）、agent/**（agent 载荷随资源进包）、tasks|resource|resource_*|data|locales/**
+    # 与 interface.json（PI 资源白名单）、maa-project.json（版本与资产前缀）、requirements.txt / pyproject.toml /
+    # uv.lock（resolver 的版本来源）、logo.png / logo.ico / CONTACT / LICENSE（默认白名单或 app.icon 会读的文件）、
+    # tools/android-packaging.mjs 与两个 workflow 自己。
+    paths:
+      - "Android/**"
+      - "agent/**"
+      - "tasks/**"
+      - "resource/**"
+      - "resource_*/**"
+      - "data/**"
+      - "locales/**"
+      - "interface.json"
+      - "maa-project.json"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
+      - "logo.png"
+      - "logo.ico"
+      - "CONTACT"
+      - "LICENSE"
+      - "tools/android-packaging.mjs"
+      - ".github/workflows/android.yml"
+      - ".github/workflows/android-build.yml"
+  pull_request:
+    # 与上面 push.paths 逐条相同：GitHub 没有"同上"语法，必须抄全
+    paths:
+      - "Android/**"
+      - "agent/**"
+      - "tasks/**"
+      - "resource/**"
+      - "resource_*/**"
+      - "data/**"
+      - "locales/**"
+      - "interface.json"
+      - "maa-project.json"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
+      - "logo.png"
+      - "logo.ico"
+      - "CONTACT"
+      - "LICENSE"
+      - "tools/android-packaging.mjs"
+      - ".github/workflows/android.yml"
+      - ".github/workflows/android-build.yml"
+  workflow_dispatch:
+    inputs:
+      assemble:
+        description: "debug 或 release（release 出 APK 工件、不发布；缺 KEYSTORE_BASE64 时为未签名包，tag 发版除外）"
+        type: choice
+        options:
+          - debug
+          - release
+        default: debug
+      maafw_tag:
+        description: "MaaFramework release tag；留空按 requirements.txt / maa-project.json 解析（与桌面同源），填 latest 取 GitHub 最新（会破坏 APK 内前后端同版本，一般不用）"
+        required: false
+        default: ""
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    uses: ./.github/workflows/android-build.yml
+    with:
+      assemble: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.assemble || 'debug' }}
+      maafw_tag: ${{ github.event.inputs.maafw_tag }}
+    secrets: inherit

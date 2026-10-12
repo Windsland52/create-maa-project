@@ -252,7 +252,7 @@ describe('applyIncrementalAddons', () => {
         ]),
       ),
     ).rejects.toThrow(
-      'Supported incremental add-ons: dev-tools, vscode, github, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
+      'Supported incremental add-ons: dev-tools, vscode, github, android, agent, resource-pack, git-cliff, auto-format, optimize-images, community, dependabot, schema-sync',
     )
   })
 })

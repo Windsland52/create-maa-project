@@ -1,11 +1,26 @@
-import { join } from 'node:path'
+import { execFile } from 'node:child_process'
+import { dirname, join, resolve } from 'node:path'
 import { stat } from 'node:fs/promises'
+import { promisify } from 'node:util'
 import { readProjectConfig } from './project.js'
 import type { MaaProjectConfig } from './types.js'
 import { normalizeControllerKind } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
 import { pinsSupportedNode, SUPPORTED_NODE_MAJOR } from './node-support.js'
+import {
+  ANDROID_BUILD_WORKFLOW,
+  ANDROID_ENTRY_WORKFLOW,
+  ANDROID_GITIGNORE_LINE,
+  ANDROID_PACKAGING_SCRIPT,
+  ANDROID_PROFILE_PATH,
+  ANDROID_SUBMODULE_BRANCH,
+  ANDROID_SUBMODULE_PATH,
+  ANDROID_SUBMODULE_URL,
+  isValidAndroidAppId,
+} from './android.js'
 import { exists, readText } from './utils.js'
+
+const execFileAsync = promisify(execFile)
 
 export type DoctorReport = {
   ok: boolean
@@ -181,7 +196,157 @@ export async function runDoctor(root: string): Promise<DoctorReport> {
   )
   ok = maatoolsOk && ok
 
+  if (isAddonEnabled(config, 'android')) {
+    detailStart = lines.length
+    const androidOk = await checkAndroidPackaging(root, config, lines)
+    recordDoctorCheck(
+      checks,
+      'android-packaging',
+      androidOk,
+      androidOk
+        ? 'Android packaging files, shell checkout and version pin are consistent.'
+        : 'Android packaging needs repair.',
+      lines,
+      detailStart,
+    )
+    ok = androidOk && ok
+  } else {
+    recordSkippedCheck(checks, 'android-packaging', 'Android packaging is not enabled in project configuration.')
+  }
+
   return { ok, lines, checks }
+}
+
+/**
+ * The Android add-on has three failure modes that only show up in CI: a shell that was never checked
+ * out (the submodule is a directory CI has to fetch), a package that cannot be paired with a kernel
+ * release because nothing pins `maafw`, and build artifacts that end up committed.
+ */
+async function checkAndroidPackaging(root: string, config: MaaProjectConfig, lines: string[]): Promise<boolean> {
+  let ok = true
+  for (const path of [
+    ANDROID_PROFILE_PATH,
+    ANDROID_PACKAGING_SCRIPT,
+    ANDROID_ENTRY_WORKFLOW,
+    ANDROID_BUILD_WORKFLOW,
+  ]) {
+    if (await exists(join(root, path))) continue
+    lines.push(`[ERR] Required Android packaging file is missing: ${path}`)
+    lines.push('      To fix: create-maa-project --add android')
+    ok = false
+  }
+
+  const buildWorkflowPath = join(root, ANDROID_BUILD_WORKFLOW)
+  if ((await exists(buildWorkflowPath)) && !workflowPinsSupportedNode(await readText(buildWorkflowPath))) {
+    lines.push(`[ERR] ${ANDROID_BUILD_WORKFLOW} must use Node ${SUPPORTED_NODE_MAJOR} in actions/setup-node.`)
+    lines.push('      To fix: create-maa-project --add android')
+    ok = false
+  }
+
+  // The recipe is project-owned, so the two things worth checking are its anchors: `assets` is
+  // relative to the recipe file and has to land on the repository root the workflow packages, and
+  // `app.id` has to survive MaaFwApp's package-segment rule (a kebab-case id fails the build).
+  const profilePath = join(root, ANDROID_PROFILE_PATH)
+  if (await exists(profilePath)) {
+    const profile = await readText(profilePath)
+    const assets = /^assets:\s*(\S+)\s*$/m.exec(profile)?.[1]
+    if (assets === undefined || resolve(dirname(profilePath), assets) !== resolve(root)) {
+      lines.push(`[ERR] ${ANDROID_PROFILE_PATH} does not resolve its "assets" to the repository root.`)
+      lines.push('      To fix: set assets to ".." (the recipe is project-owned; the file is not regenerated).')
+      ok = false
+    }
+    const appId = /^\s+id:\s*(\S+)\s*$/m.exec(profile)?.[1]
+    if (appId !== undefined && !isValidAndroidAppId(appId)) {
+      lines.push(`[ERR] ${ANDROID_PROFILE_PATH} declares app.id "${appId}", which the shell rejects.`)
+      lines.push('      To fix: use lowercase package segments such as maa_helper (letters, digits and underscores).')
+      ok = false
+    }
+  }
+
+  const registered = await androidSubmoduleRegistered(root)
+  if (!registered) {
+    lines.push(`[ERR] ${ANDROID_SUBMODULE_PATH} is not registered as a Git submodule.`)
+    lines.push(
+      `      To fix: git submodule add -b ${ANDROID_SUBMODULE_BRANCH} ${ANDROID_SUBMODULE_URL} ${ANDROID_SUBMODULE_PATH}`,
+    )
+    ok = false
+  } else if (!(await exists(join(root, ANDROID_SUBMODULE_PATH, '.git')))) {
+    lines.push(`[ERR] The Android shell is not checked out: ${ANDROID_SUBMODULE_PATH} is empty.`)
+    lines.push(`      To fix: git submodule update --init --depth 1 ${ANDROID_SUBMODULE_PATH}`)
+    ok = false
+  } else if ((await androidGitlinkStaged(root)) === false) {
+    lines.push(`[ERR] ${ANDROID_SUBMODULE_PATH} has no staged gitlink, so CI would check out an empty directory.`)
+    lines.push(`      To fix: git add ${ANDROID_SUBMODULE_PATH}`)
+    ok = false
+  }
+
+  if (config.python !== undefined) {
+    const gitignorePath = join(root, '.gitignore')
+    if (await exists(gitignorePath)) {
+      const ignored = (await readText(gitignorePath))
+        .split(/\r?\n/u)
+        .some((line) => line.trim() === ANDROID_GITIGNORE_LINE)
+      if (!ignored) {
+        lines.push(`[ERR] .gitignore does not ignore ${ANDROID_GITIGNORE_LINE} (built from requirements.txt).`)
+        lines.push('      To fix: create-maa-project --add android')
+        ok = false
+      }
+    }
+    const requirementsPin = await requirementPin(join(root, 'requirements.txt'), /^maafw==(\S+)/m)
+    if (requirementsPin === undefined) {
+      lines.push(
+        '[ERR] requirements.txt has no exact maafw pin, so the Android bundle cannot be paired with a kernel release.',
+      )
+      lines.push('      To fix: create-maa-project --update python-deps')
+      ok = false
+    } else {
+      const declared = (config.maafw.version ?? '').trim()
+      if (declared !== '' && declared !== requirementsPin) {
+        lines.push(
+          `[ERR] maa-project.json pins maafw ${declared} but requirements.txt pins ${requirementsPin}; the APK would mix two versions.`,
+        )
+        lines.push(
+          '      To fix: align maafw.version with the exported pin, then run create-maa-project --update python-deps',
+        )
+        ok = false
+      }
+      const pyprojectPin = await requirementPin(join(root, 'pyproject.toml'), /"maafw==([^"]+)"/)
+      if (pyprojectPin !== undefined && pyprojectPin !== requirementsPin) {
+        lines.push(
+          `[ERR] pyproject.toml pins maafw ${pyprojectPin} but requirements.txt pins ${requirementsPin}; uv has not exported the change.`,
+        )
+        lines.push('      To fix: create-maa-project --update python-deps')
+        ok = false
+      }
+    }
+  }
+
+  if (ok) lines.push('[OK] Android packaging files, shell checkout and version pin are consistent.')
+  return ok
+}
+
+async function androidSubmoduleRegistered(root: string): Promise<boolean> {
+  const gitmodulesPath = join(root, '.gitmodules')
+  if (!(await exists(gitmodulesPath))) return false
+  return (await readText(gitmodulesPath)).includes(`path = ${ANDROID_SUBMODULE_PATH}`)
+}
+
+/** `undefined` when Git cannot answer, so a missing Git never turns into a doctor failure. */
+async function androidGitlinkStaged(root: string): Promise<boolean | undefined> {
+  try {
+    const { stdout } = await execFileAsync('git', ['ls-files', '--stage', '--', ANDROID_SUBMODULE_PATH], {
+      cwd: root,
+      windowsHide: true,
+    })
+    return stdout.trim().startsWith('160000')
+  } catch {
+    return undefined
+  }
+}
+
+async function requirementPin(path: string, pattern: RegExp): Promise<string | undefined> {
+  if (!(await exists(path))) return undefined
+  return pattern.exec(await readText(path))?.[1]
 }
 
 function recordDoctorCheck(

@@ -29,3 +29,11 @@ export function hasVscode(config: MaaProjectConfig): boolean {
 export function hasGithubAutomation(config: MaaProjectConfig): boolean {
   return isAddonEnabled(config, 'github') || config.features.ci.enabled || config.features.release.enabled
 }
+
+/**
+ * Android packaging is independent of GitHub automation: the entry workflow is usable on its own,
+ * and the release hook is a soft integration that only exists when release.yml does.
+ */
+export function hasAndroidPackaging(config: MaaProjectConfig): boolean {
+  return isAddonEnabled(config, 'android')
+}

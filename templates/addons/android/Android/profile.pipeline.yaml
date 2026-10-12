@@ -1,0 +1,36 @@
+# Android 打包配方（MaaFwApp 格式）。字段权威说明见 Android/MaaFwApp/pi-profile.sample.yaml。
+# 路径解析分三类：文件系统字段（assets / agent.sourceDir / app.icon）相对本文件；include /
+# exclude / logs.include 是相对 PI 根（assets）的 glob；pi.profile 本身相对 Gradle 根项目。
+# 资源在构建期打进 APK：换任务 / 资源要重新出包。
+
+assets: ..
+
+# include 省略 = 内置默认白名单（interface.json、tasks/**、resource/**、resource_*/**、data/**、
+# locales/**、CONTACT、LICENSE），已覆盖脚手架生成的全部内容；以后新增自定义目录（要进包的）再补。
+# 注意：写了 include 就是整体替换（不合并），include: [] 是空白名单，不是"用默认值"。
+#
+# exclude 压在 include 之上，用来挖掉大而用不上的资源，例如：
+# exclude:
+#   - resource/model/detect/ProtocolSpace/**
+
+app:
+  # 包段规则由外壳校验：小写字母 / 数字 / 下划线，每段以字母开头，拼成 com.aliothmoon.maafw.<id>；
+  # 项目 ID 里的连字符在这里换成下划线（maa-helper → maa_helper），数字开头会加前缀 p。
+  id: {{appId}}
+  label: {{displayName}}
+  # icon 只收 png / webp，路径相对本文件；不写则用 MaaFwApp 自带图标。
+  # 仓库根放了 logo.png 时可取消注释（记得把 logo.png 也加进 android.yml 的 paths 触发列表）：
+  # icon: ../logo.png
+
+# 前台模式跑在手机主屏上；比例对不上资源时改用后台虚拟屏并自带分辨率预设：
+# display:
+#   foreground: false
+#   presets:
+#     - label: 720P
+#       width: 1280
+#       height: 720
+#       dpi: 240
+
+# 应用内更新走 Mirror酱「可执行包」流时取消注释（rid 与 PI 资源 rid 不是同一条）：
+# update:
+#   mirrorchyanRid: {{slug}}_exec

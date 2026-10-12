@@ -59,17 +59,18 @@ text, e.g. `Android / Emulator`). `WlRoots` is accepted as the pre-rename spelli
 | `--dry-run`                         | Preview `--restore` without changing files                                                                         |
 | `--clean-cache`                     | Remove the local download cache                                                                                    |
 
-Add-ons: `dev-tools`, `vscode`, `github`, `agent`, `resource-pack` (takes a positional slug),
-`git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
+Add-ons: `dev-tools`, `vscode`, `github`, `android`, `agent`, `resource-pack` (takes a positional
+slug), `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync`.
 
 Dependencies are resolved automatically for both `create` and `--add`, so no manual ordering is
 needed:
 
-| Add-on                                                                                  | Requires                          |
-| --------------------------------------------------------------------------------------- | --------------------------------- |
-| `vscode`, `github`, `agent`                                                             | `dev-tools`                       |
-| `agent`                                                                                 | `vscode` (ships the debug config) |
-| `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync` | `github` (and thus `dev-tools`)   |
+| Add-on                                                                                  | Requires                           |
+| --------------------------------------------------------------------------------------- | ---------------------------------- |
+| `vscode`, `github`, `agent`                                                             | `dev-tools`                        |
+| `agent`                                                                                 | `vscode` (ships the debug config)  |
+| `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, `schema-sync` | `github` (and thus `dev-tools`)    |
+| `android`                                                                               | nothing: it ships its own workflow |
 
 `--add community` therefore enables `dev-tools`, `github`, and `community`. Never assume the
 enabled set equals your arguments: the human output prints `Add-ons required by dependencies:`,
@@ -121,6 +122,40 @@ Scripts in `package.json` follow the enabled add-ons: `check` always chains `for
 `check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
+
+### Files written by android
+
+`--add android` connects the project to the MaaFwApp shell (Kotlin/Gradle) that CI turns into an APK:
+
+| File                                  | Refresh |
+| ------------------------------------- | ------- |
+| `Android/profile.yaml` (recipe)       | once    |
+| `Android/README.md`                   | once    |
+| `tools/android-packaging.mjs`         | managed |
+| `.github/workflows/android.yml`       | managed |
+| `.github/workflows/android-build.yml` | managed |
+
+Re-running `--add android` refreshes the `managed` files. Beyond the files, and important for
+callers that only look at `written`:
+
+- The shell `Android/MaaFwApp` is a Git submodule (`Aliothmoon/MaaFwApp`): creation or `--add android`
+  shallow-clones it, appends its `.gitmodules` section and stages both that file and the gitlink (CI
+  checks out submodules recursively). A failed clone is reported as an `android-submodule` pending action whose
+  command is `git submodule add -b main https://github.com/Aliothmoon/MaaFwApp.git Android/MaaFwApp`,
+  and creation still succeeds. `--skip-download` is not valid with `--add`, so an offline `--add
+android` fails the clone and lands in that pending action.
+- `.gitignore` gains `Android/agent-dist/`.
+- An Agent project needs an exact `maafw==X` in `requirements.txt` (the Android Python binding only
+  ships inside the MaaAgentCoreAndroid kernel release); otherwise the add-on records an
+  `android-version` pending action with `create-maa-project --update python-deps` as its command. With
+  an exact `maafw.version` in `maa-project.json`, `--add android` pins `pyproject.toml` too.
+- With `github` enabled, `release.yml` gains an `android` job that runs in parallel with `package`;
+  `release-assets/*.apk` is published, and the release job's `needs` becomes `[package, android]`
+  (`[package, android, git_cliff]` with git-cliff). A tag release without `KEYSTORE_BASE64` fails.
+- The recipe's `app.id` takes lowercase package segments only (`com.aliothmoon.maafw.<id>`): a
+  kebab-case project id is converted to underscores, and a leading digit gets a `p` prefix.
+- Doctor's `android-packaging` check covers the file set, `assets` / `app.id`, the submodule state, the
+  `.gitignore` line, and the maafw pin.
 
 ### Python dependencies (Agent projects)
 

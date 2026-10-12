@@ -35,6 +35,7 @@ Add-ons:
 create-maa-project --add dev-tools
 create-maa-project --add vscode
 create-maa-project --add github
+create-maa-project --add android
 create-maa-project --add agent
 create-maa-project --add resource-pack extra --label "Extra Resource"
 create-maa-project --add git-cliff
@@ -50,7 +51,9 @@ Add-on dependencies are resolved automatically, so no manual ordering is require
 - `vscode`, `github`, and `agent` require `dev-tools`;
 - `agent` also requires `vscode`, because Agent projects ship the `Maa Agent: Debug` launch config;
 - `git-cliff`, `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync`
-  require `github` (and therefore `dev-tools`).
+  require `github` (and therefore `dev-tools`);
+- `android` requires nothing: it ships its own entry workflow and builds a debug APK without the
+  `github` add-on.
 
 For example, `create-maa-project --add community` also enables `dev-tools` and `github`. The
 human-readable output prints `Add-ons required by dependencies:`, and the `addons` field of the
@@ -111,6 +114,62 @@ Scripts in `package.json` follow the enabled add-ons: `check` always chains `for
 `check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
+
+### Files written by android
+
+`--add android` connects the project to the MaaFwApp shell (Kotlin/Gradle) that CI turns into an APK:
+
+| File                                  | Purpose                                                                   | Refresh |
+| ------------------------------------- | ------------------------------------------------------------------------- | ------- |
+| `Android/profile.yaml`                | Packaging recipe, one of two variants (pipeline / agent), hand-maintained | once    |
+| `Android/README.md`                   | Local builds, signing secrets, shell upgrades, troubleshooting            | once    |
+| `tools/android-packaging.mjs`         | Resolves the MaaFW version, kernel tag, artifact prefix and Chaquopy args | managed |
+| `.github/workflows/android.yml`       | Entry: debug APK on push / PR, optional release on manual dispatch        | managed |
+| `.github/workflows/android-build.yml` | Reusable pipeline: debug / universal / single-ABI packages                | managed |
+
+Re-running `--add android` refreshes the `managed` files (`--update` has no android target). Beyond
+the files:
+
+- The shell `Android/MaaFwApp` is a Git submodule (`Aliothmoon/MaaFwApp`, `branch = main`): creation or
+  `--add android` shallow-clones it, appends its `.gitmodules` section and stages both that file and
+  the gitlink, because CI checks out submodules recursively and a missing gitlink or URL yields an
+  empty directory. A failed clone
+  does not fail creation; it records an `android-submodule` pending action whose command is
+  `git submodule add -b main …`.
+- `.gitignore` gains `Android/agent-dist/`: the agent runtime is a build artifact.
+- An **Agent** project also needs an exact `maafw==X` in `requirements.txt`: the Android Python binding
+  only ships inside the MaaAgentCoreAndroid kernel release (`X-maafwY` tags), which is what pairs the
+  kernel with the native libraries inside the APK. Without it the add-on records an `android-version`
+  pending action. When `maa-project.json` carries an exact `maafw.version`, `--add android` pins
+  `pyproject.toml` to it as well, and `--update python-deps` exports that pin to `requirements.txt`.
+  When upstream ships a patch release before the kernel catches up, CI degrades to the highest pairing
+  at or below the pin and prints a `::warning::` (the APK stays internally consistent, it is just older
+  than the pin); only a pin older than every kernel pairing is an error.
+- Native Python packages (the ones carrying `.so` files) are probed per package against the Chaquopy
+  index, and the resolver emits the downgrade arguments: a desktop pin with no build for the kernel
+  CPython is pinned to the highest version the index has, a package the index does not carry at all is
+  pure Python and stays untouched, and an index that has builds but none for the kernel CPython fails
+  the resolver instead of failing pip in the middle of the build.
+- With `github` enabled, `release.yml` gains an `android` job that runs **in parallel** with desktop
+  `package`; the release job waits for both, the assets grow `release-assets/*.apk`, and the Android
+  job only runs for tags. A tag release without `KEYSTORE_BASE64` fails; a manual dispatch may still
+  upload an unsigned APK. Without the add-on, `release.yml` is byte-for-byte what it was.
+- The interactive `All` preset does **not** include `android` (it checks out a shell repository); pick
+  it in Custom or pass `--add android`.
+- Artifact names: `<prefix>-android-<tag>.apk` (universal, deliberately without an ABI segment) and
+  `<prefix>-android-<abi>-<tag>.apk` (single ABI). The prefix is `project.displayName`, falling back to
+  `project.slug` when it is not ASCII — in-app updates select assets by name, so the prefix must be.
+- The recipe's `app.id` is validated by the shell: it only takes lowercase package segments (letters,
+  digits and underscores, each starting with a letter) and becomes `com.aliothmoon.maafw.<id>`. A
+  kebab-case project id is converted (`maa-helper` → `maa_helper`), and one starting with a digit gets
+  a `p` prefix; a hyphen hand-edited back into the recipe is reported by `--doctor` instead of failing
+  the Gradle build.
+- Doctor's `android-packaging` check covers those five files, the recipe's `assets` and `app.id`, the
+  submodule registration / checkout / gitlink state, the `.gitignore` section, and the maafw pin
+  agreement for Agent projects.
+
+The authoritative field reference lives in the shell repository:
+`Android/MaaFwApp/INTEGRATION.md` and `pi-profile.sample.yaml`.
 
 Metadata sync:
 

@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { check } from 'prettier'
 import { describe, expect, it } from 'vitest'
 import { PYTHON_EMBED_VERSION, PYTHON_STANDALONE_MINOR } from '../src/assets.js'
+import { androidAppId, isValidAndroidAppId } from '../src/android.js'
+import { SUPPORTED_NODE_MAJOR } from '../src/node-support.js'
 import {
+  androidFiles,
   devToolFiles,
   githubFiles,
   releaseWorkflowFile,
@@ -135,13 +138,28 @@ describe('vscode templates', () => {
 
 describe('workflow templates', () => {
   it.each([
-    false,
-    true,
-  ])('emits formatted release workflow with git-cliff=%s', async (includeGitCliff) => {
+    [
+      false,
+      false,
+    ],
+    [
+      true,
+      false,
+    ],
+    [
+      false,
+      true,
+    ],
+    [
+      true,
+      true,
+    ],
+  ])('emits a formatted release workflow with git-cliff=%s and android=%s', async (includeGitCliff, includeAndroid) => {
     const file = releaseWorkflowFile({
       slug: 'maaxxxx',
       displayName: 'MaaXXXX',
       includeGitCliff,
+      includeAndroid,
     })
     expect(typeof file.content).toBe('string')
     await expect(
@@ -219,6 +237,198 @@ describe('workflow templates', () => {
     // data, and the offline retry still writes them when that data is unreachable.
     expect(content).toContain('--offline "$previous_stable_tag..HEAD"')
     expect(content).toContain('::warning::GitHub metadata is unavailable')
+  })
+})
+
+describe('android templates', () => {
+  const ANDROID_FILES = [
+    '.github/workflows/android-build.yml',
+    '.github/workflows/android.yml',
+    'Android/README.md',
+    'Android/profile.yaml',
+    'tools/android-packaging.mjs',
+  ]
+
+  it('writes exactly the documented file set for a pipeline project', () => {
+    const paths = androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent: false })
+      .map((file) => file.path)
+      .sort()
+
+    expect(paths).toEqual(ANDROID_FILES)
+    expect(paths).toHaveLength(5)
+  })
+
+  it('keeps the recipe and its README project-owned and the tooling refreshable', () => {
+    const files = androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent: false })
+    const byMode = (managed: boolean): string[] =>
+      files
+        .filter((file) => file.managed === managed)
+        .map((file) => file.path)
+        .sort()
+
+    // The recipe is hand-maintained from the first build on; MaaFwApp owns its schema. The resolver
+    // and the workflows follow the CLI so a probe rule or a toolchain pin can be shipped.
+    expect(byMode(false)).toEqual([
+      'Android/README.md',
+      'Android/profile.yaml',
+    ])
+    expect(byMode(true)).toEqual([
+      '.github/workflows/android-build.yml',
+      '.github/workflows/android.yml',
+      'tools/android-packaging.mjs',
+    ])
+  })
+
+  it('renders the recipe variant the project shape needs', () => {
+    const recipe = (includeAgent: boolean): string =>
+      String(
+        androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent }).find(
+          (file) => file.path === 'Android/profile.yaml',
+        )?.content ?? '',
+      )
+    const pipeline = recipe(false)
+    const agent = recipe(true)
+
+    expect(pipeline).not.toContain('{{')
+    expect(agent).not.toContain('{{')
+    expect(pipeline).toMatch(/^assets: \.\.$/m)
+    expect(pipeline).not.toMatch(/^agent:$/m)
+    expect(agent).toMatch(/^agent:$/m)
+    expect(agent).toContain('sourceDir: agent-dist')
+    // A recipe that lists `include` replaces the built-in whitelist, so the payload must be there.
+    expect(agent).toContain('  - agent/**')
+    // The application id is a lowercase package segment appended to com.aliothmoon.maafw, so a
+    // kebab-case project id cannot be copied verbatim.
+    for (const recipe of [
+      pipeline,
+      agent,
+    ]) {
+      expect(recipe).toMatch(/^ {2}id: maa_example$/m)
+      expect(recipe).toMatch(/^ {2}label: Maa Example$/m)
+    }
+  })
+
+  it('derives an application id the shell accepts, whatever the project id looks like', () => {
+    const recipeId = (slug: string): string =>
+      String(
+        androidFiles({ slug, displayName: 'x', includeAgent: false }).find(
+          (file) => file.path === 'Android/profile.yaml',
+        )?.content ?? '',
+      )
+
+    expect(androidAppId('m9a')).toBe('m9a')
+    expect(androidAppId('maa-helper')).toBe('maa_helper')
+    expect(androidAppId('maa--helper')).toBe('maa_helper')
+    expect(androidAppId('9a')).toBe('p9a')
+    for (const slug of [
+      'm9a',
+      'maa-helper',
+      '9a',
+      'proj.2',
+    ]) {
+      const appId = /^ {2}id: (\S+)$/m.exec(recipeId(slug))?.[1] ?? ''
+      expect(isValidAndroidAppId(appId), `${slug} → ${appId}`).toBe(true)
+    }
+  })
+
+  it('renders both workflows with no placeholder left behind', () => {
+    const files = androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent: false })
+    for (const path of [
+      '.github/workflows/android.yml',
+      '.github/workflows/android-build.yml',
+    ]) {
+      const content = String(files.find((file) => file.path === path)?.content ?? '')
+      // `${{ ... }}` is GitHub's own expression syntax and must survive rendering.
+      expect(content.replaceAll('${{', ''), path).not.toContain('{{')
+    }
+    const entry = String(files.find((file) => file.path === '.github/workflows/android.yml')?.content ?? '')
+    const build = String(files.find((file) => file.path === '.github/workflows/android-build.yml')?.content ?? '')
+    expect(entry).toContain('- "Android/**"')
+    expect(entry).toContain('uses: ./.github/workflows/android-build.yml')
+    expect(build).toContain('Android/MaaFwApp')
+    expect(build).toContain(`node-version: ${SUPPORTED_NODE_MAJOR}`)
+    expect(build).toContain('run: node tools/android-packaging.mjs')
+    expect(build).toContain('GITHUB_REF_TYPE')
+    expect(build).toContain('unzip -Z1')
+  })
+
+  it('renders every android file without a leftover placeholder', () => {
+    for (const includeAgent of [
+      false,
+      true,
+    ]) {
+      for (const file of androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent })) {
+        if (Buffer.isBuffer(file.content)) continue
+        expect(file.content.replaceAll('${{', ''), file.path).not.toContain('{{')
+      }
+    }
+  })
+
+  it('emits workflows and recipes a YAML parser accepts', async () => {
+    for (const includeAgent of [
+      false,
+      true,
+    ]) {
+      for (const file of androidFiles({ slug: 'maa-example', displayName: 'Maa Example', includeAgent })) {
+        if (!file.path.endsWith('.yml') && !file.path.endsWith('.yaml')) continue
+        await expect(
+          check(String(file.content), {
+            parser: 'yaml',
+            trailingComma: 'none',
+            tabWidth: 2,
+            printWidth: 100,
+          }),
+          file.path,
+        ).resolves.toBe(true)
+      }
+    }
+  })
+})
+
+describe('android packaging hook in the generated release workflow', () => {
+  it('renders the release workflow unchanged when the add-on is off', () => {
+    const content = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff: false,
+      includeAndroid: false,
+    }).content.toString()
+
+    expect(content).toContain('needs: package')
+    expect(content).not.toContain('needs: [package, android]')
+    expect(content).not.toContain('*.apk')
+    expect(content).not.toContain('android-build.yml')
+  })
+
+  it('waits for the android job and publishes the APKs when it is on', () => {
+    const content = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff: false,
+      includeAndroid: true,
+    }).content.toString()
+
+    expect(content).toContain('needs: [package, android]')
+    expect(content).toContain('release-assets/*.apk')
+    expect(content).toContain('uses: ./.github/workflows/android-build.yml')
+    // Desktop packages and the APK build in parallel; only the release job waits for both.
+    // The tag gate still matters: `release.yml` also runs on workflow_dispatch, where nothing
+    // publishes an APK.
+    expect(content).toMatch(
+      /android:\n {4}name: Build Android APK\n {4}if: startsWith\(github\.ref, 'refs\/tags\/'\)\n {4}uses:/,
+    )
+    expect(content).not.toMatch(/android:\n {4}name: Build Android APK\n {4}if: .*\n {4}needs: package/)
+  })
+
+  it('lists android before git-cliff so the generated needs stays stable', () => {
+    const content = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff: true,
+      includeAndroid: true,
+    }).content.toString()
+
+    expect(content).toContain('needs: [package, android, git_cliff]')
   })
 })
 

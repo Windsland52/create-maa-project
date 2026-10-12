@@ -362,6 +362,7 @@ export function setupChoices(language: PromptLanguage): Choice<SetupPreset>[] {
 const REPOSITORY_FEATURE_SET = [
   'dev-tools',
   'github',
+  'android',
   'vscode',
   'git-cliff',
   'auto-format',

@@ -7,6 +7,7 @@ import {
 } from './addons.js'
 import {
   addAgent,
+  addAndroid,
   addAutoFormat,
   addCommunity,
   addDependabot,
@@ -55,6 +56,8 @@ export async function applyIncrementalAddons(
           result = await addVscode(options, root)
         } else if (addon === 'github') {
           result = await addGithub(options, root)
+        } else if (addon === 'android') {
+          result = await addAndroid(options, root)
         } else if (addon === 'agent') {
           result = await addAgent(options, root)
         } else if (addon === 'resource-pack') {

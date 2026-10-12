@@ -17,7 +17,7 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 - agent 的多行日志不再丢内容。MFAAvalonia 逐行解析 agent 输出、只认带 level 前缀的行，多行消息的第二行起会被丢进 GUI 内部日志；现在逐行补前缀，并丢掉结尾换行造成的空尾行。loguru 与标准 logging 两条控制台路径合并到唯一渲染分支（`_CONSOLE_FORMAT` 走字段值，避免 callable format 的返回值被再当格式串去解析颜色标记），文件 sink 不再挂控制台 filter；MXU 侧补上转义白名单还原，只放行 `<font color="#RRGGBB">`、其余内容保持转义。`agent/utils/logger.py` 现将与上游 M9A 该版本逐字节一致
 
-已有项目：`android` 是独立 add-on，要用就执行 `create-maa-project --add android`——它会浅克隆外壳，克隆失败不阻断创建，只登记 `android-submodule` pending 与恢复命令。Agent 项目按上一条把 `maafw.version` 写成精确版本再 `--update python-deps`，否则会一直挂着 `android-version` pending。logger 修复在受管文件里，执行 `create-maa-project --update` 即可获得；tutorial 路径变更不用处理。
+已有项目：`android` 是独立 add-on，要用就执行 `create-maa-project --add android`——它会浅克隆外壳，克隆失败不阻断创建，只登记 `android-submodule` pending 与恢复命令。Agent 项目按上一条把 `maafw.version` 写成精确版本再 `--update python-deps`，否则会一直挂着 `android-version` pending。logger 修复在受管文件里，重跑 `create-maa-project --add agent` 即可获得（与模板不一致的受管文件会整体重写，手改过先确认；`--update` 的 8 个目标都不刷新 agent 文件）；tutorial 路径变更不用处理。
 
 [3.7.0]: https://github.com/Windsland52/create-maa-project/compare/v3.6.3...v3.7.0
 

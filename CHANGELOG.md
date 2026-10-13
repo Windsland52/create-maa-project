@@ -2,13 +2,15 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [3.7.1] - 2026-10-13
 
 ### 修复
 
 - Android 的 Agent 项目不再因为 vendored 外壳而红。`release.yml` 以 `submodules` 检出子模块，`ruff check .` 会一路扫进 `Android/MaaFwApp/scripts/*.py`，撞上上游脚本的 UTF-8 编码声明（`UP009`）——6 个桌面 `package` job 全挂在 `pnpm check:py`，`release` job 随之 skipped；同一个 commit 上 `check.yml`（不检子模块）反而是绿的。现在 Agent 项目的 `pyproject.toml` 在 `[tool.ruff]` 里带上 `extend-exclude = ["Android/MaaFwApp"]`（用 `extend-exclude` 而不是重写整个文件：`pyproject.toml` 还装着项目自己的 `[project].dependencies`）。启用 `android` 时创建即写入，`--add android` 与重跑 `--add agent` 也会把这行插进项目已有的 `pyproject.toml`；没启用 `android` 的项目逐字节不变
 
 已有项目：跑一次 `create-maa-project --add android`（或 `--add agent`）即补上这行，`--update` 的 8 个目标都不刷新 `pyproject.toml`。手工加等价：在 `[tool.ruff]` 里写 `extend-exclude = ["Android/MaaFwApp"]`。
+
+[3.7.1]: https://github.com/Windsland52/create-maa-project/compare/v3.7.0...v3.7.1
 
 ## [3.7.0] - 2026-10-12
 

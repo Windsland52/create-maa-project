@@ -137,6 +137,10 @@ the files:
   does not fail creation; it records an `android-submodule` pending action whose command is
   `git submodule add -b main …`.
 - `.gitignore` gains `Android/agent-dist/`: the agent runtime is a build artifact.
+- `pyproject.toml` gains `extend-exclude = ["Android/MaaFwApp"]` under `[tool.ruff]` (**Agent
+  projects**): `release.yml` checks submodules out, so an unscoped `ruff check .` reads the shell's own
+  `scripts/*.py`, trips `UP009`, and fails `pnpm check:py` in every `package` job — which is what keeps
+  the release from being created.
 - An **Agent** project also needs an exact `maafw==X` in `requirements.txt`: the Android Python binding
   only ships inside the MaaAgentCoreAndroid kernel release (`X-maafwY` tags), which is what pairs the
   kernel with the native libraries inside the APK. Without it the add-on records an `android-version`

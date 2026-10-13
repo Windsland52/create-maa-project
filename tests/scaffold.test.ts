@@ -608,6 +608,8 @@ describe('scaffold', () => {
     expect(pyproject).toContain('name = "maa-agent-test"\nversion = "0.1.0"')
     expect(pyproject).toContain('[tool.hatch.build.targets.wheel]\npackages = ["agent"]')
     expect(pyproject).toContain('[tool.ruff]')
+    // No android add-on, so there is no vendored shell to keep ruff out of.
+    expect(pyproject).not.toContain('extend-exclude')
     expect(pyproject).toContain('[tool.pyright]')
     expect(pyproject).toContain('extraPaths = ["agent"]')
     expect(pyproject).toContain('typeCheckingMode = "strict"')

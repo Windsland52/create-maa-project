@@ -19,6 +19,8 @@ import {
   ANDROID_GITIGNORE_LINE,
   ANDROID_PACKAGING_SCRIPT,
   ANDROID_PROFILE_PATH,
+  ANDROID_RUFF_EXCLUDE_COMMENT,
+  ANDROID_RUFF_EXCLUDE_LINE,
   androidAppId,
   androidProfileTemplate,
 } from './android.js'
@@ -287,8 +289,29 @@ export function withAndroidGitignoreSection(content: string, enabled = true): st
   return `${prefix}${ANDROID_GITIGNORE_COMMENT}\n${ANDROID_GITIGNORE_LINE}\n`
 }
 
+/**
+ * The ruff exclusion for the vendored shell. `pyproject.toml` is `managed` but carries project-owned
+ * content (`[project].dependencies` feeds `--update python-deps`), so `--add android` and a re-run of
+ * `--add agent` insert the line into the file the project owns instead of rewriting it; the generated
+ * content carries the same lines from creation.
+ */
+export function withAndroidRuffExclude(content: string, enabled = true): string {
+  if (!enabled) return content
+  const lines = content.split(/\r?\n/u)
+  if (lines.some((line) => line.trim() === ANDROID_RUFF_EXCLUDE_LINE)) return content
+  const header = lines.findIndex((line) => line.trim() === '[tool.ruff]')
+  if (header < 0) return content
+  // The line belongs to the `[tool.ruff]` table, so it goes before the next header — and after the
+  // section's last setting, not into the blank line that usually separates the two.
+  const nextHeader = lines.findIndex((line, index) => index > header && line.trimStart().startsWith('['))
+  let insertAt = nextHeader < 0 ? lines.length : nextHeader
+  while (insertAt > header + 1 && lines[insertAt - 1]?.trim() === '') insertAt -= 1
+  lines.splice(insertAt, 0, ANDROID_RUFF_EXCLUDE_COMMENT, ANDROID_RUFF_EXCLUDE_LINE)
+  return lines.join(content.includes('\r\n') ? '\r\n' : '\n')
+}
+
 export function agentFiles(
-  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion'>,
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion' | 'includeAndroid'>,
 ): ManagedFileInput[] {
   return [
     managed('.python-version', '3.13\n'),
@@ -898,15 +921,18 @@ function packageLicense(license: LicenseKind): string {
 }
 
 function agentPyproject(
-  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion'>,
+  input: Pick<ProjectTemplateInput, 'slug' | 'version' | 'displayName' | 'maafwVersion' | 'includeAndroid'>,
 ): string {
-  return pinnedMaafw(
-    template('agent/pyproject.toml', {
-      slug: input.slug,
-      version: input.version,
-      displayName: input.displayName,
-    }),
-    input.maafwVersion,
+  return withAndroidRuffExclude(
+    pinnedMaafw(
+      template('agent/pyproject.toml', {
+        slug: input.slug,
+        version: input.version,
+        displayName: input.displayName,
+      }),
+      input.maafwVersion,
+    ),
+    input.includeAndroid === true,
   )
 }
 

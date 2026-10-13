@@ -7,11 +7,13 @@ import { PYTHON_EMBED_VERSION, PYTHON_STANDALONE_MINOR } from '../src/assets.js'
 import { androidAppId, isValidAndroidAppId } from '../src/android.js'
 import { SUPPORTED_NODE_MAJOR } from '../src/node-support.js'
 import {
+  agentFiles,
   androidFiles,
   devToolFiles,
   githubFiles,
   releaseWorkflowFile,
   vscodeFiles,
+  withAndroidRuffExclude,
   type ProjectTemplateInput,
 } from '../src/templates.js'
 
@@ -382,6 +384,50 @@ describe('android templates', () => {
         ).resolves.toBe(true)
       }
     }
+  })
+})
+
+describe('agent pyproject ruff scope', () => {
+  const pyproject = (includeAndroid: boolean): string =>
+    String(
+      agentFiles({
+        slug: 'maa-example',
+        version: '0.1.0',
+        displayName: 'Maa Example',
+        includeAndroid,
+      }).find((file) => file.path === 'pyproject.toml')?.content ?? '',
+    )
+
+  it('excludes the vendored shell from ruff when the project has one', () => {
+    const content = pyproject(true)
+
+    expect(content).toContain('extend-exclude = ["Android/MaaFwApp"]')
+    // `release.yml` checks out submodules, so an unscoped `ruff check .` reads the shell's own
+    // scripts and fails on them (UP009). The line has to land inside [tool.ruff]: a stray line above
+    // the header would silently become nobody's setting, and one below would become a pyright key.
+    expect(content.indexOf('extend-exclude')).toBeGreaterThan(content.indexOf('[tool.ruff]'))
+    expect(content.indexOf('extend-exclude')).toBeLessThan(content.indexOf('[tool.pyright]'))
+  })
+
+  it('keeps a project without the shell byte-identical', () => {
+    const withoutShell = pyproject(false)
+
+    expect(withoutShell).not.toContain('extend-exclude')
+    expect(pyproject(true).replace(/^# Android\/MaaFwApp.*\n^extend-exclude.*\n/mu, '')).toBe(withoutShell)
+  })
+
+  it('inserts the same lines into a pyproject.toml the project already owns', () => {
+    const current = pyproject(false)
+    const patched = withAndroidRuffExclude(current)
+
+    expect(patched).toContain('extend-exclude = ["Android/MaaFwApp"]')
+    expect(patched.indexOf('extend-exclude')).toBeLessThan(patched.indexOf('[tool.pyright]'))
+    // `--add android` and `--add agent` both run more than once on the same project.
+    expect(withAndroidRuffExclude(patched)).toBe(patched)
+    expect(withAndroidRuffExclude(current, false)).toBe(current)
+    // A file without a [tool.ruff] table has nothing to extend, and inventing one would add settings
+    // the project never asked for.
+    expect(withAndroidRuffExclude('[project]\nname = "x"\n')).toBe('[project]\nname = "x"\n')
   })
 })
 

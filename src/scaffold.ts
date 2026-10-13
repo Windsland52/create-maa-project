@@ -29,6 +29,7 @@ import {
   vscodeFiles,
   withAgentDebugSession,
   withAndroidGitignoreSection,
+  withAndroidRuffExclude,
 } from './templates.js'
 import { ANDROID_SUBMODULE_BRANCH, ANDROID_SUBMODULE_PATH, ANDROID_SUBMODULE_URL } from './android.js'
 import type { ProjectTemplateInput } from './templates.js'
@@ -578,6 +579,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
         version: config.project.version,
         displayName: config.project.displayName,
         maafwVersion: config.maafw.version,
+        includeAndroid: hasAndroidPackaging(config),
       }),
       ...projectCustomSchemaFiles(true),
     ].filter((file) => !dependencyPaths.has(file.path))
@@ -589,10 +591,14 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
         continue
       }
       // pyproject.toml also carries project-owned content ([project].dependencies feeds
-      // `--update python-deps`), so only the requires-python drift is repaired in place.
+      // `--update python-deps`), so only the requires-python drift and the vendored-shell lint
+      // exclusion are repaired in place.
       if (file.path === 'pyproject.toml') {
         const content = await readText(fullPath)
-        const repaired = syncRequiresPython(content, config.python.requiresPython)
+        const repaired = withAndroidRuffExclude(
+          syncRequiresPython(content, config.python.requiresPython),
+          hasAndroidPackaging(config),
+        )
         if (repaired !== content) repairFiles.push({ ...file, content: repaired })
         continue
       }
@@ -657,6 +663,7 @@ async function addAgentLocked(_options: CliOptions, root: string): Promise<Scaff
       version: config.project.version,
       displayName: config.project.displayName,
       maafwVersion: config.maafw.version,
+      includeAndroid: hasAndroidPackaging(config),
     }),
     ...projectCustomSchemaFiles(true),
     {
@@ -941,6 +948,7 @@ async function addAndroidLocked(options: CliOptions, root: string): Promise<Scaf
       const written = new Set(result.written)
       const pending: PendingItem[] = []
       if (await syncAndroidGitignore(root)) written.add('.gitignore')
+      if (await syncAndroidRuffExclude(root)) written.add('pyproject.toml')
       await pinMaafwForAndroid(root, config, written)
       if (options.skipDownload) {
         pending.push(androidSubmodulePending('The Android shell checkout was skipped with --skip-download.'))
@@ -981,6 +989,22 @@ async function syncAndroidGitignore(root: string): Promise<boolean> {
   if (!(await exists(fullPath))) return false
   const current = await readText(fullPath)
   const next = withAndroidGitignoreSection(current)
+  if (next === current) return false
+  await trackProjectPathForBackup(root, relativePath)
+  await writeText(fullPath, next)
+  return true
+}
+
+/**
+ * Keeps the vendored shell out of the project's ruff run. The line lives in the `[tool.ruff]` table of
+ * an Agent project's `pyproject.toml`; a pipeline project has no pyproject and nothing to do.
+ */
+async function syncAndroidRuffExclude(root: string): Promise<boolean> {
+  const relativePath = 'pyproject.toml'
+  const fullPath = join(root, relativePath)
+  if (!(await exists(fullPath))) return false
+  const current = await readText(fullPath)
+  const next = withAndroidRuffExclude(current)
   if (next === current) return false
   await trackProjectPathForBackup(root, relativePath)
   await writeText(fullPath, next)

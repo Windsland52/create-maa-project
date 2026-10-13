@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runDoctor } from '../src/doctor.js'
 import { applyIncrementalAddons } from '../src/incremental-addons.js'
-import { createProject } from '../src/scaffold.js'
+import { addAgent, createProject } from '../src/scaffold.js'
 import type { CliOptions } from '../src/types.js'
 
 const execFileAsync = promisify(execFile)
@@ -153,6 +153,53 @@ describe('android add-on: project creation', () => {
 
     expect(result?.pending.map((item) => item.kind) ?? []).not.toContain('android-version')
   })
+
+  it('scopes the Agent project ruff run away from the vendored shell', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-ruff', template: 'agent', add: ['android'] }), { cwd: root })
+
+    const pyproject = await readFile(join(root, 'maa-android-ruff', 'pyproject.toml'), 'utf8')
+    // Every release package job runs `pnpm check:py` after checking out submodules, so upstream's
+    // coding comments would fail the whole release before packaging starts.
+    expect(pyproject).toContain('extend-exclude = ["Android/MaaFwApp"]')
+  })
+})
+
+describe('android add-on: --add agent on a shell project', () => {
+  it('gives the Agent project the ruff exclusion when it is added to a shell project', async () => {
+    const root = await tempRoot()
+    const projectRoot = await scaffoldProject(root, 'maa-android-then-agent', [
+      'github',
+      'vscode',
+      'android',
+    ])
+    expect(await readIfPresent(join(projectRoot, 'pyproject.toml'))).toBeUndefined()
+
+    await addAgent(options({ add: ['agent'] }), projectRoot)
+
+    const pyproject = await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')
+    expect(pyproject).toContain('extend-exclude = ["Android/MaaFwApp"]')
+  })
+
+  it('repairs a pyproject.toml that predates the exclusion', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-ruff-repair', template: 'agent', add: ['android'] }), {
+      cwd: root,
+    })
+    const projectRoot = join(root, 'maa-android-ruff-repair')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    // A project created before the template carried the line.
+    const stripped = (await readFile(pyprojectPath, 'utf8'))
+      .split(/\r?\n/)
+      .filter((line) => !line.startsWith('# Android/MaaFwApp') && !line.startsWith('extend-exclude'))
+      .join('\n')
+    await writeFile(pyprojectPath, stripped, 'utf8')
+
+    const result = await addAgent(options({ add: ['agent'] }), projectRoot)
+
+    expect(result.written).toContain('pyproject.toml')
+    expect(await readFile(pyprojectPath, 'utf8')).toContain('extend-exclude = ["Android/MaaFwApp"]')
+  })
 })
 
 describe('android add-on: --add android on an existing project', () => {
@@ -228,6 +275,27 @@ describe('android add-on: --add android on an existing project', () => {
     expect(await readFile(join(projectRoot, '.gitignore'), 'utf8')).toBe(firstIgnore)
     expect(second?.written).not.toContain('.gitmodules')
     expect(second?.written).not.toContain('.gitignore')
+  })
+
+  it('adds the ruff exclusion to a pyproject.toml the project already owns', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-ruff-add', template: 'agent' }), { cwd: root })
+    const projectRoot = join(root, 'maa-android-ruff-add')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    const before = await readFile(pyprojectPath, 'utf8')
+    expect(before).not.toContain('extend-exclude')
+
+    const result = await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+
+    const patched = await readFile(pyprojectPath, 'utf8')
+    expect(result?.written).toContain('pyproject.toml')
+    expect(patched).toContain('extend-exclude = ["Android/MaaFwApp"]')
+    // Everything the project owned survives: --update python-deps reads [project].dependencies.
+    expect(patched).toContain('dependencies = [\n    "loguru",\n    "maafw",\n]')
+
+    const second = await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+    expect(second?.written).not.toContain('pyproject.toml')
+    expect(await readFile(pyprojectPath, 'utf8')).toBe(patched)
   })
 
   it('pins an exact maafw version into pyproject.toml and waits for the export', async () => {

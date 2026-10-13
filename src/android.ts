@@ -20,6 +20,16 @@ export const ANDROID_GITIGNORE_COMMENT =
   '# Agent runtimes for the Android package are built from requirements.txt and must not be committed.'
 export const ANDROID_GITIGNORE_LINE = `${ANDROID_AGENT_DIST_PATH}/`
 
+/**
+ * The shell is third-party code: CI checks it out into the project (`submodules: true` in
+ * `release.yml`), so the project's own linters must not walk into it. Ruff is the one that bites —
+ * upstream's `scripts/*.py` carry a UTF-8 coding comment that the generated `UP` ruleset rejects,
+ * which fails every release job before packaging starts.
+ */
+export const ANDROID_RUFF_EXCLUDE_COMMENT =
+  '# Android/MaaFwApp 是 vendored 的外壳 submodule（Aliothmoon/MaaFwApp），父项目不 lint 第三方脚本。'
+export const ANDROID_RUFF_EXCLUDE_LINE = `extend-exclude = ["${ANDROID_SUBMODULE_PATH}"]`
+
 export const ANDROID_PACKAGING_SCRIPT = 'tools/android-packaging.mjs'
 export const ANDROID_ENTRY_WORKFLOW = '.github/workflows/android.yml'
 export const ANDROID_BUILD_WORKFLOW = '.github/workflows/android-build.yml'

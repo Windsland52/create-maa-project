@@ -23,6 +23,7 @@ import {
   downloadManifestAssets,
   downloadProjectManifestAssets,
   resolveProductAssetManifest,
+  resolveProductReleaseTag,
   resolveOcrManifestFromEnvironment,
   resolveRuntimePlatform,
   writeDownloadedAssets,
@@ -33,8 +34,10 @@ import {
   PYTHON_EMBED_VERSION,
   type ProductAssetManifestRequest,
   type ProductAssetManifestResolver,
+  type ProductReleaseTagResolver,
 } from './assets.js'
-import { baseProjectFiles } from './templates.js'
+import { baseProjectFiles, pinMaafwToVersion } from './templates.js'
+import { normalizeMaafwVersion } from './maafw-version.js'
 import type { CliOptions, MaaProjectConfig, ManagedFileInput, OcrConfig, PendingItem, ScaffoldResult } from './types.js'
 import {
   copyFileAtomic,
@@ -113,6 +116,7 @@ type UpdateEnvironment = {
   commandRunner?: UpdateCommandRunner
   ocrManifestResolver?: AssetManifestResolver
   productManifestResolver?: ProductAssetManifestResolver
+  productReleaseResolver?: ProductReleaseTagResolver
   assetDownloader?: AssetDownloader
   onProgress?: ProgressReporter
   onDownloadProgress?: DownloadProgressReporter
@@ -177,7 +181,15 @@ export async function recordUpdateRequests(
           ]) {
             await trackProjectPathForBackup(root, path)
           }
-          await updatePythonDeps(root, commandRunner)
+          // The reconciler only writes pyproject.toml for projects that pair with the Android kernel.
+          if (isAddonEnabled(config, 'android')) await trackProjectPathForBackup(root, 'pyproject.toml')
+          const { pinnedPyproject } = await updatePythonDeps(root, commandRunner, {
+            config,
+            releaseResolver:
+              environment.productReleaseResolver ??
+              ((request) =>
+                resolveProductReleaseTag(request, environment.signal ? { signal: environment.signal } : {})),
+          })
           for (const path of [
             'uv.lock',
             'requirements.in',
@@ -185,6 +197,7 @@ export async function recordUpdateRequests(
           ]) {
             if (await exists(join(root, path))) written.add(path)
           }
+          if (pinnedPyproject) written.add('pyproject.toml')
           continue
         }
         if (target === 'python-runtime') {
@@ -410,10 +423,32 @@ async function updateNodeDeps(root: string, commandRunner: UpdateCommandRunner):
   ])
 }
 
-async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner): Promise<void> {
+/**
+ * Synchronizes the Agent's Python dependencies. For a project with the Android add-on this is also
+ * the one place that reconciles the three files that carry a MaaFramework version: the exact pin is
+ * written into `pyproject.toml` before uv locks, so `requirements.txt` (what the APK resolver reads)
+ * and the desktop package download (`maafw.channel` / `maafw.version`) cannot drift apart. Desktop
+ * only projects keep the old behavior: `maafw` stays floating and uv — and Dependabot's
+ * `lockfile-only` updates — own the version.
+ */
+async function updatePythonDeps(
+  root: string,
+  commandRunner: UpdateCommandRunner,
+  context: {
+    config: MaaProjectConfig
+    releaseResolver: ProductReleaseTagResolver
+  },
+): Promise<{ pinnedPyproject: boolean }> {
   if (!(await exists(join(root, 'pyproject.toml')))) {
     throw new Error('--update python-deps requires an Agent project with pyproject.toml.')
   }
+  // Only the Android package consumes the exact pin: its kernel release pairs one binding version,
+  // so the three copies of that version have to be written from a single resolution. Desktop-only
+  // projects leave `maafw` floating on purpose so Dependabot can move `uv.lock`.
+  const androidTarget = isAddonEnabled(context.config, 'android')
+    ? await resolveAndroidMaafwTarget(context.config, context.releaseResolver)
+    : undefined
+  const pinnedPyproject = androidTarget !== undefined && (await pinMaafwInPyproject(root, androidTarget))
   for (const relativePath of ['requirements.in', 'uv.lock', 'requirements.txt']) {
     const path = join(root, relativePath)
     if (await exists(path)) await copyFileAtomic(path, path)
@@ -455,6 +490,63 @@ async function updatePythonDeps(root: string, commandRunner: UpdateCommandRunner
   const headerEnd = lines.findIndex((line) => !line.startsWith('#'))
   lines.splice(headerEnd < 0 ? lines.length : headerEnd, 0, '# Dependabot: use --universal when updating this file.')
   await writeFileAtomic(requirementsPath, lines.join('\n'))
+  if (androidTarget !== undefined) await assertExportedMaafw(requirementsPath, androidTarget)
+  return { pinnedPyproject }
+}
+
+/**
+ * `maa-project.json` is the declaration, `uv` is the resolver: an exact `maafw.version` wins, and an
+ * empty one follows the configured channel so a beta channel pulls the same prerelease the desktop
+ * package download uses.
+ */
+async function resolveAndroidMaafwTarget(
+  config: MaaProjectConfig,
+  releaseResolver: ProductReleaseTagResolver,
+): Promise<string> {
+  const declared = (config.maafw.version ?? '').trim()
+  if (declared !== '') return declared
+  let release: Awaited<ReturnType<ProductReleaseTagResolver>>
+  try {
+    release = await releaseResolver({ product: 'MaaFramework', channel: config.maafw.channel })
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Could not resolve the MaaFramework ${config.maafw.channel || 'stable'} channel: ${reason}. ` +
+        'Set an exact maafw.version in maa-project.json to skip channel resolution, then rerun --update python-deps.',
+    )
+  }
+  if (release === undefined || release.version.trim() === '') {
+    throw new Error(
+      'MaaFramework release resolution returned no version; set an exact maafw.version in maa-project.json ' +
+        'to skip channel resolution, then rerun --update python-deps.',
+    )
+  }
+  return release.version
+}
+
+async function pinMaafwInPyproject(root: string, version: string): Promise<boolean> {
+  const path = join(root, 'pyproject.toml')
+  const current = await readText(path)
+  const next = pinMaafwToVersion(current, version)
+  if (next === current) return false
+  await writeFileAtomic(path, next)
+  return true
+}
+
+async function assertExportedMaafw(requirementsPath: string, target: string): Promise<void> {
+  const exported = /^maafw==(\S+)/m.exec(await readText(requirementsPath))?.[1]
+  if (exported === undefined) {
+    throw new Error(
+      'uv export did not pin maafw, so the Android bundle cannot be paired with a kernel release ' +
+        `(expected maafw==${target}). Check [project].dependencies in pyproject.toml.`,
+    )
+  }
+  if (normalizeMaafwVersion(exported) !== normalizeMaafwVersion(target)) {
+    throw new Error(
+      `uv exported maafw ${exported} but the Android pairing target is ${target}; the APK would mix two ` +
+        'framework versions. Align maafw.version and pyproject.toml, then rerun --update python-deps.',
+    )
+  }
 }
 
 async function updatePythonRuntime(

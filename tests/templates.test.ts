@@ -350,6 +350,7 @@ describe('android templates', () => {
     expect(build).toContain('Android/MaaFwApp')
     expect(build).toContain(`node-version: ${SUPPORTED_NODE_MAJOR}`)
     expect(build).toContain('run: node tools/android-packaging.mjs')
+    expect(build).toContain('uv export --frozen')
     expect(build).toContain('GITHUB_REF_TYPE')
     expect(build).toContain('unzip -Z1')
   })

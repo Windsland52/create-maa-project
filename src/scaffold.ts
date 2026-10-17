@@ -22,7 +22,7 @@ import {
   interfaceResourceItems,
   maatoolsConfigFile,
   optimizeImagesFiles,
-  pinnedMaafwRequirement,
+  pinMaafwToVersion,
   projectCustomSchemaFiles,
   releaseWorkflowFile,
   schemaSyncFiles,
@@ -1024,7 +1024,7 @@ async function pinMaafwForAndroid(root: string, config: MaaProjectConfig, writte
   const fullPath = join(root, relativePath)
   if (!(await exists(fullPath))) return
   const current = await readText(fullPath)
-  const next = pinnedMaafwRequirement(current, version)
+  const next = pinMaafwToVersion(current, version)
   if (next === current) return
   await trackProjectPathForBackup(root, relativePath)
   await writeText(fullPath, next)

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { stat } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { readProjectConfig } from './project.js'
+import { normalizeMaafwVersion } from './maafw-version.js'
 import type { MaaProjectConfig } from './types.js'
 import { normalizeControllerKind } from './controllers.js'
 import { enabledResourcePacks, hasDevTools, hasGithubAutomation, isAddonEnabled } from './features.js'
@@ -301,7 +302,7 @@ async function checkAndroidPackaging(root: string, config: MaaProjectConfig, lin
       ok = false
     } else {
       const declared = (config.maafw.version ?? '').trim()
-      if (declared !== '' && declared !== requirementsPin) {
+      if (declared !== '' && normalizeMaafwVersion(declared) !== normalizeMaafwVersion(requirementsPin)) {
         lines.push(
           `[ERR] maa-project.json pins maafw ${declared} but requirements.txt pins ${requirementsPin}; the APK would mix two versions.`,
         )
@@ -311,7 +312,10 @@ async function checkAndroidPackaging(root: string, config: MaaProjectConfig, lin
         ok = false
       }
       const pyprojectPin = await requirementPin(join(root, 'pyproject.toml'), /"maafw==([^"]+)"/)
-      if (pyprojectPin !== undefined && pyprojectPin !== requirementsPin) {
+      if (
+        pyprojectPin !== undefined &&
+        normalizeMaafwVersion(pyprojectPin) !== normalizeMaafwVersion(requirementsPin)
+      ) {
         lines.push(
           `[ERR] pyproject.toml pins maafw ${pyprojectPin} but requirements.txt pins ${requirementsPin}; uv has not exported the change.`,
         )

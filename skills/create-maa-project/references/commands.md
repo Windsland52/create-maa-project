@@ -151,7 +151,11 @@ android` fails the clone and lands in that pending action.
 - An Agent project needs an exact `maafw==X` in `requirements.txt` (the Android Python binding only
   ships inside the MaaAgentCoreAndroid kernel release); otherwise the add-on records an
   `android-version` pending action with `create-maa-project --update python-deps` as its command. With
-  an exact `maafw.version` in `maa-project.json`, `--add android` pins `pyproject.toml` too.
+  an exact `maafw.version` in `maa-project.json`, `--add android` pins `pyproject.toml` too; when it is
+  empty, `--update python-deps` resolves `maafw.channel` and pins that version instead.
+  Pre-releases pair as well: kernel and release tags keep the released spelling
+  (`3.13.15-maafw5.15.0-beta.1`, `v5.15.0-beta.1`) while `requirements.txt` carries the PEP 440-normalized
+  form `uv export` writes (`5.15.0b1`); the resolver and doctor compare normalized versions.
 - With `github` enabled, `release.yml` gains an `android` job that runs in parallel with `package`;
   `release-assets/*.apk` is published, and the release job's `needs` becomes `[package, android]`
   (`[package, android, git_cliff]` with git-cliff). A tag release without `KEYSTORE_BASE64` fails.
@@ -171,6 +175,14 @@ packages while local runs keep working. `--update python-runtime` downloads the 
 interpreter for one platform (`CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>`) into
 `.create-maa-project/runtime/python/<platform>` and reinstalls from `requirements.txt`, so run
 `python-deps` first after a dependency change.
+
+With the `android` add-on, `--update python-deps` also reconciles the MaaFramework version: an exact
+`maafw.version` wins, otherwise the newest release of `maafw.channel` (`beta` / `alpha` include
+prereleases). It pins `maafw==X` into `pyproject.toml` before `uv lock` / `uv export`, then verifies
+the exported `requirements.txt` still carries the same version (PEP 440-normalized) and fails on
+drift. Without `android`, `maafw` stays floating so uv and Dependabot's `lockfile-only` updates own
+it. The release workflows re-export `requirements.txt` from `uv.lock` (`uv export --frozen`) before
+packaging, so merged Dependabot uv PRs need no manual re-export.
 
 ## Common options
 

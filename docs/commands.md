@@ -124,9 +124,13 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 - **Agent 项目**需要 `requirements.txt` 里的精确 `maafw==X`：Android 的 Python 绑定只随内核
   （`MaaAgentCoreAndroid` 的 `X-maafwY` tag）发布，CI 按它配对内核与 APK 内的原生库。拿不到精确版本时
   登记 `android-version` pending；`maa-project.json` 的 `maafw.version` 填了精确版本时，`--add android`
-  会把 `pyproject.toml` 的 `maafw` 一并钉住，再跑 `--update python-deps` 让 uv 把钉版导出到
-  `requirements.txt`。上游发了补丁版而内核还没跟上时，CI 会降级到不高于固定版本的最高配对并打
-  `::warning::`（APK 内仍是同版本，只是比 requirements 固定得旧）；固定版本比内核所有配对都旧才报错。
+  会把 `pyproject.toml` 的 `maafw` 一并钉住；为空时由 `--update python-deps` 按 `maafw.channel` 解析并
+  钉住。两条路径都靠 `--update python-deps` 把钉版导出到 `requirements.txt`。上游发了补丁版而内核还没
+  跟上时，CI 会降级到不高于固定版本的最高配对并打 `::warning::`（APK 内仍是同版本，只是比 requirements
+  固定得旧）；固定版本比内核所有配对都旧才报错。
+  预发布版本同样能配对：内核 tag 与 release tag 用发布原文（`3.13.15-maafw5.15.0-beta.1`、
+  `v5.15.0-beta.1`），`requirements.txt` 里是 uv 导出的归一形式（`5.15.0b1`），resolver 与 `--doctor`
+  都先按 PEP 440 归一再比较，`maa-project.json` 的 `maafw.version` 写哪种拼写都能匹配。
 - 带 `.so` 的原生 Python 包由 resolver 按 Chaquopy 索引**逐包探测**后给出降级参数：桌面 pin 在索引上
   没有当前 CPython 的构建就钉到索引最高可用版，索引上没有该包（纯 Python）不钉，索引有构建但没有
   当前 CPython 时 CI 直接报错，而不是让 pip 在构建中途失败。
@@ -194,6 +198,16 @@ Agent 项目的 Python 依赖是一条两级链路，改依赖时两步都要走
 （`tools/sync-runtime.mjs` 发现该文件缺失会直接报错），所以只 `uv add` 的结果是本地一切正常、打出的
 包里没有新依赖。每次改完依赖，把 `pyproject.toml`、`uv.lock`、`requirements.in`、`requirements.txt`
 一起提交。
+
+对启用 `android` 的 Agent 项目，`--update python-deps` 还负责对齐 MaaFramework 版本：目标取
+`maa-project.json` 的精确 `maafw.version`，为空则按 `maafw.channel` 解析最新发布（`beta` / `alpha`
+含预发布），先把该版本钉进 `pyproject.toml` 的 `maafw==X` 再 `uv lock` / `uv export`，最后校验导出的
+`requirements.txt` 仍是同一版本（按 PEP 440 归一后比较，不一致直接报错，不让 APK 与桌面资产各用一套）。
+没有 `android` 的 Agent 项目不受影响：`maafw` 保持浮动，由 uv 与 Dependabot 的 `lockfile-only` 更新驱动。
+发版 workflow（桌面 `release.yml` 与 Android 的 `android-build.yml`）在打包前会用 `uv export --frozen`
+从 `uv.lock` 重新导出 `requirements.txt`，所以合并 Dependabot 的 uv PR 后不用手工重导；`--update
+python-deps` 只负责把仓库里那份文件同步到最新（本地开发与提交用）。`--frozen` 会在 `pyproject.toml` 与
+`uv.lock` 不一致时直接失败，而不是悄悄用旧 lock。
 
 `--update python-runtime` 用 `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>` 指定平台（一次一个），
 把内嵌解释器下载到 `.create-maa-project/runtime/python/<platform>`，并按 `requirements.txt` 重装依赖；

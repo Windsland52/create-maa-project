@@ -193,6 +193,42 @@ export async function resolveProductAssetManifestFromGithubRelease(
   return parseGithubReleaseManifest(config, release, channel, selectedPlatform)
 }
 
+export type ProductReleaseTagRequest = {
+  product: string
+  channel?: string
+  version?: string
+}
+
+export type ProductReleaseTag = {
+  tag: string
+  version: string
+}
+
+export type ProductReleaseTagResolver = (request: ProductReleaseTagRequest) => Promise<ProductReleaseTag | undefined>
+
+/**
+ * Resolves just the release a product selector points at, without downloading its manifest. Callers
+ * that have to pin another file to the same release — an Agent project pins its Python `maafw`
+ * binding to the MaaFramework release its Android kernel pairs with — use this so the channel is
+ * resolved by one implementation rather than by a second copy of the release rules.
+ */
+export async function resolveProductReleaseTag(
+  request: ProductReleaseTagRequest,
+  options: ProductAssetManifestResolveOptions = {},
+): Promise<ProductReleaseTag | undefined> {
+  const config = productReleaseConfig(request.product)
+  if (!config) return undefined
+  const channel = normalizeReleaseChannel(request.channel)
+  const version = request.version?.trim() ?? ''
+  const release = version
+    ? await fetchGithubReleaseByTag(config, version, options.fetchJson, options.signal)
+    : await fetchGithubReleaseByChannel(config, channel, options.fetchJson, options.signal)
+  if (!isRecord(release) || typeof release.tag_name !== 'string' || release.tag_name.trim() === '') {
+    throw new Error(`Invalid GitHub release payload for ${config.product}.`)
+  }
+  return { tag: release.tag_name, version: release.tag_name.replace(/^v/i, '') }
+}
+
 export async function downloadManifestAssets(
   manifest: AssetManifest,
   options: {
@@ -612,11 +648,6 @@ function isIgnoredArchiveEntry(path: string): boolean {
   return lower === '.ds_store' || lower.endsWith('/.ds_store') || lower.startsWith('__macosx/')
 }
 
-/**
- * Upstream tags are v-prefixed (`v5.13.1`) while a pinned version is often written without it, so a
- * tag that does not resolve is retried with the other spelling. The first failure is the one that
- * surfaces when neither resolves, which keeps the message tied to what the config asked for.
- */
 async function fetchGithubReleaseByTag(
   config: ProductReleaseConfig,
   tag: string,
@@ -635,17 +666,36 @@ async function fetchGithubReleaseByTag(
   throw failure
 }
 
+/**
+ * Upstream tags are v-prefixed (`v5.13.1`) while a pinned version is often written without it, so a
+ * tag that does not resolve is retried with the other spelling. Pre-releases add a second axis:
+ * `uv export` and PEP 440 write the normalized form (`5.15.0b1`) while the release tag keeps the
+ * released form (`v5.15.0-beta.1`), so the expanded spelling is retried too. The first failure is
+ * the one that surfaces when none of them resolve, which keeps the message tied to what the config
+ * asked for.
+ */
 function releaseTagCandidates(tag: string): string[] {
   const pinned = tag.trim()
-  const alternate = /^v/i.test(pinned) ? pinned.slice(1) : `v${pinned}`
-  return alternate
-    ? [
-        pinned,
-        alternate,
-      ]
-    : [
-        pinned,
-      ]
+  const candidates: string[] = []
+  for (const spelling of new Set([
+    pinned,
+    expandPrereleaseSpelling(pinned),
+  ])) {
+    candidates.push(spelling, /^v/i.test(spelling) ? spelling.slice(1) : `v${spelling}`)
+  }
+  return candidates
+}
+
+/** `5.15.0b1` / `v5.15.0b1` -> `v5.15.0-beta.1`; anything already in release form is returned as-is. */
+function expandPrereleaseSpelling(tag: string): string {
+  const match = /^(v?)(\d+(?:\.\d+)*)(a|b|rc|c)(\d+)$/i.exec(tag)
+  if (match === null) return tag
+  const prefix = match[1] ?? ''
+  const release = match[2] ?? ''
+  const kind = (match[3] ?? '').toLowerCase()
+  const number = match[4] ?? ''
+  const word = kind === 'a' ? 'alpha' : kind === 'b' ? 'beta' : 'rc'
+  return `${prefix}${release}-${word}.${number}`
 }
 
 function fetchTaggedGithubRelease(

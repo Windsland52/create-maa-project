@@ -39,6 +39,7 @@ import {
   downloadUrl,
   extractProjectArchiveAssets,
   resolveProductAssetManifestFromGithubRelease,
+  resolveProductReleaseTag,
   type DownloadProgress,
 } from '../src/assets.js'
 import { sha256 } from '../src/utils.js'
@@ -786,6 +787,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('actions/setup-python@v7')
     expect(releaseWorkflow).toContain('astral-sh/setup-uv@v9.0.0')
     expect(releaseWorkflow).toContain('pnpm check:py')
+    expect(releaseWorkflow).toContain('uv export --frozen')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
     expect(releaseWorkflow).toContain('-${gui_upper}.${{ matrix.ext }}"')
@@ -3311,6 +3313,47 @@ export default defineConfig({
 
     expect(beta).toMatchObject({ tag: 'v5.11.0-rc.1', channel: 'beta' })
 
+    // `uv export` writes the PEP 440-normalized form; the release tag keeps the released one, so a
+    // pinned beta is retried in the expanded spelling before the resolver gives up.
+    const pinnedBeta = await resolveProductAssetManifestFromGithubRelease(
+      { product: 'MaaFramework', channel: 'stable', version: '5.15.0b1', platform: 'linux-x64' },
+      {
+        fetchJson: async (url) => {
+          if (url !== 'https://api.github.com/repos/MaaXYZ/MaaFramework/releases/tags/v5.15.0-beta.1') {
+            throw new Error(`HTTP 404: ${url}`)
+          }
+          return {
+            tag_name: 'v5.15.0-beta.1',
+            assets: [
+              {
+                name: 'MAA-linux-x86_64-v5.15.0-beta.1.zip',
+                browser_download_url: 'https://example.test/maafw-pinned-beta.zip',
+                digest: `sha256:${'a'.repeat(64)}`,
+                size: 1,
+              },
+            ],
+          }
+        },
+      },
+    )
+
+    expect(pinnedBeta).toMatchObject({ tag: 'v5.15.0-beta.1' })
+
+    const tagOnly = await resolveProductReleaseTag(
+      { product: 'MaaFramework', channel: 'beta' },
+      {
+        fetchJson: async (url) => {
+          expect(url).toBe('https://api.github.com/repos/MaaXYZ/MaaFramework/releases?per_page=100')
+          return [
+            { tag_name: 'v5.15.0-beta.1', prerelease: true, assets: [] },
+            { tag_name: 'v5.14.3', prerelease: false, assets: [] },
+          ]
+        },
+      },
+    )
+
+    expect(tagOnly).toEqual({ tag: 'v5.15.0-beta.1', version: '5.15.0-beta.1' })
+
     const python = await resolveProductAssetManifestFromGithubRelease(
       { product: 'Python', channel: '20260610', platform: 'osx-arm64' },
       {
@@ -5761,7 +5804,135 @@ export default defineConfig({
     )
     expect(result.pending.some((item) => item.kind === 'node-deps')).toBe(false)
     expect(result.pending.some((item) => item.kind === 'python-deps')).toBe(false)
+    // Desktop-only Agent projects keep `maafw` floating: Dependabot's lockfile updates own it.
+    expect(await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')).toContain('"maafw",')
     await expect(runSchemaValidator(projectRoot)).resolves.toBeDefined()
+  })
+
+  it('pins the Android pairing target into pyproject before uv locks', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-android-target-pin',
+        template: 'agent',
+        add: [
+          'android',
+        ],
+        skipDownload: true,
+      }),
+    )
+    const projectRoot = join(root, 'maa-android-target-pin')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { maafw: { version: string } }
+    config.maafw.version = '5.15.0-beta.1'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    const pinsAtLock: string[] = []
+    const result = await recordUpdateRequests(defaultOptions({ update: ['python-deps'] }), {
+      productReleaseResolver: async () => {
+        throw new Error('an exact maafw.version must skip channel resolution')
+      },
+      commandRunner: async (cwd, command, args) => {
+        if (command !== 'uv') return
+        if (args[0] === 'run') {
+          await writeFile(join(cwd, 'requirements.in'), 'loguru\nmaafw==5.15.0-beta.1\n', 'utf8')
+        }
+        if (args[0] === 'lock') {
+          pinsAtLock.push(await readFile(join(cwd, 'pyproject.toml'), 'utf8'))
+          await writeFile(join(cwd, 'uv.lock'), '# lock\n', 'utf8')
+        }
+        if (args[0] === 'export') {
+          // uv writes the PEP 440-normalized spelling even when pyproject carries the release one.
+          await writeFile(join(cwd, 'requirements.txt'), 'loguru==0.7.3\nmaafw==5.15.0b1\n', 'utf8')
+        }
+      },
+    })
+
+    expect(pinsAtLock).toHaveLength(1)
+    expect(pinsAtLock[0]).toContain('"maafw==5.15.0-beta.1"')
+    expect(await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')).toContain('"maafw==5.15.0-beta.1"')
+    expect(result.written).toEqual(expect.arrayContaining(['pyproject.toml', 'requirements.txt']))
+  })
+
+  it('resolves an empty maafw.version from the channel and pins the same release', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-android-channel-pin',
+        template: 'agent',
+        add: [
+          'android',
+        ],
+        skipDownload: true,
+      }),
+    )
+    const projectRoot = join(root, 'maa-android-channel-pin')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { maafw: { channel: string } }
+    config.maafw.channel = 'beta'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    const requests: Array<{ product: string; channel: string | undefined }> = []
+    await recordUpdateRequests(defaultOptions({ update: ['python-deps'] }), {
+      productReleaseResolver: async (request) => {
+        requests.push({ product: request.product, channel: request.channel })
+        return { tag: 'v5.15.0-beta.1', version: '5.15.0-beta.1' }
+      },
+      commandRunner: async (cwd, command, args) => {
+        if (command !== 'uv') return
+        if (args[0] === 'run') {
+          await writeFile(join(cwd, 'requirements.in'), 'loguru\nmaafw==5.15.0-beta.1\n', 'utf8')
+        }
+        if (args[0] === 'lock') await writeFile(join(cwd, 'uv.lock'), '# lock\n', 'utf8')
+        if (args[0] === 'export') {
+          await writeFile(join(cwd, 'requirements.txt'), 'loguru==0.7.3\nmaafw==5.15.0b1\n', 'utf8')
+        }
+      },
+    })
+
+    expect(requests).toEqual([
+      {
+        product: 'MaaFramework',
+        channel: 'beta',
+      },
+    ])
+    expect(await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')).toContain('"maafw==5.15.0-beta.1"')
+  })
+
+  it('fails when uv exports a maafw version other than the pairing target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(
+      defaultOptions({
+        name: 'maa-android-target-drift',
+        template: 'agent',
+        add: [
+          'android',
+        ],
+        skipDownload: true,
+      }),
+    )
+    const projectRoot = join(root, 'maa-android-target-drift')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { maafw: { version: string } }
+    config.maafw.version = '5.15.0-beta.1'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    process.chdir(projectRoot)
+
+    await expect(
+      recordUpdateRequests(defaultOptions({ update: ['python-deps'] }), {
+        commandRunner: async (cwd, command, args) => {
+          if (command !== 'uv') return
+          if (args[0] === 'run') await writeFile(join(cwd, 'requirements.in'), 'maafw==5.15.0-beta.1\n', 'utf8')
+          if (args[0] === 'lock') await writeFile(join(cwd, 'uv.lock'), '# lock\n', 'utf8')
+          if (args[0] === 'export') await writeFile(join(cwd, 'requirements.txt'), 'maafw==5.14.3\n', 'utf8')
+        },
+      }),
+    ).rejects.toThrow(/the APK would mix two framework versions/)
   })
 
   it('updates Python dependency files without modifying external hard links', async () => {

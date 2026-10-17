@@ -968,6 +968,18 @@ export function pinnedMaafwRequirement(content: string, version: string): string
 }
 
 /**
+ * Rewrites whatever `maafw` requirement `pyproject.toml` already carries to an exact pin. Unlike
+ * `pinnedMaafwRequirement` this also replaces an existing pin or range: an Agent project with the
+ * Android add-on has exactly one owner for that version (`maa-project.json` or the channel), so a
+ * stale hand-edited pin has to move with it rather than block the update.
+ */
+export function pinMaafwToVersion(content: string, version: string): string {
+  const normalized = version.trim()
+  if (normalized === '') return content
+  return content.replace(/^(\s*)"maafw(?:[<>=!~][^"]*)?"(\s*,?\s*)$/m, `$1"maafw==${normalized}"$2`)
+}
+
+/**
  * `maafw` is unpinned by default: the desktop project follows whatever uv resolves. An Android
  * package that carries an agent cannot: the Android binding only ships inside the
  * MaaAgentCoreAndroid kernel release, so the version the kernel pairs with has to be the version

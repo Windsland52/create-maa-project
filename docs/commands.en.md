@@ -145,10 +145,14 @@ the files:
   only ships inside the MaaAgentCoreAndroid kernel release (`X-maafwY` tags), which is what pairs the
   kernel with the native libraries inside the APK. Without it the add-on records an `android-version`
   pending action. When `maa-project.json` carries an exact `maafw.version`, `--add android` pins
-  `pyproject.toml` to it as well, and `--update python-deps` exports that pin to `requirements.txt`.
+  `pyproject.toml` to it as well; when it is empty, `--update python-deps` resolves `maafw.channel`
+  and pins that version instead. Either way `--update python-deps` exports the pin to `requirements.txt`.
   When upstream ships a patch release before the kernel catches up, CI degrades to the highest pairing
   at or below the pin and prints a `::warning::` (the APK stays internally consistent, it is just older
-  than the pin); only a pin older than every kernel pairing is an error.
+  than the pin); only a pin older than every kernel pairing is an error. Pre-releases pair too: kernel
+  and release tags keep the released spelling (`3.13.15-maafw5.15.0-beta.1`, `v5.15.0-beta.1`) while
+  `requirements.txt` carries the PEP 440-normalized form `uv export` produces (`5.15.0b1`); the resolver
+  and `--doctor` compare normalized versions, and `maafw.version` accepts either spelling.
 - Native Python packages (the ones carrying `.so` files) are probed per package against the Chaquopy
   index, and the resolver emits the downgrade arguments: a desktop pin with no build for the kernel
   CPython is pinned to the highest version the index has, a package the index does not carry at all is
@@ -240,6 +244,19 @@ move until you run `create-maa-project --update python-deps`, which regenerates
 leaves local runs working while the built package ships without the new dependency. After every
 dependency change, commit `pyproject.toml`, `uv.lock`, `requirements.in`, and `requirements.txt`
 together.
+
+For an Agent project with the `android` add-on, `--update python-deps` also reconciles the
+MaaFramework version: the target is an exact `maafw.version` from `maa-project.json`, or the newest
+release of `maafw.channel` (`beta` / `alpha` include prereleases) when that is empty. It pins
+`maafw==X` into `pyproject.toml` before `uv lock` / `uv export`, then verifies the exported
+`requirements.txt` still carries the same version (compared after PEP 440 normalization) and fails
+instead of letting the APK and the desktop package use different frameworks. Agent projects without
+the `android` add-on are untouched: `maafw` stays floating, so uv and Dependabot's `lockfile-only`
+updates own the version. The release workflows (`release.yml` for desktop and `android-build.yml` for
+APKs) re-export `requirements.txt` from `uv.lock` with `uv export --frozen` before packaging, so a
+merged Dependabot uv PR needs no manual re-export; `--update python-deps` only keeps the committed
+file current for local development. `--frozen` fails when `pyproject.toml` and `uv.lock` disagree
+instead of silently exporting the old lock.
 
 `--update python-runtime` takes its platform from `CREATE_MAA_PROJECT_RUNTIME_PLATFORM=<os>-<arch>`
 (one platform per run), downloads the embedded interpreter into

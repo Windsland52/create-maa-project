@@ -118,6 +118,17 @@ jobs:
         with:
           python-version: "3.13"
 
+      # The resolver reads `requirements.txt` for the maafw pin; Dependabot's uv updates only move
+      # `uv.lock`, so re-export from the lock first or the APK would be paired against a stale pin.
+      - uses: astral-sh/setup-uv@v9.0.0
+        if: hashFiles('pyproject.toml') != ''
+
+      - name: Re-export Python requirements from uv.lock
+        if: hashFiles('pyproject.toml') != ''
+        run: >-
+          uv export --frozen --format requirements-txt --no-hashes --no-emit-project
+          --no-group dev --no-annotate --output-file requirements.txt
+
       # Node 主版本由 create-maa-project 渲染（与桌面 workflow 同一来源），只为 OCR 同步而装。
       # 纯 pipeline 且模型已入库的项目不必付这份开销：has_ocr 门控放在 resolver 之后。
       # resolver 自己跑在 runner 预装的 Node 上（只用 fetch / node: 内建，不依赖 pnpm）。
@@ -377,6 +388,16 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+
+      # Same ordering rule as the build job: export from the lock before the resolver reads the pin.
+      - uses: astral-sh/setup-uv@v9.0.0
+        if: hashFiles('pyproject.toml') != ''
+
+      - name: Re-export Python requirements from uv.lock
+        if: hashFiles('pyproject.toml') != ''
+        run: >-
+          uv export --frozen --format requirements-txt --no-hashes --no-emit-project
+          --no-group dev --no-annotate --output-file requirements.txt
 
       - name: Resolve Android packaging
         id: maafw

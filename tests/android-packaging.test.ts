@@ -16,6 +16,7 @@ const CORE_TAGS = [
   '3.13.15-maafw5.12.3',
   '3.13.15-maafw5.13.0',
   '3.13.15-maafw4.11.0',
+  '3.13.15-maafw5.15.0-beta.1',
 ]
 const MAAFW_RELEASES = [
   { tag: 'v5.15.0-beta.1', prerelease: true },
@@ -163,6 +164,15 @@ describe('android packaging resolver: pure pipeline projects', () => {
     expect(outputs.maafw_tag).toBe('v5.12.3')
   })
 
+  it('maps a pep 440 beta pin to the release tag the assets are published under', async () => {
+    const { code, stdout, outputs } = await runResolver(
+      await writeProject('pure-pinned-beta', { maafwVersion: '5.15.0b1' }),
+    )
+
+    expect(code, stdout).toBe(0)
+    expect(outputs.maafw_tag).toBe('v5.15.0-beta.1')
+  })
+
   it('ignores AGENT_CORE_TAG because there is no agent runtime to pin', async () => {
     const { code, stdout, outputs } = await runResolver(
       await writeProject('pure-override', { maafwVersion: '5.13.0' }),
@@ -191,6 +201,56 @@ describe('android packaging resolver: python agent projects', () => {
       chaquopy_index: CHAQUOPY_INDEX_3_13,
       chaquopy_pins: '--exclude pillow --require pillow==11.0.0',
     })
+  })
+
+  it('pairs a beta pin spelled the pep 440 way with the prerelease kernel tag', async () => {
+    const { code, stdout, outputs } = await runResolver(
+      await writeProject('agent-beta-normalized', { agent: true, requirements: 'maafw==5.15.0b1\n' }),
+    )
+
+    expect(code, stdout).toBe(0)
+    expect(stdout).not.toContain('::warning::')
+    expect(outputs).toMatchObject({
+      // 内核 tag 与 release tag 用发布原文，requirements 用 uv 导出的归一形式：同一个版本
+      maafw_tag: 'v5.15.0-beta.1',
+      core_tag: '3.13.15-maafw5.15.0-beta.1',
+    })
+  })
+
+  it('accepts the release spelling of the same beta pin', async () => {
+    const { code, stdout, outputs } = await runResolver(
+      await writeProject('agent-beta-release', { agent: true, requirements: 'maafw==5.15.0-beta.1\n' }),
+    )
+
+    expect(code, stdout).toBe(0)
+    expect(stdout).not.toContain('::warning::')
+    expect(outputs.maafw_tag).toBe('v5.15.0-beta.1')
+    expect(outputs.core_tag).toBe('3.13.15-maafw5.15.0-beta.1')
+  })
+
+  it('does not warn when the two files spell the same beta differently', async () => {
+    const { code, stdout, outputs } = await runResolver(
+      await writeProject('agent-beta-spelling', {
+        agent: true,
+        maafwVersion: '5.15.0-beta.1',
+        requirements: 'maafw==5.15.0b1\n',
+      }),
+    )
+
+    expect(code, stdout).toBe(0)
+    expect(stdout).not.toContain('::warning::')
+    expect(outputs.core_tag).toBe('3.13.15-maafw5.15.0-beta.1')
+  })
+
+  it('pins the beta core through AGENT_CORE_TAG without a spelling warning', async () => {
+    const { code, stdout, outputs } = await runResolver(
+      await writeProject('agent-beta-override', { agent: true, requirements: 'maafw==5.15.0b1\n' }),
+      { AGENT_CORE_TAG: '3.13.15-maafw5.15.0-beta.1' },
+    )
+
+    expect(code, stdout).toBe(0)
+    expect(stdout).not.toContain('::warning::')
+    expect(outputs.core_tag).toBe('3.13.15-maafw5.15.0-beta.1')
   })
 
   it('warns when maa-project.json disagrees with the requirements pin and keeps the pin', async () => {

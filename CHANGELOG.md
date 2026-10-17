@@ -2,6 +2,42 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- Android 的 beta 配对现在能真正匹配上。预发布版本在三个地方拼写不同：`requirements.txt` 是 uv 导出的
+  PEP 440 归一形式（`maafw==5.15.0b1`），内核 tag 是发布原文（`3.13.15-maafw5.15.0-beta.1`），
+  MaaFramework release tag 是 `v5.15.0-beta.1`。resolver 的配对正则原先不认 `-`，`5.15.0b1` 会被判成
+  "内核还没发配对"而降级回上一个正式版；现在 tag 解析放行预发布后缀，配对、`AGENT_CORE_TAG` 校验以及
+  `maa-project.json` / `requirements.txt` 的一致性比较都先按 PEP 440 归一再比，`maafw_tag` 取 release
+  的真实拼写而不是 `v` 加归一版本。`--doctor` 的 android 钉版检查同样归一后再比，`maafw.version` 写
+  `5.15.0b1` 或 `5.15.0-beta.1` 不再互相误报。桌面侧 `--update maafw` 把 `maafw.version` 当 tag 查时，
+  归一形式查不到会补试发布拼写（`5.15.0b1` → `v5.15.0-beta.1`）
+
+### 变更
+
+- `--update python-deps` 成为 android 项目的版本对齐点。启用 `android` 的 Agent 项目里，它先确定
+  MaaFramework 目标版本（`maa-project.json` 的精确 `maafw.version` 优先，为空则按 `maafw.channel` 解析
+  最新发布，`beta` / `alpha` 含预发布），把 `maafw==X` 钉进 `pyproject.toml` 后再 `uv lock` /
+  `uv export`，最后校验 `requirements.txt` 导出的是同一版本（PEP 440 归一后比较），不一致直接报错。
+  没有 `android` 的 Agent 项目保持原行为：`maafw` 浮动，由 uv 与 Dependabot 的 `lockfile-only` 更新
+  驱动，不会和自动更新打架。`--add android` 现在也会改写已有的 `maafw` 钉版（原来只填未钉版的依赖），
+  `maafw.version` 改了重跑即可
+- 发版 workflow 自己重导 Python 依赖。Dependabot 的 `uv` 更新只动 `uv.lock`，而桌面包与 APK 都从
+  `requirements.txt` 装依赖；现在 `release.yml` 在 `pnpm sync:runtime` 之前、`android-build.yml` 在两个
+  job 的 `tools/android-packaging.mjs` 之前都会先跑 `uv export --frozen`，从 lock 重新导出工作区里的
+  `requirements.txt`。合并 Dependabot 的 uv PR 后不必再手工跑 `--update python-deps` 才能发版；仓库里
+  那份仍是提交物，本地开发想更新时再跑。`--frozen` 在 `pyproject.toml` 与 `uv.lock` 不一致时直接失败，
+  不会悄悄用旧 lock
+
+已有项目：`tools/android-packaging.mjs` 是受管文件，重跑 `create-maa-project --add android` 即更新。
+要出 beta 包不用再手改 `pyproject.toml`：把 `maa-project.json` 的 `maafw.channel` 改成 `beta`（或把
+`maafw.version` 写成精确版本）后跑一次 `--update python-deps`，它会自己把 `maafw==5.15.0-beta.1` 钉进
+`pyproject.toml`、导出 `requirements.txt`，内核已有 `3.13.15-maafw5.15.0-beta.1` 配对时 APK 就会用它。
+
+[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.7.1...HEAD
+
 ## [3.7.1] - 2026-10-13
 
 ### 修复

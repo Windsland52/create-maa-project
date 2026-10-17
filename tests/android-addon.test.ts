@@ -323,6 +323,24 @@ describe('android add-on: --add android on an existing project', () => {
     expect(await readFile(join(projectRoot, 'requirements.txt'), 'utf8')).toMatch(/^maafw$/m)
     expect(result?.pending.map((item) => item.kind) ?? []).toContain('android-version')
   })
+
+  it('re-pins an existing maafw pin when maafw.version changes', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-repin', template: 'agent', add: ['android'] }), { cwd: root })
+    const projectRoot = join(root, 'maa-android-repin')
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { maafw: { version: string } }
+    config.maafw.version = '5.15.0-beta.1'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+
+    await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+    expect(await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')).toContain('"maafw==5.15.0-beta.1"')
+
+    config.maafw.version = '5.15.0'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+    expect(await readFile(join(projectRoot, 'pyproject.toml'), 'utf8')).toContain('"maafw==5.15.0"')
+  })
 })
 
 describe('android add-on: doctor', () => {
@@ -350,6 +368,28 @@ describe('android add-on: doctor', () => {
         }),
       ]),
     )
+  })
+
+  it('accepts the pep 440 beta pin and the release spelling as the same version', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-beta-pin', template: 'agent', add: ['android'] }), {
+      cwd: root,
+    })
+    const projectRoot = join(root, 'maa-android-beta-pin')
+    await execFileAsync('git', ['init'], { cwd: projectRoot })
+    await createShellRepository(join(projectRoot, 'Android/MaaFwApp'))
+
+    const configPath = join(projectRoot, 'maa-project.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { maafw: { version: string } }
+    config.maafw.version = '5.15.0-beta.1'
+    await writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8')
+    await applyIncrementalAddons(options({ add: ['android'], skipDownload: false }), () => {}, projectRoot)
+    // `uv export` writes the PEP 440-normalized form; the release tag keeps the released one.
+    await writeFile(join(projectRoot, 'requirements.txt'), 'maafw==5.15.0b1\n', 'utf8')
+
+    const report = await runDoctor(projectRoot)
+
+    expect(report.lines).toContain('[OK] Android packaging files, shell checkout and version pin are consistent.')
   })
 
   it('rejects an app id the shell cannot turn into package segments', async () => {

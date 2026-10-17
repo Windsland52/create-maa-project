@@ -2,7 +2,7 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [3.7.2] - 2026-10-17
 
 ### 修复
 
@@ -36,7 +36,7 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 `maafw.version` 写成精确版本）后跑一次 `--update python-deps`，它会自己把 `maafw==5.15.0-beta.1` 钉进
 `pyproject.toml`、导出 `requirements.txt`，内核已有 `3.13.15-maafw5.15.0-beta.1` 配对时 APK 就会用它。
 
-[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.7.1...HEAD
+[3.7.2]: https://github.com/Windsland52/create-maa-project/compare/v3.7.1...v3.7.2
 
 ## [3.7.1] - 2026-10-13
 

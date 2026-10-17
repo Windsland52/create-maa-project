@@ -2,7 +2,7 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [3.7.3] - 2026-10-18
 
 ### 修复
 
@@ -14,7 +14,7 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 已有项目：手工删掉重复的那行 `extend-exclude`（保留项目自己的并补上 `"Android/MaaFwApp"`），或升级后
 重跑 `create-maa-project --add android` 自动修复。
 
-[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.7.2...HEAD
+[3.7.3]: https://github.com/Windsland52/create-maa-project/compare/v3.7.2...v3.7.3
 
 ## [3.7.2] - 2026-10-17
 

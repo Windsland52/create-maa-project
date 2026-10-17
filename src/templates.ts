@@ -294,20 +294,146 @@ export function withAndroidGitignoreSection(content: string, enabled = true): st
  * content (`[project].dependencies` feeds `--update python-deps`), so `--add android` and a re-run of
  * `--add agent` insert the line into the file the project owns instead of rewriting it; the generated
  * content carries the same lines from creation.
+ *
+ * A project-owned `extend-exclude` is merged, never duplicated: TOML rejects the duplicate key, and
+ * an unparsable `pyproject.toml` also breaks `--update python-deps` (it parses the file). Output from
+ * older releases could stack a second key; the shell-only line is folded back into the project's
+ * list when both are present.
  */
 export function withAndroidRuffExclude(content: string, enabled = true): string {
   if (!enabled) return content
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
   const lines = content.split(/\r?\n/u)
-  if (lines.some((line) => line.trim() === ANDROID_RUFF_EXCLUDE_LINE)) return content
   const header = lines.findIndex((line) => line.trim() === '[tool.ruff]')
   if (header < 0) return content
+
+  let sectionEnd = ruffSectionEnd(lines, header)
+  let keys = extendExcludeKeys(lines, header, sectionEnd)
+  if (keys.length > 1) {
+    const drop = new Set<number>()
+    for (const index of keys) {
+      if (lines[index]?.trim() !== ANDROID_RUFF_EXCLUDE_LINE) continue
+      drop.add(index)
+      if (lines[index - 1]?.trim() === ANDROID_RUFF_EXCLUDE_COMMENT) drop.add(index - 1)
+    }
+    if (drop.size > 0) {
+      lines.splice(0, lines.length, ...lines.filter((_, index) => !drop.has(index)))
+      sectionEnd = ruffSectionEnd(lines, header)
+      keys = extendExcludeKeys(lines, header, sectionEnd)
+    }
+    if (keys.length > 1) {
+      throw new Error(
+        'pyproject.toml declares [tool.ruff] extend-exclude more than once; merge the lists before adding the Android shell exclusion.',
+      )
+    }
+  }
+
+  const [
+    keyIndex,
+  ] = keys
+  if (keyIndex !== undefined) {
+    if (!extendExcludeHasShell(lines, keyIndex, sectionEnd)) addShellToExtendExclude(lines, keyIndex, sectionEnd)
+    return lines.join(newline)
+  }
+
   // The line belongs to the `[tool.ruff]` table, so it goes before the next header — and after the
   // section's last setting, not into the blank line that usually separates the two.
-  const nextHeader = lines.findIndex((line, index) => index > header && line.trimStart().startsWith('['))
-  let insertAt = nextHeader < 0 ? lines.length : nextHeader
+  let insertAt = sectionEnd
   while (insertAt > header + 1 && lines[insertAt - 1]?.trim() === '') insertAt -= 1
   lines.splice(insertAt, 0, ANDROID_RUFF_EXCLUDE_COMMENT, ANDROID_RUFF_EXCLUDE_LINE)
-  return lines.join(content.includes('\r\n') ? '\r\n' : '\n')
+  return lines.join(newline)
+}
+
+/** Index of the first line after the `[tool.ruff]` table, or the end of the file. */
+function ruffSectionEnd(lines: string[], header: number): number {
+  const next = lines.findIndex((line, index) => index > header && line.trimStart().startsWith('['))
+  return next < 0 ? lines.length : next
+}
+
+/** Every `extend-exclude` key the `[tool.ruff]` table declares. TOML allows one; more is invalid. */
+function extendExcludeKeys(lines: string[], header: number, sectionEnd: number): number[] {
+  const keys: number[] = []
+  for (let index = header + 1; index < sectionEnd; index += 1) {
+    if (/^\s*extend-exclude\s*=/u.test(lines[index] ?? '')) keys.push(index)
+  }
+  return keys
+}
+
+const SHELL_EXCLUDE_PATTERN = /["']Android\/MaaFwApp\/?["']/u
+
+/** The closing bracket of the array value at `keyIndex`, ignoring brackets inside strings. */
+function extendExcludeArray(
+  lines: string[],
+  keyIndex: number,
+  sectionEnd: number,
+): { open: number; endLine: number; endColumn: number } {
+  const keyLine = lines[keyIndex] ?? ''
+  const equals = keyLine.indexOf('=')
+  const open = equals < 0 ? -1 : keyLine.indexOf('[', equals)
+  if (open < 0) {
+    throw new Error(
+      'pyproject.toml sets [tool.ruff] extend-exclude to a value that is not an array; add "Android/MaaFwApp" to it by hand.',
+    )
+  }
+  let depth = 0
+  let quote: string | undefined
+  for (let lineIndex = keyIndex; lineIndex < sectionEnd; lineIndex += 1) {
+    const line = lines[lineIndex] ?? ''
+    for (let column = lineIndex === keyIndex ? open : 0; column < line.length; column += 1) {
+      const char = line[column]
+      if (quote !== undefined) {
+        if (char === '\\' && quote === '"') column += 1
+        else if (char === quote) quote = undefined
+        continue
+      }
+      if (char === '"' || char === "'") quote = char
+      else if (char === '[') depth += 1
+      else if (char === ']') {
+        depth -= 1
+        if (depth === 0) return { open, endLine: lineIndex, endColumn: column }
+      }
+    }
+  }
+  throw new Error('pyproject.toml has an unterminated [tool.ruff] extend-exclude array.')
+}
+
+function extendExcludeHasShell(lines: string[], keyIndex: number, sectionEnd: number): boolean {
+  const { open, endLine, endColumn } = extendExcludeArray(lines, keyIndex, sectionEnd)
+  const text =
+    endLine === keyIndex
+      ? (lines[keyIndex] ?? '').slice(open, endColumn + 1)
+      : [
+          (lines[keyIndex] ?? '').slice(open),
+          ...lines.slice(keyIndex + 1, endLine),
+          (lines[endLine] ?? '').slice(0, endColumn + 1),
+        ].join('\n')
+  return SHELL_EXCLUDE_PATTERN.test(text)
+}
+
+/** Appends the shell path to the existing array, keeping the project's own entries and layout. */
+function addShellToExtendExclude(lines: string[], keyIndex: number, sectionEnd: number): void {
+  const { open, endLine, endColumn } = extendExcludeArray(lines, keyIndex, sectionEnd)
+  const value = '"Android/MaaFwApp"'
+  if (endLine === keyIndex) {
+    const line = lines[keyIndex] ?? ''
+    const inner = line.slice(open + 1, endColumn).trim()
+    const before = line.slice(0, endColumn).trimEnd()
+    const separator = inner === '' ? '' : inner.endsWith(',') ? ' ' : ', '
+    lines[keyIndex] = `${before}${separator}${value}${line.slice(endColumn)}`
+    return
+  }
+  let previous = keyIndex
+  for (let index = endLine - 1; index > keyIndex; index -= 1) {
+    if ((lines[index] ?? '').trim() !== '') {
+      previous = index
+      break
+    }
+  }
+  const previousLine = lines[previous] ?? ''
+  if (previous !== keyIndex && !previousLine.trimEnd().endsWith(',')) lines[previous] = `${previousLine},`
+  // An empty multi-line array has no element to copy indentation from, so use a plain four spaces.
+  const indent = previous === keyIndex ? '    ' : (/^\s*/u.exec(previousLine)?.[0] ?? '')
+  lines.splice(endLine, 0, `${indent}${value},`)
 }
 
 export function agentFiles(

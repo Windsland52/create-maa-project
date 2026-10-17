@@ -4,7 +4,12 @@ import { fileURLToPath } from 'node:url'
 import { check } from 'prettier'
 import { describe, expect, it } from 'vitest'
 import { PYTHON_EMBED_VERSION, PYTHON_STANDALONE_MINOR } from '../src/assets.js'
-import { androidAppId, isValidAndroidAppId } from '../src/android.js'
+import {
+  androidAppId,
+  isValidAndroidAppId,
+  ANDROID_RUFF_EXCLUDE_COMMENT,
+  ANDROID_RUFF_EXCLUDE_LINE,
+} from '../src/android.js'
 import { SUPPORTED_NODE_MAJOR } from '../src/node-support.js'
 import {
   agentFiles,
@@ -399,6 +404,24 @@ describe('agent pyproject ruff scope', () => {
       }).find((file) => file.path === 'pyproject.toml')?.content ?? '',
     )
 
+  /** A project-owned pyproject.toml whose `[tool.ruff]` table already has `extend-exclude`. */
+  const ruffConfig = (extendExclude: string): string =>
+    [
+      '[project]',
+      'name = "probe"',
+      '',
+      '[tool.ruff]',
+      'line-length = 120',
+      extendExclude,
+      '',
+      '[tool.pyright]',
+      'include = ["agent"]',
+      '',
+    ].join('\n')
+
+  const extendExcludeKeyCount = (content: string): number =>
+    content.split('\n').filter((line) => /^\s*extend-exclude\s*=/u.test(line)).length
+
   it('excludes the vendored shell from ruff when the project has one', () => {
     const content = pyproject(true)
 
@@ -429,6 +452,45 @@ describe('agent pyproject ruff scope', () => {
     // A file without a [tool.ruff] table has nothing to extend, and inventing one would add settings
     // the project never asked for.
     expect(withAndroidRuffExclude('[project]\nname = "x"\n')).toBe('[project]\nname = "x"\n')
+  })
+
+  it('merges the shell into an extend-exclude the project already owns', () => {
+    const patched = withAndroidRuffExclude(ruffConfig('extend-exclude = ["scripts"]'))
+
+    expect(patched).toContain('extend-exclude = ["scripts", "Android/MaaFwApp"]')
+    expect(extendExcludeKeyCount(patched)).toBe(1)
+    expect(withAndroidRuffExclude(patched)).toBe(patched)
+  })
+
+  it('merges into an empty or multi-line extend-exclude without touching the project entries', () => {
+    const empty = withAndroidRuffExclude(ruffConfig('extend-exclude = []'))
+    expect(empty).toContain('extend-exclude = ["Android/MaaFwApp"]')
+
+    const multiLine = withAndroidRuffExclude(ruffConfig('extend-exclude = [\n    "scripts",\n    "vendor",\n]'))
+    expect(multiLine).toContain('extend-exclude = [\n    "scripts",\n    "vendor",\n    "Android/MaaFwApp",\n]')
+    expect(extendExcludeKeyCount(multiLine)).toBe(1)
+    expect(withAndroidRuffExclude(multiLine)).toBe(multiLine)
+  })
+
+  it('repairs a pyproject.toml that stacked the shell-only key on the project list', () => {
+    const stacked = ruffConfig(
+      `extend-exclude = ["scripts"]\n${ANDROID_RUFF_EXCLUDE_COMMENT}\n${ANDROID_RUFF_EXCLUDE_LINE}`,
+    )
+
+    const repaired = withAndroidRuffExclude(stacked)
+
+    expect(extendExcludeKeyCount(repaired)).toBe(1)
+    expect(repaired).toContain('"scripts"')
+    expect(repaired).toContain('"Android/MaaFwApp"')
+  })
+
+  it('leaves a list that already excludes the shell alone', () => {
+    expect(withAndroidRuffExclude(ruffConfig('extend-exclude = ["Android/MaaFwApp", "scripts"]'))).toBe(
+      ruffConfig('extend-exclude = ["Android/MaaFwApp", "scripts"]'),
+    )
+    expect(withAndroidRuffExclude(ruffConfig('extend-exclude = ["Android/MaaFwApp/"]'))).toBe(
+      ruffConfig('extend-exclude = ["Android/MaaFwApp/"]'),
+    )
   })
 })
 

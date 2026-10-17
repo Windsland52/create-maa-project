@@ -147,7 +147,8 @@ android` fails the clone and lands in that pending action.
 - `.gitignore` gains `Android/agent-dist/`.
 - An Agent project's `pyproject.toml` gains `extend-exclude = ["Android/MaaFwApp"]` under
   `[tool.ruff]`: `release.yml` checks out submodules, so an unscoped `ruff check .` lints the vendored
-  shell and fails `pnpm check:py` in every package job.
+  shell and fails `pnpm check:py` in every package job. An existing `extend-exclude` is merged into,
+  never duplicated (a duplicate key is invalid TOML and breaks `--update python-deps`).
 - An Agent project needs an exact `maafw==X` in `requirements.txt` (the Android Python binding only
   ships inside the MaaAgentCoreAndroid kernel release); otherwise the add-on records an
   `android-version` pending action with `create-maa-project --update python-deps` as its command. With

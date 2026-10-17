@@ -298,6 +298,45 @@ describe('android add-on: --add android on an existing project', () => {
     expect(await readFile(pyprojectPath, 'utf8')).toBe(patched)
   })
 
+  it('merges the shell into an extend-exclude the project already owns', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-ruff-merge', template: 'agent' }), { cwd: root })
+    const projectRoot = join(root, 'maa-android-ruff-merge')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    const current = await readFile(pyprojectPath, 'utf8')
+    await writeFile(
+      pyprojectPath,
+      current.replace('line-length = 120', 'line-length = 120\nextend-exclude = ["scripts"]'),
+      'utf8',
+    )
+
+    await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+
+    const patched = await readFile(pyprojectPath, 'utf8')
+    expect(patched).toContain('extend-exclude = ["scripts", "Android/MaaFwApp"]')
+    // A second key would be invalid TOML and would break --update python-deps (it parses this file).
+    expect(patched.split('\n').filter((line) => /^\s*extend-exclude\s*=/u.test(line))).toHaveLength(1)
+  })
+
+  it('repairs a pyproject.toml that already stacked the shell-only key', async () => {
+    const root = await tempRoot()
+    await createProject(options({ name: 'maa-android-ruff-repair-dupe', template: 'agent' }), { cwd: root })
+    const projectRoot = join(root, 'maa-android-ruff-repair-dupe')
+    const pyprojectPath = join(projectRoot, 'pyproject.toml')
+    const broken = (await readFile(pyprojectPath, 'utf8')).replace(
+      'line-length = 120',
+      'line-length = 120\nextend-exclude = ["scripts"]\nextend-exclude = ["Android/MaaFwApp"]',
+    )
+    await writeFile(pyprojectPath, broken, 'utf8')
+
+    await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
+
+    const repaired = await readFile(pyprojectPath, 'utf8')
+    expect(repaired.split('\n').filter((line) => /^\s*extend-exclude\s*=/u.test(line))).toHaveLength(1)
+    expect(repaired).toContain('"scripts"')
+    expect(repaired).toContain('"Android/MaaFwApp"')
+  })
+
   it('pins an exact maafw version into pyproject.toml and waits for the export', async () => {
     const root = await tempRoot()
     await createProject(options({ name: 'maa-android-pin', template: 'agent', add: ['android'] }), { cwd: root })

@@ -2,6 +2,20 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- `--add android` 不再把 `extend-exclude` 叠成重复 key。项目自己的 `[tool.ruff]` 已有
+  `extend-exclude` 时，`Android/MaaFwApp` 会并进现有数组（单行、空数组、多行都支持）；早期版本留下
+  的重复 key 会在下一次 `--add android` / `--add agent` 时折回成一个。重复 key 会让 `pyproject.toml`
+  变成非法 TOML，连带 `--update python-deps` 的 `tomllib` 解析一起失败（`Cannot overwrite a value`）
+
+已有项目：手工删掉重复的那行 `extend-exclude`（保留项目自己的并补上 `"Android/MaaFwApp"`），或升级后
+重跑 `create-maa-project --add android` 自动修复。
+
+[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.7.2...HEAD
+
 ## [3.7.2] - 2026-10-17
 
 ### 修复

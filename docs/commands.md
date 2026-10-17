@@ -121,6 +121,8 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 - `pyproject.toml` 的 `[tool.ruff]` 追加 `extend-exclude = ["Android/MaaFwApp"]`（**Agent 项目**）：
   `release.yml` 以 `submodules` 检出子模块，不排除的话 `ruff check .` 会扫进外壳自带的
   `scripts/*.py` 并命中 `UP009`，`pnpm check:py` 在 6 个 `package` job 里一起失败、Release 因此不创建。
+  项目自己已有 `extend-exclude` 时把路径并进那个数组（单行/多行都行），不会再写第二个同名 key——重复
+  key 会让 `pyproject.toml` 变成非法 TOML，连带 `--update python-deps` 的 `tomllib` 解析一起失败。
 - **Agent 项目**需要 `requirements.txt` 里的精确 `maafw==X`：Android 的 Python 绑定只随内核
   （`MaaAgentCoreAndroid` 的 `X-maafwY` tag）发布，CI 按它配对内核与 APK 内的原生库。拿不到精确版本时
   登记 `android-version` pending；`maa-project.json` 的 `maafw.version` 填了精确版本时，`--add android`

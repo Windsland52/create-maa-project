@@ -140,7 +140,9 @@ the files:
 - `pyproject.toml` gains `extend-exclude = ["Android/MaaFwApp"]` under `[tool.ruff]` (**Agent
   projects**): `release.yml` checks submodules out, so an unscoped `ruff check .` reads the shell's own
   `scripts/*.py`, trips `UP009`, and fails `pnpm check:py` in every `package` job — which is what keeps
-  the release from being created.
+  the release from being created. When the project already has an `extend-exclude`, the path is merged
+  into that array (single-line or multi-line) instead of adding a second key: duplicate keys make
+  `pyproject.toml` invalid TOML and break `--update python-deps`, which parses the file.
 - An **Agent** project also needs an exact `maafw==X` in `requirements.txt`: the Android Python binding
   only ships inside the MaaAgentCoreAndroid kernel release (`X-maafwY` tags), which is what pairs the
   kernel with the native libraries inside the APK. Without it the add-on records an `android-version`

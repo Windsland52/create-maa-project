@@ -2,6 +2,24 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.7.4] - 2026-11-04
+
+### 修复
+
+- Agent 的识别详情 helper 与上游 M9A 同步。`best_box` 直接读取识别详情自带的 `box`，`And` / `Or`
+  组合识别与 `DirectHit` 这类没有类型化 `best_result` 的算法不再返回 `None`；新增
+  `custom_result_dict` / `filtered_result_dicts`，统一读取 `Custom` 结果的 payload 与 `filtered`
+  原始结果，组合识别会递归子结果。`agent/utils/maa_types.py` 与 M9A 的同名文件逐字节一致
+
+### 变更
+
+- 生成项目的 MaaFW schema 与 `@nekosu/maa-tools` 依赖同步（`@nekosu/maa-tools` `1.1.3` → `1.2.1`）
+
+已有项目：`agent/utils/maa_types.py` 是受管文件，重跑 `create-maa-project --add agent` 即更新；
+schema 与依赖 pin 用 `--update schema` / `--update node-deps` 刷新。
+
+[3.7.4]: https://github.com/Windsland52/create-maa-project/compare/v3.7.3...v3.7.4
+
 ## [3.7.3] - 2026-10-18
 
 ### 修复

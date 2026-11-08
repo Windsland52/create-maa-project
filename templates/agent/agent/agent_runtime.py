@@ -61,8 +61,9 @@ def run_agent(project_root_dir: str) -> int:
     work_root = default_work_root()
     configure_runtime_paths(project_root=project_root_dir, work_root=work_root)
 
-    # main.py 已把 cwd 指到数据目录；把包内基线（data/、config/ 补缺、interface.json）
-    # 播种过去，让按 cwd 读相对路径的二进制插件拿到与 resolve() 同一份文件。
+    # main.py 已把 cwd 指到数据目录；把包内基线接过去（data/、config/ 补缺、
+    # interface.json 复制；resource/ 等只读资产符号链接），让按 cwd 读相对路径的
+    # 二进制插件和遗漏的裸 open() 拿到与 resolve() 同一份文件。
     try:
         seeded = seed_work_root(get_runtime_paths())
         if seeded:

@@ -155,10 +155,10 @@ class _BraceFormatLogger:
     def __init__(self, wrapped: logging.Logger) -> None:
         self._wrapped = wrapped
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._wrapped, name)
 
-    def _render(self, msg: Any, args: tuple, kwargs: dict) -> tuple[Any, dict]:
+    def _render(self, msg: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         if args and isinstance(msg, str):
             try:
                 rendered = msg.format(*args, **{k: v for k, v in kwargs.items() if k != "exc_info"})
@@ -168,30 +168,30 @@ class _BraceFormatLogger:
             return rendered, kwargs
         return msg, kwargs
 
-    def _log(self, level: int, msg: Any, args: tuple, kwargs: dict) -> None:
+    def _log(self, level: int, msg: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
         msg, kwargs = self._render(msg, args, kwargs)
         self._wrapped.log(level, msg, **kwargs)
 
-    def debug(self, msg: Any, *args, **kwargs) -> None:
+    def debug(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         self._log(logging.DEBUG, msg, args, kwargs)
 
-    def info(self, msg: Any, *args, **kwargs) -> None:
+    def info(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         self._log(logging.INFO, msg, args, kwargs)
 
-    def warning(self, msg: Any, *args, **kwargs) -> None:
+    def warning(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         self._log(logging.WARNING, msg, args, kwargs)
 
-    def error(self, msg: Any, *args, **kwargs) -> None:
+    def error(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         self._log(logging.ERROR, msg, args, kwargs)
 
-    def exception(self, msg: Any, *args, **kwargs) -> None:
+    def exception(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("exc_info", True)
         self._log(logging.ERROR, msg, args, kwargs)
 
-    def critical(self, msg: Any, *args, **kwargs) -> None:
+    def critical(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         self._log(logging.CRITICAL, msg, args, kwargs)
 
-    def opt(self, *args, **kwargs):  # noqa: ANN003
+    def opt(self, *args: Any, **kwargs: Any) -> "_BraceFormatLogger":
         return self  # loguru 特有；回退路径直接忽略 opt(...) 的语义，仍可用 .debug 等
 
 

@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
+ENV_USER_DATA_DIR = "PI_USER_DATA_DIR"
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def default_work_root() -> Path:
+    """返回 config / debug / data 的落盘根目录。
+
+    Client 通过 ``PI_USER_DATA_DIR`` 交出一个可写数据目录。macOS 的 .app 里项目根目录位于应用
+    包内，普通用户账户不可写，所以不能回落到工作目录；Client 没设该变量时（例如 MFAAvalonia）
+    与以前一致，仍用当前工作目录。
+    """
+    value = os.environ.get(ENV_USER_DATA_DIR, "").strip()
+    return Path(value) if value else Path.cwd()
 
 
 @dataclass(frozen=True)
@@ -28,6 +41,10 @@ def build_runtime_paths(
         agent_dir=resolved_project_root / "agent",
         work_root=resolved_work_root,
         config_dir=resolved_work_root / "config",
+        # 热更新写到 work_root/resource：MXU 的 .app 形态下项目目录只读，只能写这里；便携布局
+        # 下 work_root 与项目目录相同，与旧行为一致。
+        # TODO: 若 Client 在扁平布局下仍把 PI_USER_DATA_DIR 指到独立数据目录，MaaFW 仍按
+        # project_root/resource 加载资源，热更新会静默不生效，届时需改回 project_root。
         resource_dir=resolved_work_root / "resource",
         debug_dir=resolved_work_root / "debug",
         interface_file=resolved_project_root / "interface.json",

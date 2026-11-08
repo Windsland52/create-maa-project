@@ -235,8 +235,10 @@ export function githubFiles(input: ProjectTemplateInput): ManagedFileInput[] {
   return [
     managed('.github/workflows/check.yml', checkWorkflow()),
     releaseWorkflowFile(input),
-    managed('.github/workflows/package-smoke.yml', packageSmokeWorkflow()),
+    managed('.github/workflows/package-smoke.yml', packageSmokeWorkflow(input)),
     managed('tools/build-release.mjs', buildReleaseScript(input)),
+    managed('tools/macos-app-bundle.mjs', macosAppBundleScript(input)),
+    managed('tools/ci/smoke-macos-app.sh', macosAppSmokeScript(input)),
     managed('tools/sync-runtime.mjs', syncRuntimeScript()),
   ]
 }
@@ -766,10 +768,12 @@ function checkWorkflow(): string {
   return template('addons/github/.github/workflows/check.yml', { nodeMajor: SUPPORTED_NODE_MAJOR })
 }
 
-function packageSmokeWorkflow(): string {
+function packageSmokeWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/package-smoke.yml', {
       nodeMajor: SUPPORTED_NODE_MAJOR,
+      slug: input.slug,
+      releaseArtifactName: releaseArtifactName(input),
       releaseTargetMatrix: releaseTargetMatrixYaml(),
     }),
   )
@@ -949,6 +953,22 @@ function releaseTargetArtifactTuples(): string {
         ]`,
     ).join(',\n') + ','
   )
+}
+
+// The bundle's display name follows the release artifact name (which is displayName, sanitized):
+// the .app, the dmg volume and the published archive then share one spelling, and the value stays
+// inside the ASCII-safe set CFBundle values tolerate.
+function macosAppBundleScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
+  return template('addons/github/tools/macos-app-bundle.mjs', {
+    slug: input.slug,
+    displayName: releaseArtifactName(input),
+  })
+}
+
+function macosAppSmokeScript(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
+  return template('addons/github/tools/ci/smoke-macos-app.sh', {
+    releaseArtifactName: releaseArtifactName(input),
+  })
 }
 
 function syncRuntimeScript(): string {

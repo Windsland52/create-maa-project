@@ -5,7 +5,12 @@ import os
 import sys
 
 from utils.logger import logger
-from utils.runtime_paths import configure_runtime_paths, default_work_root, get_runtime_paths
+from utils.runtime_paths import (
+    configure_runtime_paths,
+    default_work_root,
+    get_runtime_paths,
+    seed_data_dir,
+)
 
 PI_ENV_KEYS = (
     "PI_INTERFACE_VERSION",
@@ -55,6 +60,15 @@ def run_agent(project_root_dir: str) -> int:
     # default_work_root 回落到当前工作目录。
     work_root = default_work_root()
     configure_runtime_paths(project_root=project_root_dir, work_root=work_root)
+
+    # 数据目录播种包内 data/ 基线：二进制插件和裸 open("data/...") 按 cwd 读、不走
+    # resolve() 的覆盖层；播种后 cwd 与 resolve 两条读路径落到同一份文件。
+    try:
+        seeded = seed_data_dir(get_runtime_paths())
+        if seeded:
+            logger.debug(f"已向数据目录播种 {seeded} 个 data/ 基线文件")
+    except OSError as error:
+        logger.warning(f"data/ 基线播种失败（{error}），二进制插件可能读到包内旧数据")
 
     if len(sys.argv) < 2:
         logger.error("Missing MaaFW Agent socket id argument.")

@@ -103,11 +103,17 @@ jobs:
             fi
             archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext"
             if [[ "$ext" == "dmg" ]]; then
+              # An explicitly requested icon fails the build when it cannot be applied, so the flag
+              # is only passed when the project actually ships a logo.ico.
+              icon_args=()
+              if [[ -f logo.ico ]]; then
+                icon_args=(--icon logo.ico)
+              fi
               node tools/macos-app-bundle.mjs \
                 --package "$pkg_dir" \
                 --app "dist/{{releaseArtifactName}}.app" \
                 --version "$GITHUB_REF_NAME" \
-                --icon logo.ico \
+                "${icon_args[@]+"${icon_args[@]}"}" \
                 --dmg "dist/$archive"
               rm -rf "dist/{{releaseArtifactName}}.app"
             else

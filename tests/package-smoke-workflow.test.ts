@@ -39,4 +39,26 @@ describe('package smoke workflow', () => {
       expect(command.indexOf('import maafw_paths')).toBeLessThan(command.indexOf('import agent_runtime'))
     }
   })
+
+  // The osx leg also exercises the whole dmg pipeline the release uses — enabling MXU, bundling,
+  // signing and running the app read-only — so the bundler cannot rot on the CI platforms that
+  // only build flat packages.
+  it('exercises the macOS app bundler on the osx package-smoke leg', async () => {
+    const text = (await readFile(CI_WORKFLOW, 'utf8')).replace(/\r\n/g, '\n')
+    for (const marker of [
+      "mxu: {enabled: true, channel: 'stable', version: ''}",
+      'node tools/macos-app-bundle.mjs',
+      '--package dist/package-mxu',
+      '--executable ci-package',
+      '--icon logo.ico',
+      'smoke-macos-app.sh "dist/CI-Package.app"',
+      'codesign --verify --strict',
+    ]) {
+      expect(text).toContain(marker)
+    }
+    expect(text.indexOf('node tools/macos-app-bundle.mjs')).toBeGreaterThan(text.indexOf('mxu: {enabled: true'))
+    expect(text.indexOf('smoke-macos-app.sh')).toBeGreaterThan(text.indexOf('node tools/macos-app-bundle.mjs'))
+    // The bundler steps only exist on the macOS leg of the matrix.
+    expect(text.match(/if: runner\.os == 'macOS'/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+  })
 })

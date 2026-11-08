@@ -25,7 +25,7 @@ import {
     symlinkSync,
     writeFileSync,
 } from "node:fs";
-import {basename, dirname, join, relative, resolve} from "node:path";
+import {basename, dirname, join, relative, resolve, sep} from "node:path";
 
 // Mach-O and universal binaries, read as big-endian u32 so both byte orders are listed.
 const MACHO_MAGICS = new Set([
@@ -280,45 +280,27 @@ function escapeXml(value) {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// sips and iconutil only exist on macOS, so a failed conversion keeps the default system icon
-// instead of breaking the packaging step.
+// sips and iconutil only exist on macOS, so an off-platform build keeps the default system icon
+// instead of breaking the packaging step. On macOS the icon is applied before signing: an
+// explicitly requested --icon that cannot be applied fails the build, because silently shipping
+// the default icon would make release assets lie about what was applied.
 function attachIcon(appDir, iconPath, options) {
     if (process.platform !== "darwin") {
         console.warn("[WARN] sips and iconutil are macOS-only; the app keeps the default icon");
         return;
     }
-    if (!existsSync(iconPath)) {
-        console.warn(`[WARN] macOS app icon was not found: ${iconPath}`);
-        return;
-    }
     const resourcesDir = join(appDir, "Contents", "Resources");
-    const icnsName = `${options.displayName.toLowerCase()}.icns`;
+    // The icon file name becomes part of Contents/Info.plist and a real file under
+    // Contents/Resources — keep it strictly inside a safe character set.
+    const iconBase = options.displayName.toLowerCase().replace(/[^a-z0-9.-]+/g, "-");
+    const icnsName = `${iconBase}.icns`;
     const icnsPath = join(resourcesDir, icnsName);
     const workDir = join(resourcesDir, "icon-work");
     rmSync(workDir, {recursive: true, force: true});
     mkdirSync(workDir, {recursive: true});
     try {
         const pngPath = join(workDir, "icon.png");
-        if (iconPath.toLowerCase().endsWith(".ico")) {
-            run("uv", [
-                "run",
-                "--frozen",
-                "python",
-                "-c",
-                [
-                    "import sys",
-                    "from PIL import Image",
-                    "image = Image.open(sys.argv[1])",
-                    "image.size = sorted(image.info.get('sizes', [image.size]))[-1]",
-                    "image.load()",
-                    "image.convert('RGBA').save(sys.argv[2])",
-                ].join("; "),
-                iconPath,
-                pngPath,
-            ]);
-        } else {
-            copyFileSync(iconPath, pngPath);
-        }
+        writeIconPng(iconPath, pngPath);
         const iconsetDir = join(workDir, "icon.iconset");
         mkdirSync(iconsetDir, {recursive: true});
         for (const size of [
@@ -365,10 +347,94 @@ function attachIcon(appDir, iconPath, options) {
         );
         writeFileSync(plistPath, plist, "utf8");
     } catch (error) {
-        console.warn(`[WARN] macOS app icon was not applied: ${error.message}`);
+        // An explicitly requested icon must either land or fail the build; silently shipping the
+        // default icon makes release assets lie about what was applied.
+        throw new Error(`macOS app icon was not applied: ${error.message}`);
     } finally {
         rmSync(workDir, {recursive: true, force: true});
     }
+}
+
+// Produces the PNG the iconset is built from. .ico needs a converter: Pillow through uv when uv is
+// installed, and otherwise the PNG frame embedded in most modern .ico files extracted directly.
+// Anything else goes through sips, which also accepts .icns and friends.
+function writeIconPng(iconPath, pngPath) {
+    if (iconPath.toLowerCase().endsWith(".ico")) {
+        if (commandExists("uv")) {
+            // The generated project may not depend on Pillow (non-Agent projects ship no uv
+            // environment at all), so --with pulls it into an ephemeral one.
+            try {
+                run("uv", [
+                    "run",
+                    "--with",
+                    "pillow",
+                    "python",
+                    "-c",
+                    [
+                        "import sys",
+                        "from PIL import Image",
+                        "image = Image.open(sys.argv[1])",
+                        "image.size = sorted(image.info.get('sizes', [image.size]))[-1]",
+                        "image.load()",
+                        "image.convert('RGBA').save(sys.argv[2])",
+                    ].join("; "),
+                    iconPath,
+                    pngPath,
+                ]);
+                return;
+            } catch (error) {
+                console.warn(`[WARN] Pillow icon conversion failed (${error.message}); extracting the .ico PNG frame`);
+            }
+        }
+        writeFileSync(pngPath, extractIcoPngFrame(iconPath));
+        return;
+    }
+    if (iconPath.toLowerCase().endsWith(".png")) {
+        copyFileSync(iconPath, pngPath);
+        return;
+    }
+    run("sips", [
+        "-s",
+        "format",
+        "png",
+        iconPath,
+        "--out",
+        pngPath,
+    ]);
+}
+
+function commandExists(command) {
+    const result = spawnSync(command, ["--version"], {stdio: "ignore"});
+    return !result.error && result.status === 0;
+}
+
+// .ico frames store either a PNG (magic bytes intact, which is what recent tooling writes) or a
+// BMP; only the PNG kind can be pulled out without a decoder. The largest frame wins because
+// iconutil needs at least 512x512 to fill every iconset slot.
+function extractIcoPngFrame(iconPath) {
+    const data = readFileSync(iconPath);
+    if (data.length < 6 || data.readUInt16LE(0) !== 0 || data.readUInt16LE(2) !== 1) {
+        throw new Error(`icon is not a .ico file: ${iconPath}`);
+    }
+    const frameCount = data.readUInt16LE(4);
+    let frame = null;
+    for (let index = 0; index < frameCount; index += 1) {
+        const entry = 6 + index * 16;
+        if (entry + 16 > data.length) break;
+        // Entry bytes 0/1 encode width/height, where 0 means 256.
+        const width = data[entry] === 0 ? 256 : data[entry];
+        const height = data[entry + 1] === 0 ? 256 : data[entry + 1];
+        const size = data.readUInt32LE(entry + 8);
+        const offset = data.readUInt32LE(entry + 12);
+        if (offset + size > data.length) continue;
+        if (!frame || width * height > frame.width * frame.height) {
+            frame = {width, height, offset, size};
+        }
+    }
+    if (!frame || data.readUInt32BE(frame.offset) !== 0x89504e47) {
+        throw new Error(".ico icon has no PNG frame to extract without Pillow; ship a .png or .icns icon instead");
+    }
+    return data.subarray(frame.offset, frame.offset + frame.size);
 }
 
 function signBundle(appDir, options) {
@@ -413,20 +479,23 @@ function createDmg(appDir, dmgPath, options) {
         "UDZO",
         dmgPath,
     ];
-    // Hosted runners occasionally answer `Resource busy` while the volume service is still
-    // settling after the bundle was just written; a short retry absorbs that flake.
-    for (let attempt = 1; ; attempt++) {
-        try {
-            run("hdiutil", dmgArgs);
-            break;
-        } catch (error) {
-            if (attempt >= 4) throw error;
-            const waitMs = attempt * 5000;
-            console.warn(`[WARN] hdiutil create failed (attempt ${attempt}/4), retrying in ${waitMs / 1000}s`);
-            spawnSync("sleep", [String(waitMs / 1000)]);
+    try {
+        // Hosted runners occasionally answer `Resource busy` while the volume service is still
+        // settling after the bundle was just written; a short retry absorbs that flake.
+        for (let attempt = 1; ; attempt++) {
+            try {
+                run("hdiutil", dmgArgs);
+                break;
+            } catch (error) {
+                if (attempt >= 4) throw error;
+                const waitMs = attempt * 5000;
+                console.warn(`[WARN] hdiutil create failed (attempt ${attempt}/4), retrying in ${waitMs / 1000}s`);
+                spawnSync("sleep", [String(waitMs / 1000)]);
+            }
         }
+    } finally {
+        rmSync(stagingDir, {recursive: true, force: true});
     }
-    rmSync(stagingDir, {recursive: true, force: true});
 }
 
 // The layout contract is checked on every host, including the Windows and Linux builders that
@@ -455,7 +524,7 @@ function verifyBundle(appDir, options) {
         if (!existsSync(resolved)) {
             throw new Error(`macOS bundle symlink does not resolve: ${entry.name}`);
         }
-        if (!resolved.startsWith(portableDir)) {
+        if (!resolved.startsWith(portableDir + sep)) {
             throw new Error(`macOS bundle symlink escapes ${PORTABLE_DIR}: ${entry.name}`);
         }
     }

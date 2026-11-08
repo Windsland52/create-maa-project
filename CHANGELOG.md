@@ -2,6 +2,38 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 新功能
+
+- macOS 的 MXU 包发布为签名的 `.app` 应用包 + `.dmg` 镜像。`tools/macos-app-bundle.mjs` 把
+  `dist/package-mxu` 组装成 `<DisplayName>.app`（可执行文件留在 `Contents/MacOS`，其余顶层条目经
+  `Contents/Resources/MXU-portable` 软链接入），嵌套签名后产出
+  `<Artifact>-macos-<arch>-<tag>-MXU.dmg`；MFAA 包保持 `.tar.gz` 不变。生成项目的 release 与
+  package-smoke workflow 在 macOS 目标上自动走 dmg 分支，仓库 CI 的 package-smoke osx 腿也全链路
+  跑一遍（启用 MXU → 打包 → 签名 → dmg → 只读运行 smoke）
+- Agent 项目支持 `PI_USER_DATA_DIR`：Client（只读 `.app` 下的 MXU）通过该环境变量交出可写数据
+  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；`tools/ci/smoke-macos-app.sh` 以只读 bundle
+  复刻安装形态做回归
+
+### 修复
+
+- `--icon` 图标转换加固：`uv` 可用时改用 `uv run --with pillow`（生成项目不再要求自身 pyproject
+  带 Pillow），`.ico` 且无 uv 时回退到内置 PNG 帧提取；图标路径失败不再静默告警而是中止构建。
+  dmg staging 目录在 `hdiutil` 重试终败后也会清理；bundle 软链逃逸检查补上路径分隔符边界
+- slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等 GUI 入口候选与
+  顶层发布路径）；smoke 脚本只放行"完全没有 Agent"的跳过，`python/` 或 `agent/` 缺一即报
+  partial agent bundle
+- `build-release.mjs` 的产物名契约与 release.yml 实际发布名对齐：macOS MXU 记 `.dmg`，其余目标
+  保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
+
+### 变更
+
+- MaaFW 内核日志目录改为 `debug/agent`（此前是 `debug/` 根）：Agent 自定义日志仍在
+  `debug/custom`，内核日志不再和自定义日志平铺混放；依赖旧布局翻内核日志的脚本要相应改路径
+- release artifact 列表新增 `.dmg`：生成项目的 release workflow 只发布 macOS MXU 的 dmg，其余
+  目标/ GUI 后缀不变；发布资产命名校验随之上移为 `(zip|tar.gz|dmg)`
+
 ## [3.7.4] - 2026-11-04
 
 ### 修复

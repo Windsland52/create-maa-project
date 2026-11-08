@@ -24,7 +24,17 @@ fail() {
     failures=$((failures + 1))
 }
 
-if [ ! -e "$macos_dir/python/bin/python3" ] || [ ! -e "$macos_dir/agent/main.py" ]; then
+has_python=false
+has_agent=false
+[ -e "$macos_dir/python/bin/python3" ] && has_python=true
+[ -e "$macos_dir/agent/main.py" ] && has_agent=true
+if [ "$has_python" != "$has_agent" ]; then
+    # One half of the Agent bundle is present and the other is missing: that is a broken package,
+    # not a project without an Agent.
+    echo "[ERR] partial agent bundle: python3 present=$has_python, agent/main.py present=$has_agent"
+    exit 1
+fi
+if [ "$has_python" = false ]; then
     # A project without an Agent ships no bundled interpreter, so there is nothing to smoke here;
     # the bundle layout itself is already verified by tools/macos-app-bundle.mjs.
     echo "[OK] no embedded Agent; macOS bundle runtime smoke skipped"

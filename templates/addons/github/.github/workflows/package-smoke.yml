@@ -198,11 +198,17 @@ jobs:
           # The release pipeline ships macOS MXU as {{releaseArtifactName}}.app inside a dmg; building and
           # signing it here keeps the layout, the codesign seal and the icon conversion covered on
           # every push.
+          # An explicitly requested icon fails the build when it cannot be applied, so the flag is
+          # only passed when the project actually ships a logo.ico.
+          icon_args=()
+          if [ -f logo.ico ]; then
+            icon_args=(--icon logo.ico)
+          fi
           node tools/macos-app-bundle.mjs \
             --package dist/package-mxu \
             --app "dist/{{releaseArtifactName}}.app" \
             --version v0.0.0-package-smoke \
-            --icon logo.ico \
+            "${icon_args[@]+"${icon_args[@]}"}" \
             --dmg "dist/{{releaseArtifactName}}-package-smoke.dmg"
           test -x "dist/{{releaseArtifactName}}.app/Contents/MacOS/{{slug}}"
           test -L "dist/{{releaseArtifactName}}.app/Contents/MacOS/interface.json"

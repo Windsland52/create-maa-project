@@ -9,7 +9,7 @@ from utils.runtime_paths import (
     configure_runtime_paths,
     default_work_root,
     get_runtime_paths,
-    seed_data_dir,
+    seed_work_root,
 )
 
 PI_ENV_KEYS = (
@@ -61,14 +61,14 @@ def run_agent(project_root_dir: str) -> int:
     work_root = default_work_root()
     configure_runtime_paths(project_root=project_root_dir, work_root=work_root)
 
-    # 数据目录播种包内 data/ 基线：二进制插件和裸 open("data/...") 按 cwd 读、不走
-    # resolve() 的覆盖层；播种后 cwd 与 resolve 两条读路径落到同一份文件。
+    # main.py 已把 cwd 指到数据目录；把包内基线（data/、config/ 补缺、interface.json）
+    # 播种过去，让按 cwd 读相对路径的二进制插件拿到与 resolve() 同一份文件。
     try:
-        seeded = seed_data_dir(get_runtime_paths())
+        seeded = seed_work_root(get_runtime_paths())
         if seeded:
-            logger.debug(f"已向数据目录播种 {seeded} 个 data/ 基线文件")
+            logger.debug(f"已向数据目录播种 {seeded} 个基线文件")
     except OSError as error:
-        logger.warning(f"data/ 基线播种失败（{error}），二进制插件可能读到包内旧数据")
+        logger.warning(f"数据目录基线播种失败（{error}），二进制插件可能读到包内旧数据")
 
     if len(sys.argv) < 2:
         logger.error("Missing MaaFW Agent socket id argument.")

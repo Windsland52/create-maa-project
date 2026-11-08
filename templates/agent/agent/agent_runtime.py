@@ -4,7 +4,7 @@ import importlib.metadata
 import os
 import sys
 
-from utils import logger
+from utils.logger import logger
 from utils.runtime_paths import configure_runtime_paths, default_work_root, get_runtime_paths
 
 PI_ENV_KEYS = (

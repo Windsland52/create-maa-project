@@ -386,8 +386,15 @@ function writeIconPng(iconPath, pngPath) {
                 console.warn(`[WARN] Pillow icon conversion failed (${error.message}); extracting the .ico PNG frame`);
             }
         }
-        writeFileSync(pngPath, extractIcoPngFrame(iconPath));
-        return;
+        try {
+            writeFileSync(pngPath, extractIcoPngFrame(iconPath));
+            return;
+        } catch (error) {
+            // Classic .ico files often store BMP frames. Quick Look can render one without
+            // pulling Pillow into a pipeline project that has no uv environment.
+            if (tryQuickLookIcon(iconPath, pngPath)) return;
+            throw error;
+        }
     }
     if (iconPath.toLowerCase().endsWith(".png")) {
         copyFileSync(iconPath, pngPath);
@@ -406,6 +413,31 @@ function writeIconPng(iconPath, pngPath) {
 function commandExists(command) {
     const result = spawnSync(command, ["--version"], {stdio: "ignore"});
     return !result.error && result.status === 0;
+}
+
+// qlmanage is part of macOS and can render a classic BMP-backed .ico to a PNG thumbnail. It is a
+// fallback only: if Quick Look refuses the file, the caller still fails the build as before.
+function tryQuickLookIcon(iconPath, pngPath) {
+    if (!existsSync("/usr/bin/qlmanage")) return false;
+    const outputDir = dirname(pngPath);
+    rmSync(pngPath, {force: true});
+    try {
+        run("qlmanage", [
+            "-t",
+            "-s",
+            "1024",
+            "-o",
+            outputDir,
+            iconPath,
+        ]);
+        if (existsSync(pngPath)) return true;
+        const generated = readdirSync(outputDir).find((name) => name.endsWith(".png"));
+        if (!generated) return false;
+        copyFileSync(join(outputDir, generated), pngPath);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 // .ico frames store either a PNG (magic bytes intact, which is what recent tooling writes) or a

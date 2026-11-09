@@ -113,7 +113,7 @@ export const RESERVED_PROJECT_SLUGS = new Set([
   'maafw',
   'maapicli',
   'mfaa',
-  'mfaaavalonia',
+  'mfaavalonia',
   'mxu',
   'plugins',
   'python',
@@ -130,6 +130,13 @@ export function assertValidSlug(slug: string): void {
   if (!/^[a-z0-9](?:[a-z0-9-]{0,212}[a-z0-9])?$/.test(slug)) {
     throw new Error(`Invalid project ID "${slug}". Use lowercase ASCII letters, numbers, and hyphens.`)
   }
+}
+
+// The project slug also becomes the GUI executable name inside every release package, so it must
+// not collide with a binary the GUI runtimes ship or with a top-level release path. Resource-pack
+// slugs do not go through the release package layout and only use assertValidSlug().
+export function assertValidProjectSlug(slug: string): void {
+  assertValidSlug(slug)
   if (RESERVED_PROJECT_SLUGS.has(slug.toLowerCase())) {
     throw new Error(
       `Invalid project ID "${slug}". This name is reserved by the release package layout; choose a different one.`,

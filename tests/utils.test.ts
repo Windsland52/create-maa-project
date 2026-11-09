@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertValidSlug } from '../src/utils.js'
+import { assertValidProjectSlug, assertValidSlug } from '../src/utils.js'
 
 describe('assertValidSlug', () => {
   it('accepts ordinary kebab-case slugs', () => {
@@ -33,10 +33,16 @@ describe('assertValidSlug', () => {
       'agent',
       'resource',
       'mfaa',
+      'mfaavalonia',
       'maapicli',
       'runtimes',
     ]) {
-      expect(() => assertValidSlug(slug)).toThrow('reserved by the release package layout')
+      expect(() => assertValidProjectSlug(slug)).toThrow('reserved by the release package layout')
     }
+  })
+
+  it('keeps reserved names available for resource packs', () => {
+    expect(() => assertValidSlug('data')).not.toThrow()
+    expect(() => assertValidSlug('resource')).not.toThrow()
   })
 })

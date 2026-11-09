@@ -266,6 +266,8 @@ describe('workflow templates', () => {
     const script = String(files.find((file) => file.path === 'tools/ci/smoke-macos-app.sh')?.content ?? '')
     expect(script).toContain('PI_USER_DATA_DIR')
     expect(script).toContain('Maa-Example.app')
+    expect(script).toContain('AgentServer started.')
+    expect(script).toContain('seeded_link')
   })
 
   it('pins and verifies git-cliff while generating cumulative release notes', () => {
@@ -456,10 +458,12 @@ describe('agent runtime data directory', () => {
     expect(runtimePaths).toContain('def default_work_root()')
     expect(runtimePaths).toContain('os.environ.get(ENV_USER_DATA_DIR')
     expect(runtimePaths).toContain('Path.cwd()')
+    expect(runtimePaths).toContain('def resolve_user(')
 
     const logger = agentFile('agent/utils/logger.py')
     expect(logger).toContain('def setup_logger(log_dir: str | None = None')
     expect(logger).toContain('default_work_root() / "debug" / "custom"')
+    expect(logger).toContain('_WRAPPER_FRAMES = 2')
 
     const runtime = agentFile('agent/agent_runtime.py')
     expect(runtime).toContain('"PI_USER_DATA_DIR"')

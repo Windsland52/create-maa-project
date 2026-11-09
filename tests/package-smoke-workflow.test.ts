@@ -60,5 +60,11 @@ describe('package smoke workflow', () => {
     expect(text.indexOf('smoke-macos-app.sh')).toBeGreaterThan(text.indexOf('node tools/macos-app-bundle.mjs'))
     // The bundler steps only exist on the macOS leg of the matrix.
     expect(text.match(/if: runner\.os == 'macOS'/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+
+    // The generated workflow must gate the dmg on the MXU GUI probe rather than only warning.
+    const generated = (await readFile(GENERATED_PACKAGE_SMOKE_WORKFLOW, 'utf8')).replace(/\r\n/g, '\n')
+    expect(generated).not.toContain('continue-on-error: true')
+    expect(generated).toContain('[ERR] MXU did not load interface.json')
+    expect(generated).toContain('exit 1')
   })
 })

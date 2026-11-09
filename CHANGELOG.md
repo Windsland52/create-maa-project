@@ -13,17 +13,19 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   package-smoke workflow 在 macOS 目标上自动走 dmg 分支，仓库 CI 的 package-smoke osx 腿也全链路
   跑一遍（启用 MXU → 打包 → 签名 → dmg → 只读运行 smoke）
 - Agent 项目支持 `PI_USER_DATA_DIR`：Client（只读 `.app` 下的 MXU）通过该环境变量交出可写数据
-  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；`tools/ci/smoke-macos-app.sh` 以只读 bundle
+  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；`RuntimePaths.resolve_user()` 对用户数据
+  采用“存在即赢”，避免新版包体基线覆盖旧存档；`tools/ci/smoke-macos-app.sh` 以只读 bundle
   复刻安装形态做回归
 
 ### 修复
 
 - `--icon` 图标转换加固：`uv` 可用时改用 `uv run --with pillow`（生成项目不再要求自身 pyproject
-  带 Pillow），`.ico` 且无 uv 时回退到内置 PNG 帧提取；图标路径失败不再静默告警而是中止构建。
-  dmg staging 目录在 `hdiutil` 重试终败后也会清理；bundle 软链逃逸检查补上路径分隔符边界
-- slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等 GUI 入口候选与
-  顶层发布路径）；smoke 脚本只放行"完全没有 Agent"的跳过，`python/` 或 `agent/` 缺一即报
-  partial agent bundle
+  带 Pillow），`.ico` 且无 uv 时回退到内置 PNG 帧提取，BMP 帧再回退到 Quick Look；图标路径失败
+  不再静默告警而是中止构建。dmg staging 目录在 `hdiutil` 重试终败后也会清理；bundle 软链逃逸
+  检查补上路径分隔符边界
+- 项目 slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等 GUI 入口
+  候选与顶层发布路径），资源包 slug 不受该限制；smoke 脚本只放行"完全没有 Agent"的跳过，
+  `python/` 或 `agent/` 缺一即报 partial agent bundle
 - `build-release.mjs` 的产物名契约与 release.yml 实际发布名对齐：macOS MXU 记 `.dmg`，其余目标
   保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
 

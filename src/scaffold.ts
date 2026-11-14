@@ -42,6 +42,7 @@ import type {
   ScaffoldResult,
 } from './types.js'
 import {
+  assertValidProjectSlug,
   assertValidSlug,
   exists,
   normalizeSlug,
@@ -131,7 +132,7 @@ export async function createProject(
       `Project ID cannot be inferred from "${defaultName}". Use --slug with an ASCII kebab-case value, and pass --name for the display name.`,
     )
   }
-  assertValidSlug(slug)
+  assertValidProjectSlug(slug)
   const displayName = requiredNonBlank(options.displayName ?? defaultName, 'Project display name cannot be blank.')
   const version = stripV(options.version ?? '0.1.0')
   assertValidSemVer(version)

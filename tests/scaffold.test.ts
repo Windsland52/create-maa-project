@@ -790,7 +790,10 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('uv export --frozen')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
-    expect(releaseWorkflow).toContain('-${gui_upper}.${{ matrix.ext }}"')
+    expect(releaseWorkflow).toContain('-${gui_upper}.$ext"')
+    // macOS MXU ships a dmg; the matrix ext applies to the other GUI archives.
+    expect(releaseWorkflow).toContain('"$gui_upper" == "MXU"')
+    expect(releaseWorkflow).toContain('ext="dmg"')
     expect(releaseWorkflow).not.toContain('gui^^')
     expect(releaseWorkflow).toContain('- name: Apply app icon')
     expect(releaseWorkflow).toContain("hashFiles('logo.ico') != ''")
@@ -2440,7 +2443,7 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
     expect(await readJson(join(root, 'MaaXX', 'interface.json'))).not.toHaveProperty('icon')
     expect(await readFile(join(root, 'MaaXX', '.github/workflows/release.yml'), 'utf8')).toContain(
-      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.${{ matrix.ext }}"',
+      'archive="MaaXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext"',
     )
     expect(await readFile(join(root, 'MaaXX', 'README.md'), 'utf8')).toContain('# MaaXX')
   })
@@ -2863,9 +2866,17 @@ export default defineConfig({
       await mkdir(join(projectRoot, 'libs/MaaAgentBinary'), { recursive: true })
       const guiRoot = join(projectRoot, '.create-maa-project/runtime/mxu', runtimePlatform)
       await mkdir(guiRoot, { recursive: true })
-      await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'mxu.exe' : 'mxu'), 'gui', {
-        mode: 0o666,
-      })
+      if (runtimePlatform.startsWith('osx-')) {
+        // MXU 2.10 ships macOS as mxu.app/Contents/MacOS/mxu; the release build lifts the binary
+        // out of the bundle into the flat portable layout.
+        const bundleMacosDir = join(guiRoot, 'mxu.app/Contents/MacOS')
+        await mkdir(bundleMacosDir, { recursive: true })
+        await writeFile(join(bundleMacosDir, 'mxu'), 'gui', { mode: 0o666 })
+      } else {
+        await writeFile(join(guiRoot, runtimePlatform.startsWith('win-') ? 'mxu.exe' : 'mxu'), 'gui', {
+          mode: 0o666,
+        })
+      }
       const pythonRuntimeRoot = join(projectRoot, '.create-maa-project/runtime/python', runtimePlatform)
       if (runtimePlatform.startsWith('win-')) {
         await mkdir(pythonRuntimeRoot, { recursive: true })
@@ -2900,6 +2911,14 @@ export default defineConfig({
       ).resolves.toBeDefined()
 
       const packageRoot = join(projectRoot, 'dist/package-mxu')
+      // The GUI executable always lands flat at the package root; on macOS it is lifted out of
+      // mxu.app and the bundle directory must not survive into the package.
+      expect(
+        await pathExists(
+          join(packageRoot, runtimePlatform.startsWith('win-') ? 'maa-mxu-release-test.exe' : 'maa-mxu-release-test'),
+        ),
+      ).toBe(true)
+      expect(await pathExists(join(packageRoot, 'mxu.app'))).toBe(false)
       const packageInterface = (await readJson(join(packageRoot, 'interface.json'))) as {
         title?: unknown
         agent?: Array<{ child_exec?: unknown; child_args?: unknown }>
@@ -4666,7 +4685,7 @@ export default defineConfig({
     expect(releaseWorkflow).toContain("if: github.event_name != 'workflow_dispatch'")
     expectReleaseWorkflowTargets(releaseWorkflow)
     expect(releaseWorkflow).toContain(
-      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.${{ matrix.ext }}"',
+      'archive="Maa-Test-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext"',
     )
     expect(releaseWorkflow).toContain('7z a "../$archive" .')
     expect(releaseWorkflow).toContain('tar -czf "../$archive" .')

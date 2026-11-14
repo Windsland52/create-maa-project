@@ -90,9 +90,57 @@ export function normalizeSlug(input: string): string {
     .replace(/^-|-$/g, '')
 }
 
+// The slug becomes the GUI executable name inside every release package, so it must not collide
+// with a binary the GUI runtimes ship (entrypointCandidates / findUnixExecutableFiles in
+// templates/addons/github/tools/build-release.mjs) or with a top-level release path
+// (releasePackagePaths / optionalPackagePaths there) — releasePackagePaths would never see the
+// clobbered entry, and case-insensitive filesystems would drop one of the two entries.
+export const RESERVED_PROJECT_SLUGS = new Set([
+  'agent',
+  'announcement',
+  'config',
+  'contact',
+  'data',
+  'debug',
+  'docs',
+  'interface',
+  'libs',
+  'license',
+  'locales',
+  'logo',
+  'maa-cli',
+  'maaagentserver',
+  'maafw',
+  'maapicli',
+  'mfaa',
+  'mfaavalonia',
+  'mxu',
+  'plugins',
+  'python',
+  'python3',
+  'readme',
+  'resource',
+  'resources',
+  'runtimes',
+  'tasks',
+  'tools',
+])
+
 export function assertValidSlug(slug: string): void {
   if (!/^[a-z0-9](?:[a-z0-9-]{0,212}[a-z0-9])?$/.test(slug)) {
     throw new Error(`Invalid project ID "${slug}". Use lowercase ASCII letters, numbers, and hyphens.`)
+  }
+}
+
+// The project slug also becomes the GUI executable name inside every release package, so it must
+// not collide with a binary the GUI runtimes ship or with a top-level release path. Resource-pack
+// slugs do not go through the release package layout and only use assertValidSlug().
+export function assertValidProjectSlug(slug: string): void {
+  assertValidSlug(slug)
+  if (RESERVED_PROJECT_SLUGS.has(slug.toLowerCase())) {
+    throw new Error(
+      `Invalid project ID "${slug}". This name is reserved by the release package layout; choose a different one.`,
+    )
   }
 }
 

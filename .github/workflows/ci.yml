@@ -149,6 +149,67 @@ jobs:
         env:
           CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.target }}
         run: node tools/build-release.mjs --release-tag v0.0.0-ci-smoke
+      # release.yml ships macOS MXU as a signed .app inside a dmg, so the osx leg exercises the
+      # whole bundler chain end to end: enable the MXU runtime, rebuild the packages with it, then
+      # bundle, sign, dmg and run the app read-only the way the release does.
+      - name: Enable the MXU runtime for the bundle smoke
+        if: runner.os == 'macOS'
+        working-directory: .ci-package-project
+        run: |
+          node --input-type=module -e "
+          import fs from 'node:fs';
+          const project = JSON.parse(fs.readFileSync('maa-project.json', 'utf8'));
+          project.runtime = {...project.runtime, mxu: {enabled: true, channel: 'stable', version: ''}};
+          fs.writeFileSync('maa-project.json', JSON.stringify(project, null, 4) + '\n');
+          "
+      - name: Synchronize the MXU runtime
+        if: runner.os == 'macOS'
+        working-directory: .ci-package-project
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.target }}
+          CREATE_MAA_PROJECT_BIN: node ${{ github.workspace }}/dist/index.js
+          CREATE_MAA_PROJECT_OCR_SOURCE: download
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm sync:runtime
+      # build-release.mjs removes every dist/package-* before rebuilding, so this second run both
+      # produces package-mxu and keeps the package-mfaa the verify steps below still assert.
+      - name: Rebuild the release packages with MXU
+        if: runner.os == 'macOS'
+        working-directory: .ci-package-project
+        env:
+          CREATE_MAA_PROJECT_RUNTIME_PLATFORM: ${{ matrix.target }}
+        run: node tools/build-release.mjs --release-tag v0.0.0-ci-smoke
+      - name: Build and smoke the macOS app bundle
+        if: runner.os == 'macOS'
+        working-directory: .ci-package-project
+        run: |
+          set -euo pipefail
+          # The project ships no logo.ico; wrap the PNG it does have into one so the bundler's
+          # icon conversion path is exercised the way release.yml uses it.
+          node --input-type=module -e "
+          import fs from 'node:fs';
+          const png = fs.readFileSync('resource/base/image/empty.png');
+          const entry = Buffer.alloc(16);
+          entry.writeUInt16LE(1, 4);
+          entry.writeUInt16LE(32, 6);
+          entry.writeUInt32LE(png.length, 8);
+          entry.writeUInt32LE(22, 12);
+          fs.writeFileSync('logo.ico', Buffer.concat([Buffer.from([0, 0, 1, 0, 1, 0]), entry, png]));
+          "
+          node tools/macos-app-bundle.mjs \
+            --package dist/package-mxu \
+            --app "dist/CI-Package.app" \
+            --version v0.0.0-ci-smoke \
+            --executable ci-package \
+            --display-name "CI Package" \
+            --icon logo.ico \
+            --dmg "dist/CI-Package-macos-aarch64-v0.0.0-ci-smoke-MXU.dmg"
+          test -x "dist/CI-Package.app/Contents/MacOS/ci-package"
+          test -L "dist/CI-Package.app/Contents/MacOS/interface.json"
+          test -d "dist/CI-Package.app/Contents/Resources/MXU-portable"
+          test -s "dist/CI-Package-macos-aarch64-v0.0.0-ci-smoke-MXU.dmg"
+          codesign --verify --strict --verbose=2 "dist/CI-Package.app"
+          bash tools/ci/smoke-macos-app.sh "dist/CI-Package.app" "$RUNNER_TEMP/ci-package-app-smoke"
       - name: Verify the package (Windows)
         if: runner.os == 'Windows'
         working-directory: .ci-package-project

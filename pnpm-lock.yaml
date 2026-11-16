@@ -5,9 +5,11 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  "@hono/node-server": 2.1.6
   "@vitest/mocker": 4.1.12
   body-parser: 2.4.0
   fast-uri: 3.1.9
+  hono: 4.13.16
   ip-address: 10.7.4
   qs: 6.16.1
   source-map-js: 1.2.2
@@ -472,12 +474,12 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  "@hono/node-server@2.1.3":
+  "@hono/node-server@2.1.6":
     resolution:
-      {integrity: sha512-TA//nWMqPhbfdfneACk6t5a9eqbS9lABEPyKn0/xZTah3H3U2XaVg85rJFl0/Fyit0I552YDHgXGVSf3GwqbUw==}
+      {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: ">=20"}
     peerDependencies:
-      hono: ^4
+      hono: 4.13.16
 
   "@jridgewell/resolve-uri@3.1.2":
     resolution:
@@ -1067,9 +1069,9 @@ packages:
       {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: ">= 0.4"}
 
-  hono@4.13.13:
+  hono@4.13.16:
     resolution:
-      {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
+      {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
     engines: {node: ">=16.9.0"}
 
   html-escaper@2.0.2:
@@ -1796,9 +1798,9 @@ snapshots:
   "@esbuild/win32-x64@0.28.1":
     optional: true
 
-  "@hono/node-server@2.1.3(hono@4.13.13)":
+  "@hono/node-server@2.1.6(hono@4.13.16)":
     dependencies:
-      hono: 4.13.13
+      hono: 4.13.16
 
   "@jridgewell/resolve-uri@3.1.2": {}
 
@@ -1811,7 +1813,7 @@ snapshots:
 
   "@modelcontextprotocol/sdk@1.32.1(zod@4.6.6)":
     dependencies:
-      "@hono/node-server": 2.1.3(hono@4.13.13)
+      "@hono/node-server": 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -1821,7 +1823,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.7.1(express@5.2.1)
-      hono: 4.13.13
+      hono: 4.13.16
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -2287,7 +2289,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.13.13: {}
+  hono@4.13.16: {}
 
   html-escaper@2.0.2: {}
 

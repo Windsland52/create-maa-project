@@ -9,7 +9,7 @@ from utils.runtime_paths import (
     configure_runtime_paths,
     default_work_root,
     get_runtime_paths,
-    seed_work_root,
+    link_work_root,
 )
 
 PI_ENV_KEYS = (
@@ -61,15 +61,14 @@ def run_agent(project_root_dir: str) -> int:
     work_root = default_work_root()
     configure_runtime_paths(project_root=project_root_dir, work_root=work_root)
 
-    # main.py 已把 cwd 指到数据目录；把包内基线接过去（data/、config/ 补缺、
-    # interface.json 复制；resource/ 等只读资产符号链接），让按 cwd 读相对路径的
-    # 二进制插件和遗漏的裸 open() 拿到与 resolve() 同一份文件。
+    # main.py 已把 cwd 指到数据目录；把包内只读顶层条目（resource/、agent/、interface.json
+    # 等）符号链接过来，让按 cwd 读相对路径的组件找得到文件。
     try:
-        seeded = seed_work_root(get_runtime_paths())
-        if seeded:
-            logger.debug(f"已向数据目录播种 {seeded} 个基线文件")
+        linked = link_work_root(get_runtime_paths())
+        if linked:
+            logger.debug(f"已向数据目录链接 {linked} 个包内条目")
     except OSError as error:
-        logger.warning(f"数据目录基线播种失败（{error}），二进制插件可能读到包内旧数据")
+        logger.warning(f"数据目录链接失败（{error}），按 cwd 读取的相对路径可能找不到包内资源")
 
     if len(sys.argv) < 2:
         logger.error("Missing MaaFW Agent socket id argument.")

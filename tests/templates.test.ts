@@ -302,7 +302,7 @@ describe('workflow templates', () => {
     expect(script).toContain('PI_USER_DATA_DIR')
     expect(script).toContain('Maa-Example.app')
     expect(script).toContain('AgentServer started.')
-    expect(script).toContain('seeded_link')
+    expect(script).toContain('linked_asset')
   })
 
   it('pins and verifies git-cliff while generating cumulative release notes', () => {
@@ -486,7 +486,7 @@ describe('agent runtime data directory', () => {
     )
 
   it('defaults the work root to the client data directory when one is provided', () => {
-    // Inside a signed macOS .app the project root is read-only, so config/debug/data must follow
+    // Inside a signed macOS .app the project root is read-only, so config/debug must follow
     // the writable directory the client hands over through PI_USER_DATA_DIR.
     const runtimePaths = agentFile('agent/utils/runtime_paths.py')
     expect(runtimePaths).toContain('ENV_USER_DATA_DIR = "PI_USER_DATA_DIR"')
@@ -494,7 +494,6 @@ describe('agent runtime data directory', () => {
     expect(runtimePaths).toContain('os.environ.get(ENV_USER_DATA_DIR')
     expect(runtimePaths).toContain('Path(value).expanduser().resolve()')
     expect(runtimePaths).toContain('Path.cwd()')
-    expect(runtimePaths).toContain('def resolve_user(')
 
     const main = agentFile('agent/main.py')
     expect(main).toContain('os.path.abspath(os.path.expanduser(user_data_dir))')

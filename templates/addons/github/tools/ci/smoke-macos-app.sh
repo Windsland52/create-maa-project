@@ -64,7 +64,7 @@ kill "$pid" 2>/dev/null
 set -e
 
 # Whatever the socket handshake does, the run has to reach the point where logs and config are set
-# up — that is the part a read-only bundle used to break. seed_work_root() also has to have linked
+# up — that is the part a read-only bundle used to break. link_work_root() also has to have linked
 # the read-only bundle dirs into the data dir, otherwise cwd-relative resource readers (warehouse /
 # SOS / drop templates) silently find nothing.
 if [ -d "$scratch/user-data/debug/custom" ]; then
@@ -83,11 +83,11 @@ fi
 
 # cwd-relative 的资源读点（warehouse/SOS/掉落模板）靠数据目录里的符号链接读包内资产；
 # 链接不在就等于这些读点全部落空。
-for seeded_link in resource agent; do
-    if [ -e "$scratch/user-data/$seeded_link" ] || [ -L "$scratch/user-data/$seeded_link" ]; then
-        echo "[OK] data dir reaches bundle asset: $seeded_link"
+for linked_asset in resource agent; do
+    if [ -e "$scratch/user-data/$linked_asset" ] || [ -L "$scratch/user-data/$linked_asset" ]; then
+        echo "[OK] data dir reaches bundle asset: $linked_asset"
     else
-        fail "seed_work_root did not expose $seeded_link in the data dir"
+        fail "link_work_root did not expose $linked_asset in the data dir"
     fi
 done
 

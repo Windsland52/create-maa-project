@@ -13,8 +13,8 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   package-smoke workflow 在 macOS 目标上自动走 dmg 分支，仓库 CI 的 package-smoke osx 腿也全链路
   跑一遍（启用 MXU → 打包 → 签名 → dmg → 只读运行 smoke）
 - Agent 项目支持 `PI_USER_DATA_DIR`：Client（只读 `.app` 下的 MXU）通过该环境变量交出可写数据
-  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；`RuntimePaths.resolve_user()` 对用户数据
-  采用“存在即赢”，避免新版包体基线覆盖旧存档；`tools/ci/smoke-macos-app.sh` 以只读 bundle
+  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；包内只读顶层条目（`resource/`、`agent/`、
+  `interface.json` 等）以符号链接接入数据目录。`tools/ci/smoke-macos-app.sh` 以只读 bundle
   复刻安装形态做回归
 
 ### 修复

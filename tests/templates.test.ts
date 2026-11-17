@@ -505,11 +505,22 @@ describe('agent runtime data directory', () => {
     expect(logger).toContain('default_work_root() / "debug" / "custom"')
     expect(logger).toContain('_WRAPPER_FRAMES = 2')
 
+    for (const path of [
+      'agent/agent_runtime.py',
+      'agent/custom/action/general.py',
+      'agent/custom/reco/general.py',
+    ]) {
+      const source = agentFile(path)
+      expect(source, path).toContain('from utils.logger import logger')
+      expect(source, path).not.toContain('from utils import logger')
+    }
+
     const runtime = agentFile('agent/agent_runtime.py')
     expect(runtime).toContain('"PI_USER_DATA_DIR"')
     expect(runtime).toContain('work_root = default_work_root()')
     expect(runtime).toContain('configure_runtime_paths(project_root=project_root_dir, work_root=work_root)')
-    expect(runtime).toContain('Tasker.set_log_dir(str(get_runtime_paths().debug_dir / "agent"))')
+    expect(runtime).toContain('Tasker.set_log_dir(str(get_runtime_paths().debug_dir))')
+    expect(runtime).not.toContain('debug_dir / "agent"')
     expect(runtime).not.toContain('work_root=os.getcwd()')
     expect(runtime).not.toContain('set_log_dir("./debug")')
   })

@@ -33,11 +33,11 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 - smoke 脚本只放行「完全没有 Agent」的跳过，`python/` 或 `agent/` 缺一即报 partial agent bundle
 - `build-release.mjs` 的产物名契约与 release.yml 实际发布名对齐：macOS MXU 记 `.dmg`，其余目标
   保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
+- Agent 模板统一为 `from utils.logger import logger`。`from utils import logger` 在已导入
+  `utils.logger` 子模块后会拿到 module 而不是 logger
 
 ### 变更
 
-- MaaFW 内核日志目录改为 `debug/agent`（此前是 `debug/` 根）：Agent 自定义日志仍在
-  `debug/custom`，内核日志不再和自定义日志平铺混放；依赖旧布局翻内核日志的脚本要相应改路径
 - release artifact 列表新增 `.dmg`：生成项目的 release workflow 只发布 macOS MXU 的 dmg，其余
   目标/ GUI 后缀不变；发布资产命名校验随之上移为 `(zip|tar.gz|dmg)`
 

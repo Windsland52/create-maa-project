@@ -89,7 +89,7 @@ def run_agent(project_root_dir: str) -> int:
     import custom
 
     custom.register_all()
-    Tasker.set_log_dir(str(get_runtime_paths().debug_dir / "agent"))
+    Tasker.set_log_dir(str(get_runtime_paths().debug_dir))
 
     socket_id = sys.argv[-1]
     logger.debug("socket_id: {}", socket_id)

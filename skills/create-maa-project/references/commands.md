@@ -123,6 +123,24 @@ Scripts in `package.json` follow the enabled add-ons: `check` always chains `for
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
 
+### Files written by github
+
+`--add github` writes 7 files, all `managed` (re-running `--add github` refreshes them):
+
+| File                                  | Refresh |
+| ------------------------------------- | ------- |
+| `.github/workflows/check.yml`         | managed |
+| `.github/workflows/release.yml`       | managed |
+| `.github/workflows/package-smoke.yml` | managed |
+| `tools/build-release.mjs`             | managed |
+| `tools/macos-app-bundle.mjs`          | managed |
+| `tools/ci/smoke-macos-app.sh`         | managed |
+| `tools/sync-runtime.mjs`              | managed |
+
+With MXU enabled, macOS ships a signed `.app` inside a `.dmg` (`tools/macos-app-bundle.mjs`, ad-hoc
+codesign). Agent projects honor `PI_USER_DATA_DIR` so config and logs land outside the read-only
+bundle. Without MXU the bundle steps are skipped and macOS still ships only the MFAA `.tar.gz`.
+
 ### Files written by android
 
 `--add android` connects the project to the MaaFwApp shell (Kotlin/Gradle) that CI turns into an APK:

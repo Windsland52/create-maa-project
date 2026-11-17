@@ -13,8 +13,21 @@ current_file_path = os.path.abspath(__file__)
 agent_dir = os.path.dirname(current_file_path)
 project_root_dir = os.path.dirname(agent_dir)
 
-if os.getcwd() != project_root_dir:
-    os.chdir(project_root_dir)
+# PI_USER_DATA_DIR 被设置时以它为工作目录：macOS .app 里 project_root 在只读包内，
+# 按 cwd 读写的相对路径必须落进可写的用户数据目录。agent_runtime 启动时用
+# link_work_root() 把包内只读顶层条目链过来。环境变量名与
+# utils.runtime_paths.ENV_USER_DATA_DIR 同步——这里不能 import utils（utils 包初始化
+# 会连带 import maa，ensure_maafw_binary_path 之后库目录就定死了）。
+user_data_dir = os.environ.get("PI_USER_DATA_DIR", "").strip()
+if user_data_dir:
+    # 相对值按启动时的 cwd 归一化并写回：否则 chdir 之后 runtime_paths 会再按新 cwd
+    # 解析一次，数据目录会多嵌一层（如 <proj>/userdata/userdata）。
+    user_data_dir = os.path.abspath(os.path.expanduser(user_data_dir))
+    os.environ["PI_USER_DATA_DIR"] = user_data_dir
+work_root_dir = user_data_dir if user_data_dir else project_root_dir
+if os.path.realpath(os.getcwd()) != os.path.realpath(work_root_dir):
+    os.makedirs(work_root_dir, exist_ok=True)
+    os.chdir(work_root_dir)
 
 if agent_dir not in sys.path:
     sys.path.insert(0, agent_dir)

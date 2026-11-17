@@ -2,6 +2,57 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 新功能
+
+- macOS 的 MXU 包发布为签名的 `.app` 应用包 + `.dmg` 镜像。`tools/macos-app-bundle.mjs` 把
+  `dist/package-mxu` 组装成 `<DisplayName>.app`（可执行文件留在 `Contents/MacOS`，其余顶层条目经
+  `Contents/Resources/MXU-portable` 软链接入），嵌套签名后产出
+  `<Artifact>-macos-<arch>-<tag>-MXU.dmg`；MFAA 包保持 `.tar.gz` 不变。生成项目的 release 与
+  package-smoke workflow 在 macOS 目标上自动走 dmg 分支，仓库 CI 的 package-smoke osx 腿也全链路
+  跑一遍（启用 MXU → 打包 → 签名 → dmg → 只读运行 smoke）
+- Agent 项目支持 `PI_USER_DATA_DIR`：Client（只读 `.app` 下的 MXU）通过该环境变量交出可写数据
+  目录，Agent 的 `config/`、`debug/` 落到 bundle 外；包内只读顶层条目（`resource/`、`agent/`、
+  `interface.json` 等）以符号链接接入数据目录。`tools/ci/smoke-macos-app.sh` 以只读 bundle
+  复刻安装形态做回归
+
+### 修复
+
+- `--icon` 图标转换加固：`uv` 可用时改用 `uv run --with pillow`（生成项目不再要求自身 pyproject
+  带 Pillow），`.ico` 且无 uv 时回退到内置 PNG 帧提取，BMP 帧再回退到 Quick Look；图标路径失败
+  不再静默告警而是中止构建。dmg staging 目录在 `hdiutil` 重试终败后也会清理；bundle 软链逃逸
+  检查补上路径分隔符边界
+- `macos-app-bundle.mjs` 先校验入口 / `interface.json` / 版本格式、并用 realpath 拒绝 `--app`
+  与包目录或 cwd 重叠，再删除旧 `.app`；参数写错不再先毁掉输入包或旧产物。`CFBundleVersion`
+  与 `CFBundleShortVersionString` 都写成 1–3 段数字（`v0.0.0-package-smoke` → `0.0.0`），
+  预发布后缀只留在 dmg 文件名里。有 `--icon` 时 package-smoke / 仓库 CI 会核对 icns 文件和
+  `CFBundleIconFile` 的值
+- `PI_USER_DATA_DIR` 为相对路径或 `~` 时，Agent 在 `chdir` 前 `expanduser` + 绝对化并写回环境
+  变量，避免数据目录变成 `userdata/userdata`
+- smoke 脚本只放行「完全没有 Agent」的跳过，`python/` 或 `agent/` 缺一即报 partial agent bundle
+- `build-release.mjs` 的产物名契约与 release.yml 实际发布名对齐：macOS MXU 记 `.dmg`，其余目标
+  保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
+- Agent 模板统一为 `from utils.logger import logger`。`from utils import logger` 在已导入
+  `utils.logger` 子模块后会拿到 module 而不是 logger
+- 无 loguru 时 `%s` 占位交给标准 logging，`logger.error("DisableNode: %s", error)` 不再打出字面 `%s`
+- 跨卷复制 bundle 时保留嵌套符号链接（`python3 → python3.13` 不再被解成失效绝对路径）。smoke
+  要求数据目录里的 `resource/`、`agent/` 是能解析的目录，断掉的链接不再误报成功
+- `PI_USER_DATA_DIR` 指到项目目录内部时，`link_work_root()` 跳过数据目录自身，避免
+  `userdata/userdata → userdata`
+
+### 变更
+
+- release artifact 列表新增 `.dmg`：生成项目的 release workflow 只发布 macOS MXU 的 dmg，其余
+  目标/ GUI 后缀不变；发布资产命名校验随之上移为 `(zip|tar.gz|dmg)`
+
+### 不兼容变更
+
+- 创建项目时的 slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等
+  GUI 入口候选与顶层发布路径）。只影响新创建和显式 `--slug`；已有项目不会在 `--add github`
+  时被重验，资源包 slug 仍走原来的字符规则。以前合法的 `create-maa-project --slug python`
+  现在会直接失败，请换一个不与发布包顶层路径冲突的项目 ID。
+
 ## [3.7.4] - 2026-11-04
 
 ### 修复

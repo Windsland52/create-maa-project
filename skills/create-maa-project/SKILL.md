@@ -96,7 +96,11 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 
 - `<path>` creates a subfolder; `.` targets the current directory.
 - `--template` is `pipeline` (default) or `agent` (adds Python agent scaffolding with uv).
-- A normal repository setup is `--add dev-tools --add github`.
+- A normal repository setup is `--add dev-tools --add github`. The github add-on writes check /
+  release / package-smoke workflows plus `tools/build-release.mjs`, `tools/macos-app-bundle.mjs`,
+  `tools/ci/smoke-macos-app.sh`, and `tools/sync-runtime.mjs`. macOS MXU ships as a signed `.app`
+  inside a `.dmg`; Agent projects honor `PI_USER_DATA_DIR` so config and logs land outside the
+  read-only bundle. Without MXU, macOS still ships only the MFAA `.tar.gz`.
 - Add-on dependencies are resolved automatically, in both `create` and `--add`: `vscode`,
   `github`, and `agent` require `dev-tools`; `agent` also requires `vscode`; `git-cliff`,
   `auto-format`, `optimize-images`, `community`, `dependabot`, and `schema-sync` require `github`

@@ -7,6 +7,7 @@ from logging.handlers import TimedRotatingFileHandler
 from typing import Any
 
 from . import pienv
+from .runtime_paths import default_work_root
 
 LEVEL_SHORT_NAMES = {
     "INFO": "info",
@@ -144,6 +145,68 @@ _FILE_FORMAT = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s:%(fun
 _std_logger = logging.getLogger("agent")
 
 
+class _BraceFormatLogger:
+    """Pre-render loguru-style {} placeholders; leave %s/%d to stdlib logging.
+
+    调用点既有 logger.debug("{}={}", key, value)，也有 logger.error("DisableNode: %s", error)。
+    只对含 {} 的消息做 str.format；其余带着参数交给 logging.getMessage()。str.format 会忽略
+    多余位置参数，所以 "%s".format(err) 既不抛也不填，必须把这类消息从 format 路径拿开。
+    """
+
+    def __init__(self, wrapped: logging.Logger) -> None:
+        self._wrapped = wrapped
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._wrapped, name)
+
+    # 用户调用点到 logging 的内部帧共两层：debug()/info()/… 一层、_log() 一层。
+    # findCaller 的默认 stacklevel=1 会停在 _log 里这一行，%(funcName)s:%(lineno)d 全部指错；
+    # 在调用方给的 stacklevel 之上再补这两层包装帧。
+    _WRAPPER_FRAMES = 2
+    _LOGGING_KW = ("exc_info", "stack_info", "stacklevel", "extra")
+
+    def _render(
+        self, msg: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
+        logging_kwargs = {k: v for k, v in kwargs.items() if k in self._LOGGING_KW}
+        if args and isinstance(msg, str) and "{" in msg:
+            try:
+                extra = {k: v for k, v in kwargs.items() if k not in self._LOGGING_KW}
+                return msg.format(*args, **extra), (), logging_kwargs
+            except Exception:
+                return msg, args, logging_kwargs
+        if args:
+            return msg, args, logging_kwargs
+        return msg, args, kwargs
+
+    def _log(self, level: int, msg: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        msg, args, kwargs = self._render(msg, args, kwargs)
+        kwargs["stacklevel"] = int(kwargs.get("stacklevel") or 1) + self._WRAPPER_FRAMES
+        self._wrapped.log(level, msg, *args, **kwargs)
+
+    def debug(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        self._log(logging.DEBUG, msg, args, kwargs)
+
+    def info(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        self._log(logging.INFO, msg, args, kwargs)
+
+    def warning(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        self._log(logging.WARNING, msg, args, kwargs)
+
+    def error(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        self._log(logging.ERROR, msg, args, kwargs)
+
+    def exception(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("exc_info", True)
+        self._log(logging.ERROR, msg, args, kwargs)
+
+    def critical(self, msg: Any, *args: Any, **kwargs: Any) -> None:
+        self._log(logging.CRITICAL, msg, args, kwargs)
+
+    def opt(self, *args: Any, **kwargs: Any) -> "_BraceFormatLogger":
+        return self  # loguru 特有；回退路径直接忽略 opt(...) 的语义，仍可用 .debug 等
+
+
 def _resolve_level(level: Any) -> int:
     if isinstance(level, int):
         return level
@@ -199,14 +262,16 @@ def _setup_std_logger(log_dir: str = "debug/custom", console_level: str = "INFO"
     file_handler.setFormatter(_FILE_FORMAT)
     _std_logger.addHandler(file_handler)
 
-    return _std_logger
+    # 标准 logging 用 % 占位，loguru 用 {}。回退路径上把 {} 先展开，%s 留给 logging。
+    return _BraceFormatLogger(_std_logger)
 
 
-def setup_logger(log_dir: str = "debug/custom", console_level: str = "INFO"):
+def setup_logger(log_dir: str | None = None, console_level: str = "INFO"):
     """设置 logger（优先 loguru，无 loguru 时回退到标准 logging）"""
+    resolved_log_dir = log_dir or str(default_work_root() / "debug" / "custom")
     if _has_loguru:
-        return _setup_loguru_logger(log_dir=log_dir, console_level=console_level)
-    return _setup_std_logger(log_dir=log_dir, console_level=console_level)
+        return _setup_loguru_logger(log_dir=resolved_log_dir, console_level=console_level)
+    return _setup_std_logger(log_dir=resolved_log_dir, console_level=console_level)
 
 
 def change_console_level(level: str = "DEBUG"):

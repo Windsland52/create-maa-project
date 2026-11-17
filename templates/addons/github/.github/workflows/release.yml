@@ -95,22 +95,67 @@ jobs:
             # macOS runners resolve `shell: bash` to the system bash 3.2, which predates the
             # parameter-expansion case modifiers, so uppercase through tr instead.
             gui_upper="$(printf '%s' "$gui" | tr '[:lower:]' '[:upper:]')"
-            archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.${{ matrix.ext }}"
-            (
-              cd "$pkg_dir"
-              if [[ "${{ matrix.ext }}" == "zip" ]]; then
-                7z a "../$archive" .
-              else
-                tar -czf "../$archive" .
-                tar -tzvf "../$archive" > "../$archive.manifest"
-                if ! awk '$1 ~ /^-/ && $0 ~ /(^|\/)({{slug}}|MFAAvalonia|mxu|MaaPiCli|MaaAgentServer|maa-cli|python3?)$/ && $1 !~ /^-..x/ { print; bad=1 } END { exit bad }' "../$archive.manifest"; then
-                  echo "[ERR] Unix archive is missing executable permission metadata"
-                  exit 1
-                fi
-                echo "[OK] Unix archive executable metadata smoke passed"
+            # macOS MXU ships as {{releaseArtifactName}}.app inside a dmg, the shape MaaEnd publishes; MFAA
+            # keeps the plain archive because it is a bare GUI binary.
+            ext="${{ matrix.ext }}"
+            if [[ "${{ matrix.artifact_os }}" == "macos" && "$gui" == "mxu" ]]; then
+              ext="dmg"
+            fi
+            archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext"
+            if [[ "$ext" == "dmg" ]]; then
+              # An explicitly requested icon fails the build when it cannot be applied, so the flag
+              # is only passed when the project actually ships a logo.ico.
+              icon_args=()
+              if [[ -f logo.ico ]]; then
+                icon_args=(--icon logo.ico)
               fi
-            )
+              node tools/macos-app-bundle.mjs \
+                --package "$pkg_dir" \
+                --app "dist/{{releaseArtifactName}}.app" \
+                --version "$GITHUB_REF_NAME" \
+                "${icon_args[@]+"${icon_args[@]}"}" \
+                --dmg "dist/$archive"
+              rm -rf "dist/{{releaseArtifactName}}.app"
+            else
+              (
+                cd "$pkg_dir"
+                if [[ "$ext" == "zip" ]]; then
+                  7z a "../$archive" .
+                else
+                  tar -czf "../$archive" .
+                  tar -tzvf "../$archive" > "../$archive.manifest"
+                  if ! awk '$1 ~ /^-/ && $0 ~ /(^|\/)({{slug}}|MFAAvalonia|mxu|MaaPiCli|MaaAgentServer|maa-cli|python3?)$/ && $1 !~ /^-..x/ { print; bad=1 } END { exit bad }' "../$archive.manifest"; then
+                    echo "[ERR] Unix archive is missing executable permission metadata"
+                    exit 1
+                  fi
+                  echo "[OK] Unix archive executable metadata smoke passed"
+                fi
+              )
+            fi
             rm -rf "$pkg_dir"
+          done
+          # Assert the exact asset set this target must produce: a GUI runtime whose package was
+          # silently skipped (mxu on linux-arm64 is the only legitimate absence) would otherwise be
+          # published as a complete release.
+          expected_guis=( $(node --input-type=module -e "
+          import fs from 'node:fs';
+          const project = JSON.parse(fs.readFileSync('maa-project.json', 'utf8'));
+          const names = [];
+          if (project.runtime?.mfa?.enabled !== false) names.push('MFAA');
+          if (project.runtime?.mxu?.enabled && '${{ matrix.runtime_os }}-${{ matrix.runtime_arch }}' !== 'linux-arm64') names.push('MXU');
+          console.log(names.join(' '));
+          ") )
+          for gui_upper in "${expected_guis[@]}"; do
+            ext="${{ matrix.ext }}"
+            if [[ "${{ matrix.artifact_os }}" == "macos" && "$gui_upper" == "MXU" ]]; then
+              ext="dmg"
+            fi
+            archive="{{releaseArtifactName}}-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext"
+            if [[ ! -f "dist/$archive" ]]; then
+              echo "[ERR] expected release asset was not produced: $archive"
+              exit 1
+            fi
+            echo "[OK] packaged release asset: $archive"
           done
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'workflow_dispatch'
@@ -136,7 +181,8 @@ jobs:
           {{releaseNotesInput}}
           files: |
             release-assets/*.zip
-            release-assets/*.tar.gz{{releaseApkAssets}}
+            release-assets/*.tar.gz
+            release-assets/*.dmg{{releaseApkAssets}}
       - name: Dispatch post-release hooks
         env:
           GH_TOKEN: ${{ github.token }}

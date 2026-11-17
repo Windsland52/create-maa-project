@@ -44,6 +44,16 @@ const DEV_TOOL_FILES = [
   'tools/validate-schema.mjs',
 ]
 
+const GITHUB_FILES = [
+  '.github/workflows/check.yml',
+  '.github/workflows/package-smoke.yml',
+  '.github/workflows/release.yml',
+  'tools/build-release.mjs',
+  'tools/ci/smoke-macos-app.sh',
+  'tools/macos-app-bundle.mjs',
+  'tools/sync-runtime.mjs',
+]
+
 const VSCODE_FILES = [
   '.vscode/extensions.json',
   '.vscode/settings.json',
@@ -223,6 +233,81 @@ describe('workflow templates', () => {
     }
   })
 
+  it('ships the macOS MXU package as a signed dmg', () => {
+    const file = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff: false,
+    })
+    const content = file.content.toString()
+
+    expect(content).toContain('node tools/macos-app-bundle.mjs')
+    expect(content).toContain('--app "dist/MaaXXXX.app"')
+    expect(content).toContain(
+      'MaaXXXX-${{ matrix.artifact_os }}-${{ matrix.arch }}-${GITHUB_REF_NAME}-${gui_upper}.$ext',
+    )
+    expect(content).toContain('--dmg "dist/$archive"')
+    expect(content).toContain('release-assets/*.dmg')
+    // The dmg overrides only macOS+MXU: the archive name keeps the GUI suffix either way.
+    expect(content).toContain('"$gui_upper" == "MXU"')
+    // The asset assertion must know the macOS MXU asset is a dmg, not the matrix ext.
+    expect(content).toContain('ext="dmg"')
+    expect(content.replaceAll('${{', '')).not.toContain('{{')
+  })
+
+  it('writes exactly the documented github file set', () => {
+    const files = githubFiles(devToolInput(true))
+    const paths = files.map((file) => file.path).sort()
+
+    expect(paths).toEqual(GITHUB_FILES)
+    // docs/commands.md states the count.
+    expect(paths).toHaveLength(7)
+    expect(files.every((file) => file.managed)).toBe(true)
+  })
+
+  it('documents the github file set in commands.md and the skill reference', async () => {
+    const documents = await Promise.all([
+      readFile(join(repoRoot, 'docs/commands.md'), 'utf8'),
+      readFile(join(repoRoot, 'docs/commands.en.md'), 'utf8'),
+      readFile(join(repoRoot, 'skills/create-maa-project/references/commands.md'), 'utf8'),
+    ])
+    for (const path of GITHUB_FILES) {
+      for (const document of documents) {
+        expect(document, path).toContain(`\`${path}\``)
+      }
+    }
+  })
+
+  it('covers the bundle in package smoke and writes the helper scripts', () => {
+    const files = githubFiles(devToolInput(true))
+    const paths = files.map((file) => file.path)
+
+    expect(paths).toContain('tools/macos-app-bundle.mjs')
+    expect(paths).toContain('tools/ci/smoke-macos-app.sh')
+    for (const file of files) {
+      if (Buffer.isBuffer(file.content)) continue
+      // `${{ ... }}` is GitHub's own expression syntax and must survive rendering.
+      expect(file.content.replaceAll('${{', ''), file.path).not.toContain('{{')
+    }
+    const smoke = String(files.find((file) => file.path === '.github/workflows/package-smoke.yml')?.content ?? '')
+    expect(smoke).toContain('bash tools/ci/smoke-macos-app.sh "dist/Maa-Example.app"')
+    expect(smoke).toContain('loaded interface for project')
+    expect(smoke).toContain('CFBundleIconFile')
+    expect(smoke).toContain('maa-example.icns')
+    const bundler = String(files.find((file) => file.path === 'tools/macos-app-bundle.mjs')?.content ?? '')
+    expect(bundler).toContain('executable: "maa-example"')
+    expect(bundler).toContain('"com.maa-example.app"')
+    expect(bundler).toContain('displayName: "Maa-Example"')
+    const script = String(files.find((file) => file.path === 'tools/ci/smoke-macos-app.sh')?.content ?? '')
+    expect(script).toContain('PI_USER_DATA_DIR')
+    expect(script).toContain('Maa-Example.app')
+    expect(script).toContain('AgentServer started.')
+    expect(script).toContain('linked_asset')
+    expect(script).toContain('[ -d "$scratch/user-data/$linked_asset" ]')
+    expect(script).not.toContain('[ -L "$scratch/user-data/$linked_asset" ]')
+    expect(bundler).toContain('verbatimSymlinks: true')
+  })
+
   it('pins and verifies git-cliff while generating cumulative release notes', () => {
     const file = releaseWorkflowFile({
       slug: 'maaxxxx',
@@ -390,6 +475,57 @@ describe('android templates', () => {
         ).resolves.toBe(true)
       }
     }
+  })
+})
+
+describe('agent runtime data directory', () => {
+  const agentFile = (path: string): string =>
+    String(
+      agentFiles({
+        slug: 'maa-example',
+        version: '0.1.0',
+        displayName: 'Maa Example',
+      }).find((file) => file.path === path)?.content ?? '',
+    )
+
+  it('defaults the work root to the client data directory when one is provided', () => {
+    // Inside a signed macOS .app the project root is read-only, so config/debug must follow
+    // the writable directory the client hands over through PI_USER_DATA_DIR.
+    const runtimePaths = agentFile('agent/utils/runtime_paths.py')
+    expect(runtimePaths).toContain('ENV_USER_DATA_DIR = "PI_USER_DATA_DIR"')
+    expect(runtimePaths).toContain('def default_work_root()')
+    expect(runtimePaths).toContain('os.environ.get(ENV_USER_DATA_DIR')
+    expect(runtimePaths).toContain('Path(value).expanduser().resolve()')
+    expect(runtimePaths).toContain('Path.cwd()')
+
+    const main = agentFile('agent/main.py')
+    expect(main).toContain('os.path.abspath(os.path.expanduser(user_data_dir))')
+    expect(main).toContain('os.environ["PI_USER_DATA_DIR"] = user_data_dir')
+
+    const logger = agentFile('agent/utils/logger.py')
+    expect(logger).toContain('def setup_logger(log_dir: str | None = None')
+    expect(logger).toContain('default_work_root() / "debug" / "custom"')
+    expect(logger).toContain('_WRAPPER_FRAMES = 2')
+    expect(logger).toContain('self._wrapped.log(level, msg, *args, **kwargs)')
+
+    for (const path of [
+      'agent/agent_runtime.py',
+      'agent/custom/action/general.py',
+      'agent/custom/reco/general.py',
+    ]) {
+      const source = agentFile(path)
+      expect(source, path).toContain('from utils.logger import logger')
+      expect(source, path).not.toContain('from utils import logger')
+    }
+
+    const runtime = agentFile('agent/agent_runtime.py')
+    expect(runtime).toContain('"PI_USER_DATA_DIR"')
+    expect(runtime).toContain('work_root = default_work_root()')
+    expect(runtime).toContain('configure_runtime_paths(project_root=project_root_dir, work_root=work_root)')
+    expect(runtime).toContain('Tasker.set_log_dir(str(get_runtime_paths().debug_dir))')
+    expect(runtime).not.toContain('debug_dir / "agent"')
+    expect(runtime).not.toContain('work_root=os.getcwd()')
+    expect(runtime).not.toContain('set_log_dir("./debug")')
   })
 })
 

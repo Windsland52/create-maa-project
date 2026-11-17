@@ -260,7 +260,10 @@ The default runtime profile targets [MFAAvalonia](https://github.com/MaaXYZ/MFAA
 `--update maafw` syncs MaaFramework assets, `--update runtime:mfa` syncs the MFAAvalonia GUI
 runtime, and the generated `pnpm sync:runtime` runs both (agent projects additionally sync the
 Python runtime). Default release artifacts cover Windows, Linux, and macOS on `x86_64` and
-`aarch64`; Windows artifacts are `.zip`, Linux and macOS artifacts are `.tar.gz`.
+`aarch64`; Windows artifacts are `.zip` and Linux artifacts are `.tar.gz`. On macOS the MFAA
+package stays `.tar.gz`, while an MXU-enabled project ships a signed `.app` bundle inside a `.dmg`
+(built by `tools/macos-app-bundle.mjs`); agent projects get `PI_USER_DATA_DIR` data-directory
+support so the Agent also runs from a read-only bundle.
 
 Projects with the `android` add-on additionally produce APKs: the
 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) shell is wired in as a Git submodule,

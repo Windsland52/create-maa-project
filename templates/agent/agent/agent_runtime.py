@@ -4,8 +4,13 @@ import importlib.metadata
 import os
 import sys
 
-from utils import logger
-from utils.runtime_paths import configure_runtime_paths
+from utils.logger import logger
+from utils.runtime_paths import (
+    configure_runtime_paths,
+    default_work_root,
+    get_runtime_paths,
+    link_work_root,
+)
 
 PI_ENV_KEYS = (
     "PI_INTERFACE_VERSION",
@@ -14,6 +19,7 @@ PI_ENV_KEYS = (
     "PI_CLIENT_LANGUAGE",
     "PI_CLIENT_MAAFW_VERSION",
     "PI_VERSION",
+    "PI_USER_DATA_DIR",
     "PI_CONTROLLER",
     "PI_RESOURCE",
 )
@@ -50,7 +56,19 @@ def _log_maafw_version() -> None:
 
 
 def run_agent(project_root_dir: str) -> int:
-    configure_runtime_paths(project_root=project_root_dir, work_root=os.getcwd())
+    # Client 在只读项目目录（macOS .app）下经 PI_USER_DATA_DIR 给出可写数据目录；未设置时
+    # default_work_root 回落到当前工作目录。
+    work_root = default_work_root()
+    configure_runtime_paths(project_root=project_root_dir, work_root=work_root)
+
+    # main.py 已把 cwd 指到数据目录；把包内只读顶层条目（resource/、agent/、interface.json
+    # 等）符号链接过来，让按 cwd 读相对路径的组件找得到文件。
+    try:
+        linked = link_work_root(get_runtime_paths())
+        if linked:
+            logger.debug(f"已向数据目录链接 {linked} 个包内条目")
+    except OSError as error:
+        logger.warning(f"数据目录链接失败（{error}），按 cwd 读取的相对路径可能找不到包内资源")
 
     if len(sys.argv) < 2:
         logger.error("Missing MaaFW Agent socket id argument.")
@@ -70,7 +88,7 @@ def run_agent(project_root_dir: str) -> int:
     import custom
 
     custom.register_all()
-    Tasker.set_log_dir("./debug")
+    Tasker.set_log_dir(str(get_runtime_paths().debug_dir))
 
     socket_id = sys.argv[-1]
     logger.debug("socket_id: {}", socket_id)

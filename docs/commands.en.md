@@ -115,6 +115,26 @@ Scripts in `package.json` follow the enabled add-ons: `check` always chains `for
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
 
+### Files written by github
+
+`--add github` writes 7 files, all `managed` (re-running `--add github` refreshes them; `--update`
+has no github target):
+
+| File                                  | Purpose                                                                                      | Refresh |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- | ------- |
+| `.github/workflows/check.yml`         | format, typecheck and tests on push / PR                                                     | managed |
+| `.github/workflows/release.yml`       | tag release: packages the matrix; macOS MXU ships as `.app` inside a `.dmg`                  | managed |
+| `.github/workflows/package-smoke.yml` | same target matrix as release, on push / PR; macOS MXU also assembles, signs and smokes      | managed |
+| `tools/build-release.mjs`             | builds the flat release packages; lifts the macOS MXU GUI binary out of `mxu.app`            | managed |
+| `tools/macos-app-bundle.mjs`          | assembles `dist/package-mxu` into a signed `.app` and packs it into a `.dmg`                 | managed |
+| `tools/ci/smoke-macos-app.sh`         | runs the Agent from a read-only bundle with `PI_USER_DATA_DIR` so data lands outside the app | managed |
+| `tools/sync-runtime.mjs`              | `pnpm sync:runtime`: MaaFW / GUI / (Agent) embedded Python                                   | managed |
+
+With MXU enabled, the macOS release asset is a signed `.app` inside a `.dmg` (ad-hoc codesign, no
+notarize). Agent projects honor `PI_USER_DATA_DIR` so `config/` and `debug/` go to a writable data
+directory next to a read-only `.app`. Without MXU, macOS still ships only the MFAA `.tar.gz` and the
+bundle steps are skipped.
+
 ### Files written by android
 
 `--add android` connects the project to the MaaFwApp shell (Kotlin/Gradle) that CI turns into an APK:

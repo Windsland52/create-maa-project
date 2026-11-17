@@ -87,6 +87,20 @@ class RuntimePathsTest(unittest.TestCase):
 
         self.assertEqual(RUNTIME_PATHS.link_work_root(paths), 0)
 
+    def test_link_work_root_skips_a_project_local_work_root(self) -> None:
+        work_root = self.project / "userdata"
+        work_root.mkdir()
+        self.write("resource/image/Item-1.png", "png")
+        paths = RUNTIME_PATHS.build_runtime_paths(project_root=self.project, work_root=work_root)
+
+        RUNTIME_PATHS.link_work_root(paths)
+
+        self.assertFalse((work_root / "userdata").exists())
+        link = work_root / "resource"
+        if not link.is_symlink():
+            self.skipTest("platform does not allow creating symlinks")
+        self.assertTrue((link / "image/Item-1.png").is_file())
+
     def test_default_work_root_resolves_a_relative_env(self) -> None:
         previous = os.environ.get("PI_USER_DATA_DIR")
         previous_cwd = os.getcwd()

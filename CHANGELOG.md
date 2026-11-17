@@ -38,6 +38,8 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 - 无 loguru 时 `%s` 占位交给标准 logging，`logger.error("DisableNode: %s", error)` 不再打出字面 `%s`
 - 跨卷复制 bundle 时保留嵌套符号链接（`python3 → python3.13` 不再被解成失效绝对路径）。smoke
   要求数据目录里的 `resource/`、`agent/` 是能解析的目录，断掉的链接不再误报成功
+- `PI_USER_DATA_DIR` 指到项目目录内部时，`link_work_root()` 跳过数据目录自身，避免
+  `userdata/userdata → userdata`
 
 ### 变更
 

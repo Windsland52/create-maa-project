@@ -303,6 +303,9 @@ describe('workflow templates', () => {
     expect(script).toContain('Maa-Example.app')
     expect(script).toContain('AgentServer started.')
     expect(script).toContain('linked_asset')
+    expect(script).toContain('[ -d "$scratch/user-data/$linked_asset" ]')
+    expect(script).not.toContain('[ -L "$scratch/user-data/$linked_asset" ]')
+    expect(bundler).toContain('verbatimSymlinks: true')
   })
 
   it('pins and verifies git-cliff while generating cumulative release notes', () => {
@@ -503,6 +506,7 @@ describe('agent runtime data directory', () => {
     expect(logger).toContain('def setup_logger(log_dir: str | None = None')
     expect(logger).toContain('default_work_root() / "debug" / "custom"')
     expect(logger).toContain('_WRAPPER_FRAMES = 2')
+    expect(logger).toContain('self._wrapped.log(level, msg, *args, **kwargs)')
 
     for (const path of [
       'agent/agent_runtime.py',

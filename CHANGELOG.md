@@ -35,6 +35,9 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
 - Agent 模板统一为 `from utils.logger import logger`。`from utils import logger` 在已导入
   `utils.logger` 子模块后会拿到 module 而不是 logger
+- 无 loguru 时 `%s` 占位交给标准 logging，`logger.error("DisableNode: %s", error)` 不再打出字面 `%s`
+- 跨卷复制 bundle 时保留嵌套符号链接（`python3 → python3.13` 不再被解成失效绝对路径）。smoke
+  要求数据目录里的 `resource/`、`agent/` 是能解析的目录，断掉的链接不再误报成功
 
 ### 变更
 

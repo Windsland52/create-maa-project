@@ -83,6 +83,7 @@ describe('macos app bundle template', () => {
     expect(bundler).toContain('"com.bundle-test.app"')
     // The .app display name follows the sanitized release artifact name, not the raw display name.
     expect(bundler).toContain('displayName: "Bundle-Test"')
+    expect(bundler).toContain('verbatimSymlinks: true')
     const smokeScript = await readFile(join(root, 'bundle-test', 'tools/ci/smoke-macos-app.sh'), 'utf8')
     expect(smokeScript).not.toContain('{{')
     expect(smokeScript).toContain('Bundle-Test.app')

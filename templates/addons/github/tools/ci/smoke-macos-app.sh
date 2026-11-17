@@ -84,7 +84,8 @@ fi
 # cwd-relative 的资源读点（warehouse/SOS/掉落模板）靠数据目录里的符号链接读包内资产；
 # 链接不在就等于这些读点全部落空。
 for linked_asset in resource agent; do
-    if [ -e "$scratch/user-data/$linked_asset" ] || [ -L "$scratch/user-data/$linked_asset" ]; then
+    # -d follows the link and requires a real directory; a dangling symlink must not pass.
+    if [ -d "$scratch/user-data/$linked_asset" ]; then
         echo "[OK] data dir reaches bundle asset: $linked_asset"
     else
         fail "link_work_root did not expose $linked_asset in the data dir"

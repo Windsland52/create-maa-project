@@ -43,6 +43,11 @@ create-maa-project --mcp [--root <path>]
 (controller ID: `Adb`, `Windows`, `macOS`, `PlayCover`, `Gamepad`, `Linux`) and a `label` (display
 text, e.g. `Android / Emulator`). `WlRoots` is accepted as the pre-rename spelling of `Linux`.
 
+The project ID (`--slug`, or derived from the folder name) becomes the GUI executable inside every
+release package, so it cannot collide with a top-level release path or runtime entry: reserved names
+such as `mxu`, `python`, `resource`, `maafw`, and `agent` are rejected on create / `--slug`. Existing
+projects are not re-checked on `--add github`; resource-pack slugs still use the character rule only.
+
 ## Maintenance options
 
 | Option                              | Meaning                                                                                                            |

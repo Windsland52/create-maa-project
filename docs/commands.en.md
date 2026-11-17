@@ -29,6 +29,8 @@ Git initialization is enabled by default: when the target is outside an existing
 
 Interactive creation defaults: project folder `maa-project` (the project ID is derived from the folder name and only asked for when no valid ID can be derived), display name from the folder name, project type `pipeline`, license `AGPL-3.0-or-later`, control target `Adb`, the All repository preset, and no extra resource pack; Git initialization follows the rule above. `--yes --no-interactive` uses these same defaults.
 
+The project ID (`--slug`, or derived from the folder name) becomes the GUI executable inside every release package, so it cannot collide with a top-level release path or runtime entry: reserved names such as `mxu`, `python`, `resource`, `maafw`, and `agent` are rejected on **new creates** and explicit `--slug`. Existing projects are not re-checked on `--add github`; resource-pack slugs still use the character rule only.
+
 Add-ons:
 
 ```bash

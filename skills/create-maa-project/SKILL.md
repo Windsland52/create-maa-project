@@ -96,6 +96,10 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 
 - `<path>` creates a subfolder; `.` targets the current directory.
 - `--template` is `pipeline` (default) or `agent` (adds Python agent scaffolding with uv).
+- `--slug` is the ASCII project ID and the GUI executable name inside every release package.
+  Do not pick a name reserved by that layout (`mxu`, `python`, `resource`, `maafw`, `agent`,
+  …); the CLI rejects those on create / `--slug`. Existing projects are not re-checked on
+  `--add github`. Resource-pack slugs still use the character rule only.
 - A normal repository setup is `--add dev-tools --add github`. The github add-on writes check /
   release / package-smoke workflows plus `tools/build-release.mjs`, `tools/macos-app-bundle.mjs`,
   `tools/ci/smoke-macos-app.sh`, and `tools/sync-runtime.mjs`. macOS MXU ships as a signed `.app`

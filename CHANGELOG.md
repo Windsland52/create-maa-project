@@ -2,9 +2,9 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 未发布
+## [3.8.0] - 2026-11-17
 
-### 新功能
+### 新增
 
 - macOS 的 MXU 包发布为签名的 `.app` 应用包 + `.dmg` 镜像。`tools/macos-app-bundle.mjs` 把
   `dist/package-mxu` 组装成 `<DisplayName>.app`（可执行文件留在 `Contents/MacOS`，其余顶层条目经
@@ -56,6 +56,15 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   GUI 入口候选与顶层发布路径）。只影响新创建和显式 `--slug`；已有项目不会在 `--add github`
   时被重验，资源包 slug 仍走原来的字符规则。以前合法的 `create-maa-project --slug python`
   现在会直接失败，请换一个不与发布包顶层路径冲突的项目 ID。
+
+已有项目：github 的 7 个文件全是受管的，重跑 `create-maa-project --add github` 会写入
+`tools/macos-app-bundle.mjs`、`tools/ci/smoke-macos-app.sh` 并刷新 release / package-smoke
+（`--update` 没有 github 目标）。Agent 的 `PI_USER_DATA_DIR`、数据目录自链跳过、以及文件日志时区/
+`tpl=` 在受管的 agent 文件里，重跑 `create-maa-project --add agent` 即更新；`--add agent` 不会改
+`[project].dependencies`，请把 `loguru` 改成 `>=0.8.0` 再 `--update python-deps`。已有项目的 slug
+不会在 `--add github` 时被重验。
+
+[3.8.0]: https://github.com/Windsland52/create-maa-project/compare/v3.7.4...v3.8.0
 
 ## [3.7.4] - 2026-11-04
 

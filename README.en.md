@@ -148,7 +148,8 @@ default in CI; `=1` forces it on).
 Project identity is split into two fields:
 
 - `slug`: ASCII kebab-case ID used for repository names, package names, artifacts, and
-  `interface.json` `name`.
+  `interface.json` `name`. Names reserved by the release package layout (`mxu`, `python`,
+  `resource`, `maafw`, `agent`, …) are rejected on new creates and explicit `--slug`.
 - `displayName`: user-facing label used for `interface.json` `label`; it may be Chinese
   or any other display text.
 

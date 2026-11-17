@@ -278,6 +278,19 @@ describe('workflow templates', () => {
     }
   })
 
+  it('documents reserved project slugs in commands.md and the skill reference', async () => {
+    const documents = await Promise.all([
+      readFile(join(repoRoot, 'docs/commands.md'), 'utf8'),
+      readFile(join(repoRoot, 'docs/commands.en.md'), 'utf8'),
+      readFile(join(repoRoot, 'skills/create-maa-project/references/commands.md'), 'utf8'),
+    ])
+    for (const document of documents) {
+      expect(document).toContain('`--slug`')
+      expect(document).toContain('`mxu`')
+      expect(document).toContain('`--add github`')
+    }
+  })
+
   it('covers the bundle in package smoke and writes the helper scripts', () => {
     const files = githubFiles(devToolInput(true))
     const paths = files.map((file) => file.path)

@@ -24,6 +24,8 @@ Git 初始化默认开启：目标不在已有 Git 仓库内时，创建（含 `
 
 交互式创建的默认值：项目目录 `maa-project`（项目 ID 由目录名推导，推导不出合法 ID 时才追问）、显示名取目录名、项目类型 `pipeline`、license `AGPL-3.0-or-later`、控制目标 `Adb`、仓库预设「全部」、不添加额外资源包；Git 初始化按上一条规则。`--yes --no-interactive` 使用同一套默认值。
 
+项目 ID（`--slug` 或从目录名推导）会成为发布包里的 GUI 可执行文件名，因此不能与包内顶层路径或运行时入口冲突：`mxu`、`python`、`resource`、`maafw`、`agent` 等保留名在**新创建**和显式 `--slug` 时会被拒绝。已有项目不会在 `--add github` 时被重验；资源包 slug 仍只走字符规则。
+
 增量能力：
 
 ```bash

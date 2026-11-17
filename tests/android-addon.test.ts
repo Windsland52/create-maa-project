@@ -291,7 +291,7 @@ describe('android add-on: --add android on an existing project', () => {
     expect(result?.written).toContain('pyproject.toml')
     expect(patched).toContain('extend-exclude = ["Android/MaaFwApp"]')
     // Everything the project owned survives: --update python-deps reads [project].dependencies.
-    expect(patched).toContain('dependencies = [\n    "loguru",\n    "maafw",\n]')
+    expect(patched).toContain('dependencies = [\n    "loguru>=0.8.0",\n    "maafw",\n]')
 
     const second = await applyIncrementalAddons(options({ add: ['android'] }), () => {}, projectRoot)
     expect(second?.written).not.toContain('pyproject.toml')

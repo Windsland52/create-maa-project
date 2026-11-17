@@ -507,6 +507,12 @@ describe('agent runtime data directory', () => {
     expect(logger).toContain('default_work_root() / "debug" / "custom"')
     expect(logger).toContain('_WRAPPER_FRAMES = 2')
     expect(logger).toContain('self._wrapped.log(level, msg, *args, **kwargs)')
+    expect(logger).toContain('def _enrich_file_template(')
+    expect(logger).toContain('{time:YYYY-MM-DD HH:mm:ss.SSSZ}')
+    expect(logger).toContain('{message}{extra[template]}')
+
+    expect(agentFile('pyproject.toml')).toContain('"loguru>=0.8.0"')
+    expect(agentFile('requirements.in')).toContain('loguru>=0.8.0')
 
     for (const path of [
       'agent/agent_runtime.py',

@@ -99,6 +99,24 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 `optimize-images` 追加 `optimize:images`，Agent 项目追加 `format:py`、`lint:py`、`typecheck:py`、
 `check:py`。
 
+### github 写入的文件
+
+`--add github` 会写入 7 个文件，全部 `managed`（重跑 `--add github` 即刷新；`--update` 没有 github 目标）：
+
+| 文件                                  | 用途                                                                                | 刷新方式 |
+| ------------------------------------- | ----------------------------------------------------------------------------------- | -------- |
+| `.github/workflows/check.yml`         | push / PR 上跑 format、typecheck、测试                                              | managed  |
+| `.github/workflows/release.yml`       | tag 发版：按矩阵打包，macOS MXU 走 `.app` + `.dmg`，其余目标仍是 `.zip` / `.tar.gz` | managed  |
+| `.github/workflows/package-smoke.yml` | 与 release 同一目标矩阵，push / PR 先打一遍包；macOS MXU 额外组装、签名、只读 smoke | managed  |
+| `tools/build-release.mjs`             | 打扁平发布包；macOS MXU 的 GUI 入口从 `mxu.app` 提出                                | managed  |
+| `tools/macos-app-bundle.mjs`          | 把 `dist/package-mxu` 组装成签名 `.app` 并打进 `.dmg`                               | managed  |
+| `tools/ci/smoke-macos-app.sh`         | 以只读 bundle + `PI_USER_DATA_DIR` 跑 Agent，确认数据目录落在包外                   | managed  |
+| `tools/sync-runtime.mjs`              | `pnpm sync:runtime`：同步 MaaFW / GUI /（Agent）嵌入 Python                         | managed  |
+
+启用 MXU 后，macOS 发布资产是签名的 `.app` 包进 `.dmg`（ad-hoc codesign，没有 notarize）。Agent
+项目在 Client 设置 `PI_USER_DATA_DIR` 时把 `config/`、`debug/` 写到可写数据目录，以配合只读
+`.app`。未启用 MXU 时 macOS 仍只出 MFAA 的 `.tar.gz`，bundle 步骤会跳过。
+
 ### android 写入的文件
 
 `--add android` 把项目接上 MaaFwApp 外壳（Kotlin/Gradle），由 CI 出 APK：

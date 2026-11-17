@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { lstat, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -122,6 +122,114 @@ describe('macos app bundle template', () => {
     expect(smoke.replaceAll('${{', '')).not.toContain('{{')
   })
 
+  async function runBundler(
+    packageDir: string,
+    app: string,
+    extra: string[] = [],
+  ): Promise<ReturnType<typeof execFileAsync>> {
+    return execFileAsync(process.execPath, [
+      BUNDLER_TEMPLATE,
+      '--package',
+      packageDir,
+      '--app',
+      app,
+      '--skip-sign',
+      ...extra,
+    ])
+  }
+
+  // These guards fail before any symlink is created, so they run on Windows too.
+  describe('bundle guards', () => {
+    it('fails when the package has no entrypoint and keeps a previous app', async () => {
+      const root = await mkTempProject()
+      const app = join(root, 'dist', 'BundleFailTest.app')
+      const previous = join(app, 'Contents', 'Info.plist')
+      await mkdir(dirname(previous), { recursive: true })
+      await writeFile(previous, 'previous')
+      const packageDir = await writeReleasePackage(root, 'bundle-fail-test')
+      await rm(join(packageDir, 'bundle-fail-test'))
+
+      await expect(runBundler(packageDir, app, ['--executable', 'bundle-fail-test'])).rejects.toThrow(
+        'release package has no entrypoint: bundle-fail-test',
+      )
+      expect(await readFile(previous, 'utf8')).toBe('previous')
+      expect((await stat(join(packageDir, 'interface.json'))).isFile()).toBe(true)
+    })
+
+    it('rejects --app inside the package without deleting the package', async () => {
+      const root = await mkTempProject()
+      const packageDir = await writeReleasePackage(root, 'bundle-inside-test')
+
+      await expect(
+        runBundler(packageDir, join(packageDir, 'Out.app'), ['--executable', 'bundle-inside-test']),
+      ).rejects.toThrow('--app must not live inside the release package')
+      expect((await stat(join(packageDir, 'bundle-inside-test'))).isFile()).toBe(true)
+    })
+
+    it('rejects --app that contains the package without deleting the package', async () => {
+      const root = await mkTempProject()
+      const nested = join(root, 'nested')
+      await mkdir(nested)
+      const packageDir = await writeReleasePackage(nested, 'bundle-contains-test')
+
+      await expect(runBundler(packageDir, nested, ['--executable', 'bundle-contains-test'])).rejects.toThrow(
+        '--app must not contain the release package',
+      )
+      expect((await stat(join(packageDir, 'bundle-contains-test'))).isFile()).toBe(true)
+    })
+
+    it('refuses to clean the working directory', async () => {
+      const root = await mkTempProject()
+      const keep = join(root, 'keep.txt')
+      await writeFile(keep, 'keep')
+      const packageDir = await writeReleasePackage(root, 'bundle-cwd-test')
+
+      await expect(runBundler(packageDir, root, ['--executable', 'bundle-cwd-test'])).rejects.toThrow(
+        '--app must not be the working directory',
+      )
+      expect(await readFile(keep, 'utf8')).toBe('keep')
+    })
+
+    it('rejects a non-numeric version before touching output', async () => {
+      const root = await mkTempProject()
+      const app = join(root, 'dist', 'BundleNightly.app')
+      const previous = join(app, 'Contents', 'Info.plist')
+      await mkdir(dirname(previous), { recursive: true })
+      await writeFile(previous, 'previous')
+      const packageDir = await writeReleasePackage(root, 'bundle-nightly-test')
+
+      await expect(
+        runBundler(packageDir, app, [
+          '--executable',
+          'bundle-nightly-test',
+          '--version',
+          'vnightly',
+        ]),
+      ).rejects.toThrow('--version must start with a numeric version')
+      expect(await readFile(previous, 'utf8')).toBe('previous')
+      expect((await stat(join(packageDir, 'bundle-nightly-test'))).isFile()).toBe(true)
+    })
+
+    it('resolves symlink aliases before comparing paths', async (context) => {
+      const root = await mkTempProject()
+      const real = join(root, 'real')
+      await mkdir(real)
+      const packageDir = await writeReleasePackage(real, 'bundle-alias-test')
+      const alias = join(root, 'alias')
+      try {
+        await symlink(real, alias, 'dir')
+      } catch {
+        context.skip()
+        return
+      }
+
+      await expect(runBundler(packageDir, alias, ['--executable', 'bundle-alias-test'])).rejects.toThrow(
+        '--app must not contain the release package',
+      )
+      expect((await stat(join(packageDir, 'bundle-alias-test'))).isFile()).toBe(true)
+    })
+  })
+
   // Directory symlinks work on Windows only with elevated or developer-mode privileges, so the
   // assembly runs on the Unix hosts the dmg is actually produced on.
   describe.skipIf(process.platform === 'win32')('bundle assembly', () => {
@@ -130,13 +238,7 @@ describe('macos app bundle template', () => {
       const packageDir = await writeReleasePackage(root, 'bundle-run-test')
       const app = join(root, 'dist', 'BundleRunTest.app')
 
-      const { stdout } = await execFileAsync(process.execPath, [
-        BUNDLER_TEMPLATE,
-        '--package',
-        packageDir,
-        '--app',
-        app,
-        '--skip-sign',
+      const { stdout } = await runBundler(packageDir, app, [
         '--version',
         'v1.2.3',
         '--executable',
@@ -165,26 +267,25 @@ describe('macos app bundle template', () => {
       const plist = await readFile(join(app, 'Contents', 'Info.plist'), 'utf8')
       expect(plist).toContain('<string>com.bundle-run-test.app</string>')
       expect(plist).toContain('<key>CFBundleExecutable</key>\n    <string>bundle-run-test</string>')
-      expect(plist).toContain('<string>1.2.3</string>')
+      expect(plist).toContain('<key>CFBundleShortVersionString</key>\n    <string>1.2.3</string>')
+      expect(plist).toContain('<key>CFBundleVersion</key>\n    <string>1.2.3</string>')
     })
 
-    it('fails when the package has no entrypoint', async () => {
+    it('uses a numeric bundle version for prereleases', async () => {
       const root = await mkTempProject()
-      const packageDir = await writeReleasePackage(root, 'bundle-fail-test')
-      await rm(join(packageDir, 'bundle-fail-test'))
+      const packageDir = await writeReleasePackage(root, 'bundle-pre-test')
+      const app = join(root, 'dist', 'BundlePreTest.app')
 
-      await expect(
-        execFileAsync(process.execPath, [
-          BUNDLER_TEMPLATE,
-          '--package',
-          packageDir,
-          '--app',
-          join(root, 'dist', 'BundleFailTest.app'),
-          '--skip-sign',
-          '--executable',
-          'bundle-fail-test',
-        ]),
-      ).rejects.toThrow('release package has no entrypoint: bundle-fail-test')
+      await runBundler(packageDir, app, [
+        '--version',
+        'v2.0.0-rc.1',
+        '--executable',
+        'bundle-pre-test',
+      ])
+      const plist = await readFile(join(app, 'Contents', 'Info.plist'), 'utf8')
+      expect(plist).toContain('<key>CFBundleShortVersionString</key>\n    <string>2.0.0</string>')
+      expect(plist).toContain('<key>CFBundleVersion</key>\n    <string>2.0.0</string>')
+      expect(plist).not.toContain('2.0.0-rc.1')
     })
   })
 })

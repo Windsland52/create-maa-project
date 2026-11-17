@@ -214,6 +214,12 @@ jobs:
           test -L "dist/{{releaseArtifactName}}.app/Contents/MacOS/interface.json"
           test -d "dist/{{releaseArtifactName}}.app/Contents/Resources/MXU-portable"
           test -s "dist/{{releaseArtifactName}}-package-smoke.dmg"
+          if [ -f logo.ico ]; then
+            test -f "dist/{{releaseArtifactName}}.app/Contents/Resources/{{bundleIconFile}}"
+            grep -A1 '<key>CFBundleIconFile</key>' \
+              "dist/{{releaseArtifactName}}.app/Contents/Info.plist" \
+              | grep -q '<string>{{bundleIconFile}}</string>'
+          fi
           # The listing documents the shipped layout: one real file, a symlink per top-level entry.
           ls -l "dist/{{releaseArtifactName}}.app/Contents/MacOS"
           codesign --verify --strict --verbose=2 "dist/{{releaseArtifactName}}.app"

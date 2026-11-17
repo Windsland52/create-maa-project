@@ -17,7 +17,9 @@ def default_work_root() -> Path:
     与以前一致，仍用当前工作目录。
     """
     value = os.environ.get(ENV_USER_DATA_DIR, "").strip()
-    return Path(value) if value else Path.cwd()
+    # 相对值按调用时的 cwd 收成绝对路径：main.py 会在 chdir 前把 env 写回绝对路径，
+    # 这里再 resolve 一次是兜底，避免漏网的相对值在 chdir 后多嵌一层。
+    return Path(value).expanduser().resolve() if value else Path.cwd()
 
 
 def _mtime(path: Path) -> float:

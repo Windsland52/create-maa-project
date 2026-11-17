@@ -207,6 +207,9 @@ jobs:
           test -x "dist/CI-Package.app/Contents/MacOS/ci-package"
           test -L "dist/CI-Package.app/Contents/MacOS/interface.json"
           test -d "dist/CI-Package.app/Contents/Resources/MXU-portable"
+          test -f "dist/CI-Package.app/Contents/Resources/ci-package.icns"
+          grep -A1 '<key>CFBundleIconFile</key>' dist/CI-Package.app/Contents/Info.plist \
+            | grep -q '<string>ci-package.icns</string>'
           test -s "dist/CI-Package-macos-aarch64-v0.0.0-ci-smoke-MXU.dmg"
           codesign --verify --strict --verbose=2 "dist/CI-Package.app"
           bash tools/ci/smoke-macos-app.sh "dist/CI-Package.app" "$RUNNER_TEMP/ci-package-app-smoke"

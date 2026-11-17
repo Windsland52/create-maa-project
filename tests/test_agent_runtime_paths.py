@@ -111,6 +111,20 @@ class RuntimePathsTest(unittest.TestCase):
 
         self.assertEqual(RUNTIME_PATHS.seed_work_root(paths), 0)
 
+    def test_default_work_root_resolves_a_relative_env(self) -> None:
+        previous = os.environ.get("PI_USER_DATA_DIR")
+        previous_cwd = os.getcwd()
+        os.chdir(self.root)
+        os.environ["PI_USER_DATA_DIR"] = "userdata"
+        try:
+            self.assertEqual(RUNTIME_PATHS.default_work_root(), (self.root / "userdata").resolve())
+        finally:
+            os.chdir(previous_cwd)
+            if previous is None:
+                os.environ.pop("PI_USER_DATA_DIR", None)
+            else:
+                os.environ["PI_USER_DATA_DIR"] = previous
+
 
 if __name__ == "__main__":
     unittest.main()

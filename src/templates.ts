@@ -769,11 +769,13 @@ function checkWorkflow(): string {
 }
 
 function packageSmokeWorkflow(input: Pick<ProjectTemplateInput, 'slug' | 'displayName'>): string {
+  const artifactName = releaseArtifactName(input)
   return trimTrailingWhitespace(
     template('addons/github/.github/workflows/package-smoke.yml', {
       nodeMajor: SUPPORTED_NODE_MAJOR,
       slug: input.slug,
-      releaseArtifactName: releaseArtifactName(input),
+      releaseArtifactName: artifactName,
+      bundleIconFile: `${artifactName.toLowerCase().replace(/[^a-z0-9.-]+/g, '-')}.icns`,
       releaseTargetMatrix: releaseTargetMatrixYaml(),
     }),
   )

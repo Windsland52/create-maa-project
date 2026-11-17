@@ -44,6 +44,16 @@ const DEV_TOOL_FILES = [
   'tools/validate-schema.mjs',
 ]
 
+const GITHUB_FILES = [
+  '.github/workflows/check.yml',
+  '.github/workflows/package-smoke.yml',
+  '.github/workflows/release.yml',
+  'tools/build-release.mjs',
+  'tools/ci/smoke-macos-app.sh',
+  'tools/macos-app-bundle.mjs',
+  'tools/sync-runtime.mjs',
+]
+
 const VSCODE_FILES = [
   '.vscode/extensions.json',
   '.vscode/settings.json',
@@ -245,6 +255,29 @@ describe('workflow templates', () => {
     expect(content.replaceAll('${{', '')).not.toContain('{{')
   })
 
+  it('writes exactly the documented github file set', () => {
+    const files = githubFiles(devToolInput(true))
+    const paths = files.map((file) => file.path).sort()
+
+    expect(paths).toEqual(GITHUB_FILES)
+    // docs/commands.md states the count.
+    expect(paths).toHaveLength(7)
+    expect(files.every((file) => file.managed)).toBe(true)
+  })
+
+  it('documents the github file set in commands.md and the skill reference', async () => {
+    const documents = await Promise.all([
+      readFile(join(repoRoot, 'docs/commands.md'), 'utf8'),
+      readFile(join(repoRoot, 'docs/commands.en.md'), 'utf8'),
+      readFile(join(repoRoot, 'skills/create-maa-project/references/commands.md'), 'utf8'),
+    ])
+    for (const path of GITHUB_FILES) {
+      for (const document of documents) {
+        expect(document, path).toContain(`\`${path}\``)
+      }
+    }
+  })
+
   it('covers the bundle in package smoke and writes the helper scripts', () => {
     const files = githubFiles(devToolInput(true))
     const paths = files.map((file) => file.path)
@@ -259,6 +292,8 @@ describe('workflow templates', () => {
     const smoke = String(files.find((file) => file.path === '.github/workflows/package-smoke.yml')?.content ?? '')
     expect(smoke).toContain('bash tools/ci/smoke-macos-app.sh "dist/Maa-Example.app"')
     expect(smoke).toContain('loaded interface for project')
+    expect(smoke).toContain('CFBundleIconFile')
+    expect(smoke).toContain('maa-example.icns')
     const bundler = String(files.find((file) => file.path === 'tools/macos-app-bundle.mjs')?.content ?? '')
     expect(bundler).toContain('executable: "maa-example"')
     expect(bundler).toContain('"com.maa-example.app"')
@@ -457,8 +492,13 @@ describe('agent runtime data directory', () => {
     expect(runtimePaths).toContain('ENV_USER_DATA_DIR = "PI_USER_DATA_DIR"')
     expect(runtimePaths).toContain('def default_work_root()')
     expect(runtimePaths).toContain('os.environ.get(ENV_USER_DATA_DIR')
+    expect(runtimePaths).toContain('Path(value).expanduser().resolve()')
     expect(runtimePaths).toContain('Path.cwd()')
     expect(runtimePaths).toContain('def resolve_user(')
+
+    const main = agentFile('agent/main.py')
+    expect(main).toContain('os.path.abspath(os.path.expanduser(user_data_dir))')
+    expect(main).toContain('os.environ["PI_USER_DATA_DIR"] = user_data_dir')
 
     const logger = agentFile('agent/utils/logger.py')
     expect(logger).toContain('def setup_logger(log_dir: str | None = None')

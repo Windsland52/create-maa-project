@@ -20,12 +20,13 @@ import {
     readFileSync,
     readlinkSync,
     readSync,
+    realpathSync,
     renameSync,
     rmSync,
     symlinkSync,
     writeFileSync,
 } from "node:fs";
-import {basename, dirname, join, relative, resolve, sep} from "node:path";
+import {basename, dirname, isAbsolute, join, relative, resolve, sep} from "node:path";
 
 // Mach-O and universal binaries, read as big-endian u32 so both byte orders are listed.
 const MACHO_MAGICS = new Set([
@@ -49,6 +50,7 @@ function main() {
     if (!existsSync(packageDir)) {
         throw new Error(`release package does not exist: ${packageDir}`);
     }
+    assertDisjointPaths(packageDir, appDir);
 
     assembleBundle(packageDir, appDir, options);
     verifyBundle(appDir, options);
@@ -109,13 +111,9 @@ function parseOptions(argv) {
 }
 
 function assembleBundle(packageDir, appDir, options) {
-    const contentsDir = join(appDir, "Contents");
-    const macosDir = join(contentsDir, "MacOS");
-    const portableDir = join(contentsDir, "Resources", PORTABLE_DIR);
-    rmSync(appDir, {recursive: true, force: true});
-    mkdirSync(macosDir, {recursive: true});
-    mkdirSync(portableDir, {recursive: true});
-
+    // Validate the inputs before touching the filesystem: the steps below recursively
+    // delete appDir and move the package contents, so a failed run would otherwise lose
+    // both the previous bundle and the input package.
     const entrypoint = join(packageDir, options.executable);
     if (!existsSync(entrypoint)) {
         throw new Error(`release package has no entrypoint: ${options.executable}`);
@@ -123,6 +121,14 @@ function assembleBundle(packageDir, appDir, options) {
     if (!existsSync(join(packageDir, "interface.json"))) {
         throw new Error("release package has no interface.json");
     }
+    parseBundleVersions(options.version);
+
+    const contentsDir = join(appDir, "Contents");
+    const macosDir = join(contentsDir, "MacOS");
+    const portableDir = join(contentsDir, "Resources", PORTABLE_DIR);
+    rmSync(appDir, {recursive: true, force: true});
+    mkdirSync(macosDir, {recursive: true});
+    mkdirSync(portableDir, {recursive: true});
 
     for (const entry of readdirSync(packageDir, {withFileTypes: true})) {
         if (entry.name === ".DS_Store") continue;
@@ -137,6 +143,44 @@ function assembleBundle(packageDir, appDir, options) {
         symlinkSync(relative(macosDir, target), join(macosDir, entry.name));
     }
     writeInfoPlist(appDir, options);
+}
+
+// appDir is recursively deleted, so the output path must not overlap the input package
+// or the caller's working directory: a mistyped --app would otherwise wipe the release
+// package or the workspace and then report "no entrypoint". Compare realpath first —
+// macOS /tmp and /var point at /private/..., so equal literal paths are not enough.
+function assertDisjointPaths(packageDir, appDir) {
+    const cwd = realPath(process.cwd());
+    const realPackage = realPath(packageDir);
+    const realApp = realPath(appDir);
+    if (realApp === realPackage) throw new Error("--app must not be the release package directory");
+    if (realApp === cwd) throw new Error("--app must not be the working directory");
+    if (containsPath(realApp, cwd)) throw new Error("--app must not contain the working directory");
+    if (containsPath(realApp, realPackage)) throw new Error("--app must not contain the release package");
+    if (containsPath(realPackage, realApp)) throw new Error("--app must not live inside the release package");
+}
+
+// appDir does not exist on the first run, so realpath fails; walk up to the nearest
+// existing ancestor, resolve that, then append the missing segments.
+function realPath(path) {
+    const missing = [];
+    let current = resolve(path);
+    while (true) {
+        try {
+            return join(realpathSync(current), ...[...missing].reverse());
+        } catch {
+            const parent = dirname(current);
+            if (parent === current) return resolve(path);
+            missing.push(basename(current));
+            current = parent;
+        }
+    }
+}
+
+function containsPath(parent, child) {
+    const rel = relative(parent, child);
+    if (rel === "") return true;
+    return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep);
 }
 
 function moveEntry(source, target) {
@@ -206,8 +250,7 @@ function isMachO(path) {
 }
 
 function writeInfoPlist(appDir, options) {
-    const fullVersion = String(options.version).replace(/^v/i, "");
-    const shortVersion = fullVersion.split("-")[0];
+    const {shortVersion} = parseBundleVersions(options.version);
     const entries = [
         [
             "CFBundleDevelopmentRegion",
@@ -243,7 +286,9 @@ function writeInfoPlist(appDir, options) {
         ],
         [
             "CFBundleVersion",
-            fullVersion,
+            // Apple requires 1–3 numeric segments; a prerelease tag (v2.0.0-rc.1)
+            // must not put its suffix in this key.
+            shortVersion,
         ],
         [
             "LSMinimumSystemVersion",
@@ -274,6 +319,17 @@ ${body}
 </plist>
 `;
     writeFileSync(join(appDir, "Contents", "Info.plist"), plist, "utf8");
+}
+
+// Apple's version keys only accept 1–3 numeric segments; prerelease / build metadata
+// stays in the dmg filename and volume name.
+function parseBundleVersions(version) {
+    const fullVersion = String(version).replace(/^v/i, "").split("+")[0];
+    const shortVersion = fullVersion.split("-")[0];
+    if (!/^\d+(?:\.\d+){0,2}$/.test(shortVersion)) {
+        throw new Error(`--version must start with a numeric version such as v1.2.3, got: ${version}`);
+    }
+    return {fullVersion, shortVersion};
 }
 
 function escapeXml(value) {

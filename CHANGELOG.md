@@ -23,9 +23,14 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   带 Pillow），`.ico` 且无 uv 时回退到内置 PNG 帧提取，BMP 帧再回退到 Quick Look；图标路径失败
   不再静默告警而是中止构建。dmg staging 目录在 `hdiutil` 重试终败后也会清理；bundle 软链逃逸
   检查补上路径分隔符边界
-- 项目 slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等 GUI 入口
-  候选与顶层发布路径），资源包 slug 不受该限制；smoke 脚本只放行"完全没有 Agent"的跳过，
-  `python/` 或 `agent/` 缺一即报 partial agent bundle
+- `macos-app-bundle.mjs` 先校验入口 / `interface.json` / 版本格式、并用 realpath 拒绝 `--app`
+  与包目录或 cwd 重叠，再删除旧 `.app`；参数写错不再先毁掉输入包或旧产物。`CFBundleVersion`
+  与 `CFBundleShortVersionString` 都写成 1–3 段数字（`v0.0.0-package-smoke` → `0.0.0`），
+  预发布后缀只留在 dmg 文件名里。有 `--icon` 时 package-smoke / 仓库 CI 会核对 icns 文件和
+  `CFBundleIconFile` 的值
+- `PI_USER_DATA_DIR` 为相对路径或 `~` 时，Agent 在 `chdir` 前 `expanduser` + 绝对化并写回环境
+  变量，避免数据目录变成 `userdata/userdata`
+- smoke 脚本只放行「完全没有 Agent」的跳过，`python/` 或 `agent/` 缺一即报 partial agent bundle
 - `build-release.mjs` 的产物名契约与 release.yml 实际发布名对齐：macOS MXU 记 `.dmg`，其余目标
   保持 `.zip` / `.tar.gz`，校验正则同步放行 `dmg`
 
@@ -35,6 +40,13 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
   `debug/custom`，内核日志不再和自定义日志平铺混放；依赖旧布局翻内核日志的脚本要相应改路径
 - release artifact 列表新增 `.dmg`：生成项目的 release workflow 只发布 macOS MXU 的 dmg，其余
   目标/ GUI 后缀不变；发布资产命名校验随之上移为 `(zip|tar.gz|dmg)`
+
+### 不兼容变更
+
+- 创建项目时的 slug 校验拒绝与发布布局冲突的保留名（`mxu`、`python`、`resource`、`maafw` 等
+  GUI 入口候选与顶层发布路径）。只影响新创建和显式 `--slug`；已有项目不会在 `--add github`
+  时被重验，资源包 slug 仍走原来的字符规则。以前合法的 `create-maa-project --slug python`
+  现在会直接失败，请换一个不与发布包顶层路径冲突的项目 ID。
 
 ## [3.7.4] - 2026-11-04
 

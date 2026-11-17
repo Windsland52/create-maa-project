@@ -36,6 +36,10 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 - Agent 模板统一为 `from utils.logger import logger`。`from utils import logger` 在已导入
   `utils.logger` 子模块后会拿到 module 而不是 logger
 - 无 loguru 时 `%s` 占位交给标准 logging，`logger.error("DisableNode: %s", error)` 不再打出字面 `%s`
+- Agent 文件日志时间戳带时区偏移；有 `{}` 占位符时附 loguru 0.8 的原始模板（`tpl=`），同一调用点
+  不同参数能聚成一条。新项目 `pyproject.toml` / `requirements.in` 钉 `loguru>=0.8.0`（`record["template"]`
+  是 0.8 新字段）。已有项目：`--add agent` 只刷新 logger，不会改 `[project].dependencies`；请把
+  `loguru` 改成 `>=0.8.0` 再 `--update python-deps`。仍停在 0.7 时文件 sink 会丢行
 - 跨卷复制 bundle 时保留嵌套符号链接（`python3 → python3.13` 不再被解成失效绝对路径）。smoke
   要求数据目录里的 `resource/`、`agent/` 是能解析的目录，断掉的链接不再误报成功
 - `PI_USER_DATA_DIR` 指到项目目录内部时，`link_work_root()` 跳过数据目录自身，避免

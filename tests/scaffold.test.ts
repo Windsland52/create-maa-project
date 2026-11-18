@@ -789,6 +789,7 @@ describe('scaffold', () => {
     expect(releaseWorkflow).toContain('pnpm check:py')
     expect(releaseWorkflow).toContain('uv export --frozen')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
+    expect(releaseWorkflow).toContain('continue-on-error: true')
     expect(releaseWorkflow).toContain('GITHUB_TOKEN: ${{ github.token }}')
     expect(releaseWorkflow).toContain('-${gui_upper}.$ext"')
     // macOS MXU ships a dmg; the matrix ext applies to the other GUI archives.
@@ -4677,8 +4678,10 @@ export default defineConfig({
     const releaseWorkflow = await readFile(join(root, 'Maa Test', '.github/workflows/release.yml'), 'utf8')
     expect(checkWorkflow).not.toContain('check-project.mjs')
     expect(checkWorkflow).toContain('pnpm audit --audit-level high')
+    expect(checkWorkflow).toContain('continue-on-error: true')
     expect(checkWorkflow).toContain('pnpm release:dry-run')
     expect(releaseWorkflow).toContain('pnpm audit --audit-level high')
+    expect(releaseWorkflow).toContain('continue-on-error: true')
     expect(releaseWorkflow).not.toContain('check-project.mjs')
     expect(releaseWorkflow).toContain('pnpm release:dry-run')
     expect(releaseWorkflow).toContain("if: github.event_name == 'workflow_dispatch'")

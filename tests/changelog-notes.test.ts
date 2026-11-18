@@ -25,7 +25,9 @@ async function runNotes(version?: string): Promise<Run> {
 /** Every version heading the changelog declares. */
 async function declaredVersions(): Promise<string[]> {
   const content = await readFile(join(repoRoot, 'CHANGELOG.md'), 'utf8')
-  return [...content.matchAll(/^## \[v?([^\]]+)\]/gm)].map((match) => match[1] as string)
+  return [...content.matchAll(/^## \[v?([^\]]+)\]/gm)]
+    .map((match) => match[1] as string)
+    .filter((version) => version !== 'Unreleased')
 }
 
 const versions = await declaredVersions()

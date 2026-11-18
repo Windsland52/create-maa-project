@@ -142,6 +142,9 @@ add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
 | `tools/ci/smoke-macos-app.sh`         | managed |
 | `tools/sync-runtime.mjs`              | managed |
 
+`check.yml` and `release.yml` run `pnpm audit --audit-level high` with `continue-on-error`: a high
+advisory is a warning, not a Check or Release failure.
+
 With MXU enabled, macOS ships a signed `.app` inside a `.dmg` (`tools/macos-app-bundle.mjs`, ad-hoc
 codesign). Agent projects honor `PI_USER_DATA_DIR` so config and logs land outside the read-only
 bundle. Without MXU the bundle steps are skipped and macOS still ships only the MFAA `.tar.gz`.

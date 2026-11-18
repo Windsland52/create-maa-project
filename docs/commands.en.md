@@ -132,6 +132,11 @@ has no github target):
 | `tools/ci/smoke-macos-app.sh`         | runs the Agent from a read-only bundle with `PI_USER_DATA_DIR` so data lands outside the app | managed |
 | `tools/sync-runtime.mjs`              | `pnpm sync:runtime`: MaaFW / GUI / (Agent) embedded Python                                   | managed |
 
+`check.yml` and `release.yml` both run `pnpm audit --audit-level high`, but a failure is only a
+warning (`continue-on-error`) and does not block Check or a release: the scan covers development
+dependencies such as maa-tools, and transitive advisories often have no installable patch. The step
+still runs and the log is kept.
+
 With MXU enabled, the macOS release asset is a signed `.app` inside a `.dmg` (ad-hoc codesign, no
 notarize). Agent projects honor `PI_USER_DATA_DIR` so `config/` and `debug/` go to a writable data
 directory next to a read-only `.app`. Without MXU, macOS still ships only the MFAA `.tar.gz` and the

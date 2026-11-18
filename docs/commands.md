@@ -115,6 +115,8 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 | `tools/ci/smoke-macos-app.sh`         | 以只读 bundle + `PI_USER_DATA_DIR` 跑 Agent，确认数据目录落在包外                   | managed  |
 | `tools/sync-runtime.mjs`              | `pnpm sync:runtime`：同步 MaaFW / GUI /（Agent）嵌入 Python                         | managed  |
 
+`check.yml` 与 `release.yml` 都会跑 `pnpm audit --audit-level high`，但失败只作警告（`continue-on-error`），不阻断 Check 或发版：扫描的是 maa-tools 等开发依赖，传递 advisory 常无可安装补丁。步骤仍跑、日志仍在。
+
 启用 MXU 后，macOS 发布资产是签名的 `.app` 包进 `.dmg`（ad-hoc codesign，没有 notarize）。Agent
 项目在 Client 设置 `PI_USER_DATA_DIR` 时把 `config/`、`debug/` 写到可写数据目录，以配合只读
 `.app`。未启用 MXU 时 macOS 仍只出 MFAA 的 `.tar.gz`，bundle 步骤会跳过。

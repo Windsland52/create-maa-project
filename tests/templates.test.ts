@@ -255,6 +255,38 @@ describe('workflow templates', () => {
     expect(content.replaceAll('${{', '')).not.toContain('{{')
   })
 
+  it('treats generated-project pnpm audit as a warning in check and release', async () => {
+    const check = String(
+      githubFiles(devToolInput(true)).find((entry) => entry.path === '.github/workflows/check.yml')?.content ?? '',
+    )
+    const release = releaseWorkflowFile({
+      slug: 'maaxxxx',
+      displayName: 'MaaXXXX',
+      includeGitCliff: false,
+    }).content.toString()
+
+    for (const workflow of [
+      check,
+      release,
+    ]) {
+      // Transitive advisories on maa-tools often have no installable patch; the step still runs.
+      expect(workflow).toContain('pnpm audit --audit-level high\n        continue-on-error: true')
+      expect(workflow.match(/continue-on-error: true/g)).toEqual([
+        'continue-on-error: true',
+      ])
+    }
+
+    const documents = await Promise.all([
+      readFile(join(repoRoot, 'docs/commands.md'), 'utf8'),
+      readFile(join(repoRoot, 'docs/commands.en.md'), 'utf8'),
+      readFile(join(repoRoot, 'skills/create-maa-project/references/commands.md'), 'utf8'),
+    ])
+    for (const document of documents) {
+      expect(document).toContain('continue-on-error')
+      expect(document).toContain('pnpm audit --audit-level high')
+    }
+  })
+
   it('writes exactly the documented github file set', () => {
     const files = githubFiles(devToolInput(true))
     const paths = files.map((file) => file.path).sort()

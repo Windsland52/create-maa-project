@@ -2,6 +2,16 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 变更
+
+- 生成项目 Check / Release 的 `pnpm audit --audit-level high` 失败改为警告（`continue-on-error`），不再阻断流水线。扫描范围是 maa-tools 等开发依赖，传递 advisory 常无可安装补丁，步骤仍跑、日志仍在。与 M9A 对齐。
+
+已有项目：`check.yml` 与 `release.yml` 都是受管文件，重跑 `create-maa-project --add github` 即刷新（`--update` 没有 github 目标）。
+
+[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.8.0...HEAD
+
 ## [3.8.0] - 2026-11-17
 
 ### 新增

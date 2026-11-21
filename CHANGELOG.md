@@ -14,8 +14,9 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 - 生成项目 Check / Release 的 `pnpm audit --audit-level high` 失败改为警告（`continue-on-error`），不再阻断流水线。扫描范围是 maa-tools 等开发依赖，传递 advisory 常无可安装补丁，步骤仍跑、日志仍在。与 M9A 对齐。
 - 生成的 `tools/build-release.mjs` 不再改写 MXU 包的 `title`：窗口标题回到协议默认的 `<name> <version>`，要自定义或本地化标题就在 `interface.json` 写 `title`（客户端运行时解析 `$key`）。此前构建期会把 `label` 拼成 `<label> <version> | MXU` 字面量，`label` 改成键后会把 `$Interface.Label` 带进发布包。
+- 生成的 `.github/cliff.toml` 改用 `commit.remote.username` 取提交者：git-cliff 2.13 已弃用 `commit.github.*`，旧写法每次生成发布说明都会在日志里打一条弃用告警。取不到远端数据时（`--offline` 重跑）照旧回退到提交者姓名。根级的 `github.contributors`（新贡献者段落）不受影响，git-cliff 没有改名。
 
-已有项目：`check.yml`、`release.yml` 与 `tools/build-release.mjs` 都是受管文件，重跑 `create-maa-project --add github` 即刷新（`--update` 没有 github 目标）。
+已有项目：`check.yml`、`release.yml` 与 `tools/build-release.mjs` 都是受管文件，重跑 `create-maa-project --add github` 即刷新（`--update` 没有 github 目标）；装了 git-cliff add-on 的项目跑 `create-maa-project --add git-cliff` 刷新 `.github/cliff.toml`。
 
 [Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.8.0...HEAD
 

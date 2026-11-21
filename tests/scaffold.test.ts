@@ -1228,10 +1228,13 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     )
     // The `[git.github] commits` table never reached the pinned git-cliff build; the release
     // job enables remote data through GITHUB_REPO, so the config no longer claims a switch.
-    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).not.toContain('[git.github]')
-    expect(await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')).toContain(
-      '问题修复 | Bug Fixes',
-    )
+    const cliffConfig = await readFile(join(root, 'maa-create-addons', '.github/cliff.toml'), 'utf8')
+    expect(cliffConfig).not.toContain('[git.github]')
+    // git-cliff 2.13 deprecates the per-host `commit.github` namespace in favour of
+    // `commit.remote`; the root `github.contributors` context keeps its name.
+    expect(cliffConfig).toContain('{% if commit.remote.username %}')
+    expect(cliffConfig).not.toContain('commit.github')
+    expect(cliffConfig).toContain('问题修复 | Bug Fixes')
     expect(await readFile(join(root, 'maa-create-addons', '.github/workflows/release.yml'), 'utf8')).toContain(
       'body_path: release-assets/CHANGES.md',
     )

@@ -52,15 +52,13 @@ const GUI_TYPES = {
                       "mxu.exe",
                   ],
         flatLayout: false,
-        modifyInterface(iface, slug, ver) {
-            const modified = {...iface};
-            const displayName =
-                typeof modified.label === "string" && modified.label.trim() ? modified.label.trim() : slug;
-            modified.title = `${displayName} ${ver} | MXU`;
-            // Deliberately no agent override: prepareReleaseInterface already sets the
-            // platform-correct command (the bundled interpreter running agent/main.py), and
-            // MXU resolves relative child_exec paths against the project root on its own.
-            return modified;
+        // Deliberately no interface override: prepareReleaseInterface already sets the
+        // platform-correct Agent command (the bundled interpreter running agent/main.py), and MXU
+        // resolves relative child_exec paths against the project root on its own. The window title
+        // stays the protocol default (`name` + `version`); a project that wants its own -- possibly
+        // translated -- title sets `title` in interface.json, which the client resolves at runtime.
+        modifyInterface(iface) {
+            return iface;
         },
     },
 };

@@ -2926,7 +2926,9 @@ export default defineConfig({
       }
       const expectedChildExec = runtimePlatform.startsWith('win-') ? 'python/python.exe' : 'python/bin/python3'
 
-      expect(packageInterface.title).toContain('| MXU')
+      // The build no longer rewrites `title`: the client falls back to the protocol default
+      // (`name` + `version`), and a project's own — possibly translated — `title` reaches it as-is.
+      expect(packageInterface.title).toBeUndefined()
       expect(packageInterface.agent?.[0]?.child_exec).toBe(expectedChildExec)
       // The MXU GUI config must not re-declare the Agent command: prepareReleaseInterface owns it.
       expect(packageInterface.agent?.[0]?.child_args).toEqual(['-u', 'agent/main.py'])

@@ -4,6 +4,12 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 ## [Unreleased]
 
+### 新增
+
+- 生成项目新增 `tools/validate-i18n.mjs` 与 `check:i18n`，并接入 `pnpm check`。它校验 `interface.json` 的 `languages` 约定：`$key` 引用必须在每个语言文件里都有条目、语言文件里的条目必须仍被引用、各语言的键集合必须一致。声明 `languages` 后，文本字段（`label`、`description`、`doc`、`desc`、`title`、`welcome`、`pattern_msg`）与 pipeline `focus` 消息模板必须是 `$key`：字面量一律算未翻译，不限语言；`icon`、`license`、`contact` 的字面量是路径或标识，仍然允许。没声明 `languages` 的项目只检查无处解析的 `$key`，单语言项目不会被判失败。
+
+已有项目：`tools/validate-i18n.mjs` 是受管文件，重跑 `create-maa-project --add dev-tools` 即补上；`package.json` 是 `once` 文件，需要自行补 `check:i18n` 脚本并加进 `check` 链。
+
 ### 变更
 
 - 生成项目 Check / Release 的 `pnpm audit --audit-level high` 失败改为警告（`continue-on-error`），不再阻断流水线。扫描范围是 maa-tools 等开发依赖，传递 advisory 常无可安装补丁，步骤仍跑、日志仍在。与 M9A 对齐。

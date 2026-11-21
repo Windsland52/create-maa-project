@@ -59,7 +59,7 @@ add-on 依赖会被自动补全，无需手动按顺序添加：
 
 ### dev-tools 写入的文件
 
-`--add dev-tools` 会写入 13 个文件：
+`--add dev-tools` 会写入 14 个文件：
 
 | 文件                                          | 用途                                                       | 刷新方式 |
 | --------------------------------------------- | ---------------------------------------------------------- | -------- |
@@ -68,6 +68,7 @@ add-on 依赖会被自动补全，无需手动按顺序添加：
 | `.prettierignore`                             | 忽略生成的 schema baseline 等                              | once     |
 | `package.json`                                | devDependencies、`engines.node >= 22.13`、`packageManager` | once     |
 | `pnpm-workspace.yaml`                         | pnpm workspace 配置                                        | once     |
+| `tools/validate-i18n.mjs`                     | `check:i18n` 使用的多语言校验脚本                          | managed  |
 | `tools/validate-schema.mjs`                   | `check:schema` 使用的校验脚本                              | managed  |
 | `tools/schema/interface.schema.json`          | 上游 MaaFW baseline（interface）                           | managed  |
 | `tools/schema/interface_config.schema.json`   | 上游 MaaFW baseline（interface config）                    | managed  |
@@ -97,9 +98,16 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
 这三个 `once` 文件由 add-on 合并写入：`settings.json` 与 `extensions.json` 保留项目已有的键（`--add vscode` 再跑一次不会丢掉你自己加的 `editor.rulers` 或扩展推荐），`launch.json` 按 `name` 合并 `configurations`；只有 `managed` 的 `tasks.json` 会被整体刷新。`maatools.config.mts` 同样是 `once`：`--add agent` 只把 `vscode.agents.uv` 调试会话补进已有文件，`--sync` 只在它缺失时重建，其余情况都不会重写。`--doctor` 会检查它的必填字段（`maaVersion`、`interfacePath`、`check`），需要重建时提示删除该文件后跑 `--sync metadata`。
 
 `package.json` 中的脚本按启用的 add-on 组合：`check` 始终包含 `format:check`、`check:schema`、
-`check:maa`；`github` 追加 `release:dry-run`、`sync:runtime`，`schema-sync` 追加 `sync:schema`，
+`check:i18n`、`check:maa`；`github` 追加 `release:dry-run`、`sync:runtime`，`schema-sync` 追加 `sync:schema`，
 `optimize-images` 追加 `optimize:images`，Agent 项目追加 `format:py`、`lint:py`、`typecheck:py`、
 `check:py`。
+
+`check:i18n` 校验 `interface.json` 的 `languages` 约定：`$key` 引用必须在每个语言文件里都有条目，
+语言文件里的条目必须仍被引用，各语言的键集合必须一致。声明 `languages` 之后，文本字段
+（`label`、`description`、`doc`、`desc`、`title`、`welcome`、`pattern_msg`）和 pipeline `focus`
+消息模板必须是 `$key`：字面量一律算未翻译，与它写的是哪种语言无关。`icon`、`license`、`contact`
+的字面量是路径或标识，仍然允许。没有声明 `languages` 的项目只检查无处解析的 `$key`，单语言项目
+不会被判失败。
 
 ### github 写入的文件
 

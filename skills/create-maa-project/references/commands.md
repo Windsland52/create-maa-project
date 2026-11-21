@@ -88,7 +88,7 @@ Custom feature list leaves it unchecked, so do not assume an interactive project
 
 ### Files written by dev-tools
 
-`--add dev-tools` writes 13 files:
+`--add dev-tools` writes 14 files:
 
 | File                                                          | Refresh |
 | ------------------------------------------------------------- | ------- |
@@ -97,6 +97,7 @@ Custom feature list leaves it unchecked, so do not assume an interactive project
 | `.prettierignore`                                             | once    |
 | `package.json` (devDependencies, engines, packageManager)     | once    |
 | `pnpm-workspace.yaml`                                         | once    |
+| `tools/validate-i18n.mjs`                                     | managed |
 | `tools/validate-schema.mjs`                                   | managed |
 | `tools/schema/interface.schema.json` (upstream)               | managed |
 | `tools/schema/interface_config.schema.json` (upstream)        | managed |
@@ -124,7 +125,7 @@ A project without this add-on has no `.vscode/`, and `--doctor` reports `vscode-
 skipped rather than failed.
 
 Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
-`check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
+`check:schema`, `check:i18n`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
 

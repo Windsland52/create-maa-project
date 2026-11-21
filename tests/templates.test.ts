@@ -41,6 +41,7 @@ const DEV_TOOL_FILES = [
   'tools/schema/interface_import.schema.json',
   'tools/schema/pipeline.schema.json',
   'tools/schema/schema-manifest.json',
+  'tools/validate-i18n.mjs',
   'tools/validate-schema.mjs',
 ]
 
@@ -86,7 +87,7 @@ describe('dev-tools templates', () => {
 
     expect(paths).toEqual(DEV_TOOL_FILES)
     // docs/commands.md states the count.
-    expect(paths).toHaveLength(13)
+    expect(paths).toHaveLength(14)
   })
 
   it('keeps editor integration out of the dev-tools set', () => {
@@ -121,6 +122,7 @@ describe('dev-tools templates', () => {
       'tools/schema/interface_import.schema.json',
       'tools/schema/pipeline.schema.json',
       'tools/schema/schema-manifest.json',
+      'tools/validate-i18n.mjs',
       'tools/validate-schema.mjs',
     ])
   })

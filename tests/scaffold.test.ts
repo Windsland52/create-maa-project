@@ -4631,7 +4631,9 @@ export default defineConfig({
     expect(packageJson.license).toBe('AGPL-3.0-or-later')
     expect(packageJson.scripts).not.toHaveProperty('sync:schema')
     expect(packageJson.scripts).not.toHaveProperty('lint')
-    expect(packageJson.scripts?.check).toBe('pnpm format:check && pnpm check:schema && pnpm check:maa')
+    expect(packageJson.scripts?.check).toBe(
+      'pnpm format:check && pnpm check:schema && pnpm check:i18n && pnpm check:maa',
+    )
     const customActionSchema = await readJson(join(root, 'Maa Test', 'tools/schema/custom.action.schema.json'))
     const customRecognitionSchema = await readJson(
       join(root, 'Maa Test', 'tools/schema/custom.recognition.schema.json'),

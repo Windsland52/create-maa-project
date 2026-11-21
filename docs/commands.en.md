@@ -67,7 +67,7 @@ while the Custom repository-feature list leaves it unchecked by default.
 
 ### Files written by dev-tools
 
-`--add dev-tools` writes 13 files:
+`--add dev-tools` writes 14 files:
 
 | File                                          | Purpose                                                      | Refresh |
 | --------------------------------------------- | ------------------------------------------------------------ | ------- |
@@ -76,6 +76,7 @@ while the Custom repository-feature list leaves it unchecked by default.
 | `.prettierignore`                             | Ignores generated schema baselines and project-owned sources | once    |
 | `package.json`                                | devDependencies, `engines.node >= 22.13`, `packageManager`   | once    |
 | `pnpm-workspace.yaml`                         | pnpm workspace config                                        | once    |
+| `tools/validate-i18n.mjs`                     | Translation check used by `check:i18n`                       | managed |
 | `tools/validate-schema.mjs`                   | Validation script used by `check:schema`                     | managed |
 | `tools/schema/interface.schema.json`          | Upstream MaaFW baseline (interface)                          | managed |
 | `tools/schema/interface_config.schema.json`   | Upstream MaaFW baseline (interface config)                   | managed |
@@ -113,9 +114,17 @@ A project without this add-on has no `.vscode/`, and `--doctor` reports `vscode-
 skipped rather than failed.
 
 Scripts in `package.json` follow the enabled add-ons: `check` always chains `format:check`,
-`check:schema`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
+`check:schema`, `check:i18n`, and `check:maa`; `github` adds `release:dry-run` and `sync:runtime`,
 `schema-sync` adds `sync:schema`, `optimize-images` adds `optimize:images`, and Agent projects
 add `format:py`, `lint:py`, `typecheck:py`, and `check:py`.
+
+`check:i18n` enforces the `languages` contract in `interface.json`: every `$key` reference must
+have an entry in each language file, every entry must still be referenced, and all languages must
+cover the same keys. Once `languages` is declared, text fields (`label`, `description`, `doc`,
+`desc`, `title`, `welcome`, `pattern_msg`) and pipeline `focus` message templates must be a `$key`:
+a literal counts as untranslated whatever language it is written in. A literal `icon`, `license`, or
+`contact` is a path or an identifier, so it stays allowed. A project without `languages` is only
+checked for `$key` references it cannot resolve, so a single-language project never fails.
 
 ### Files written by github
 

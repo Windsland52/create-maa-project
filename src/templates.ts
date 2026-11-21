@@ -206,6 +206,7 @@ export function devToolFiles(input: ProjectTemplateInput): ManagedFileInput[] {
     managed('.node-version', `${SUPPORTED_NODE_MAJOR}\n`),
     managed('.prettierrc.mjs', template('base/.prettierrc.mjs')),
     once('.prettierignore', template('base/.prettierignore')),
+    managed('tools/validate-i18n.mjs', validateI18nScript()),
     managed('tools/validate-schema.mjs', validateSchemaScript()),
     ...schemaFiles(input.includeAgent),
     once('package.json', generatedPackageJson(input)),
@@ -730,8 +731,9 @@ function packageScripts(
     format: 'prettier --write .',
     'format:check': 'prettier --check .',
     'check:schema': 'node tools/validate-schema.mjs',
+    'check:i18n': 'node tools/validate-i18n.mjs',
     'check:maa': 'pnpm exec maa-tools check',
-    check: 'pnpm format:check && pnpm check:schema && pnpm check:maa',
+    check: 'pnpm format:check && pnpm check:schema && pnpm check:i18n && pnpm check:maa',
   }
   if (input.includeGithub) {
     scripts['release:dry-run'] = 'node tools/build-release.mjs --dry-run'
@@ -906,6 +908,10 @@ function vscodeLaunch(): string {
   return template('addons/dev-tools/.vscode/launch.agent.json', {
     agentDebugSessionName: AGENT_DEBUG_SESSION_NAME,
   })
+}
+
+function validateI18nScript(): string {
+  return template('addons/dev-tools/tools/validate-i18n.mjs')
 }
 
 function validateSchemaScript(): string {

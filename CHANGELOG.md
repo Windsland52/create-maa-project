@@ -2,7 +2,7 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [3.9.0] - 2026-11-21
 
 ### 新增
 
@@ -18,7 +18,7 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 已有项目：`check.yml`、`release.yml` 与 `tools/build-release.mjs` 都是受管文件，重跑 `create-maa-project --add github` 即刷新（`--update` 没有 github 目标）；装了 git-cliff add-on 的项目跑 `create-maa-project --add git-cliff` 刷新 `.github/cliff.toml`。
 
-[Unreleased]: https://github.com/Windsland52/create-maa-project/compare/v3.8.0...HEAD
+[3.9.0]: https://github.com/Windsland52/create-maa-project/compare/v3.8.0...v3.9.0
 
 ## [3.8.0] - 2026-11-17
 

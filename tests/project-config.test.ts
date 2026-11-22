@@ -81,7 +81,7 @@ describe('project config validation', () => {
         mutate: (config) => (config.project.version = '1.0'),
       },
       {
-        expected: 'controller.kinds[0] must be one of: Adb, Win32, MacOS, PlayCover, Gamepad, Linux, WlRoots',
+        expected: 'controller.kinds[0] must be one of: Adb, IOS, Win32, MacOS, PlayCover, Gamepad, Linux, WlRoots',
         mutate: (config) =>
           (config.controller.kinds = [
             'Win3',

@@ -3,6 +3,7 @@ import type { ControllerKind, MaaProjectConfig } from './types.js'
 /** MaaFW's controller enum: `--controller`, `maa-project.json` and `interface.json` all use it. */
 export const CONTROLLER_KINDS: ControllerKind[] = [
   'Adb',
+  'IOS',
   'Win32',
   'MacOS',
   'PlayCover',
@@ -35,6 +36,8 @@ export function normalizeControllerKind(value: string): ControllerKind | undefin
     case 'adb':
     case 'android':
       return 'Adb'
+    case 'ios':
+      return 'IOS'
     case 'win32':
     case 'windows':
       return 'Win32'

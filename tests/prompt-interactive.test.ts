@@ -307,6 +307,7 @@ describe('interactive prompt flow', () => {
       'Control targets',
       [
         { value: 'Adb', label: 'Android / Emulator (Adb)' },
+        { value: 'IOS', label: 'iOS device (IOS)' },
         { value: 'Win32', label: 'Windows app (Win32)' },
         { value: 'MacOS', label: 'macOS app (MacOS)' },
         { value: 'PlayCover', label: 'PlayCover iOS app' },

@@ -162,6 +162,24 @@ describe('doctor malformed JSON diagnostics', () => {
     expect((await runDoctor(projectRoot)).lines.join('\n')).toContain('[OK] Interface metadata matches project config.')
   })
 
+  it('accepts the IOS controller type that the synced schema defines', async () => {
+    const projectRoot = await createTempProject('ios-controller-type')
+    await setController(projectRoot, [
+      { name: 'iOS', label: 'iOS device', type: 'IOS' },
+    ])
+
+    const report = await runDoctor(projectRoot)
+    const output = report.lines.join('\n')
+
+    expect(output).toContain('[OK] Interface metadata matches project config.')
+    expect(output).not.toContain('[ERR] interface.json controller')
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'interface-metadata', status: 'pass' }),
+      ]),
+    )
+  })
+
   it('only warns about a hand-tuned controller type on an unmanaged interface.json', async () => {
     const projectRoot = await createTempProject('unmanaged-controller-type')
     await setController(projectRoot, [

@@ -2720,6 +2720,7 @@ export default defineConfig({
     expect(await readJson(join(projectRoot, 'interface.json'))).toMatchObject({
       controller: [
         { name: 'Adb', label: 'Android / Emulator', type: 'Adb', display_short_side: 720 },
+        { name: 'iOS', label: 'iOS device', type: 'IOS', display_short_side: 720 },
         { name: 'Windows', label: 'Windows app', type: 'Win32', display_short_side: 720 },
         { name: 'macOS', label: 'macOS app', type: 'MacOS', display_short_side: 720 },
         { name: 'PlayCover', label: 'PlayCover iOS app', type: 'PlayCover', display_short_side: 720 },

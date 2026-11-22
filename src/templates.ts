@@ -602,6 +602,8 @@ function controllerMetadata(kind: ControllerKind): { name: string; label: string
   switch (kind) {
     case 'Adb':
       return { name: 'Adb', label: 'Android / Emulator', type: 'Adb' }
+    case 'IOS':
+      return { name: 'iOS', label: 'iOS device', type: 'IOS' }
     case 'Win32':
       return { name: 'Windows', label: 'Windows app', type: 'Win32' }
     case 'MacOS':

@@ -52,6 +52,17 @@ describe('parseArgs', () => {
     ])
   })
 
+  it('accepts the iOS device controller kind', () => {
+    const options = parseArgs([
+      '--controller',
+      'ios',
+    ])
+
+    expect(options.controllers).toEqual([
+      'IOS',
+    ])
+  })
+
   it('still accepts the pre-rename WlRoots spelling', () => {
     const options = parseArgs([
       '--controller',

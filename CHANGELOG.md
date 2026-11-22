@@ -2,6 +2,12 @@
 
 create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 控制器类型补齐 MaaFW 5.16.0 新增的 `IOS`：`--controller IOS`、交互式控制目标、MCP 的 `controllers` 与 `--doctor` 都接受该类型，生成的 `interface.json` 条目为 `name: "iOS"`、`type: "IOS"`。此前 `--doctor` 会把合法的 `IOS` 控制器误报为“不是 MaaFW 控制器类型”，并提示无法修复它的 `--sync metadata`。
+
 ## [3.9.0] - 2026-11-21
 
 ### 新增

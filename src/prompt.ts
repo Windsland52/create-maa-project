@@ -953,6 +953,8 @@ function controllerChoiceLabel(kind: ControllerKind, language: PromptLanguage): 
   switch (kind) {
     case 'Adb':
       return choice(language, 'Android / Emulator (Adb)', 'Android / 模拟器（Adb）')
+    case 'IOS':
+      return choice(language, 'iOS device (IOS)', 'iOS 真机（IOS）')
     case 'Win32':
       return choice(language, 'Windows app (Win32)', 'Windows 应用（Win32）')
     case 'MacOS':

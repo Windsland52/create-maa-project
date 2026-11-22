@@ -150,8 +150,10 @@ Project identity is split into two fields:
 - `slug`: ASCII kebab-case ID used for repository names, package names, artifacts, and
   `interface.json` `name`. Names reserved by the release package layout (`mxu`, `python`,
   `resource`, `maafw`, `agent`, …) are rejected on new creates and explicit `--slug`.
-- `displayName`: user-facing label used for `interface.json` `label`; it may be Chinese
-  or any other display text.
+- `displayName`: user-facing label used for the `interface.json` top-level `label`; it may be Chinese
+  or any other display text. When a project declares `languages` and uses a `$key` label (top-level
+  or on a resource entry), `--sync` preserves the key and the display text lives in the translation
+  files; never make `displayName` itself a `$key`, because it also feeds the Android artifact prefix.
 
 The resource layout is fixed around `resource/base/` plus optional `resource/<pack>/` folders.
 `interface.json` resource paths are generated in the order recorded in `maa-project.json`; later

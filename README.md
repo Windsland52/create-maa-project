@@ -112,7 +112,7 @@ CLI 内置零干扰的自动更新：最多每 24 小时向 npm registry 查询�
 项目身份拆成两个字段：
 
 - `slug`：ASCII kebab-case ID，用于仓库名、package 名、artifact 名和 `interface.json` 的 `name`。不能用发布包保留名（`mxu`、`python`、`resource`、`maafw`、`agent` 等）；只在新创建和显式 `--slug` 时校验。
-- `displayName`：面向用户的显示名，用于 `interface.json` 的 `label`，可以是中文或其它展示文本。
+- `displayName`：面向用户的显示名，用于 `interface.json` 的顶层 `label`，可以是中文或其它展示文本。若项目声明了 `languages` 并把顶层或资源条目的 `label` 写成 `$key`，`--sync` 会保留这个键，显示名由翻译文件维护；`displayName` 本身不要写成 `$key`（它同时是 Android 资产前缀的来源）。
 
 资源结构固定围绕 `resource/base/` 与可选的 `resource/<pack>/`；`interface.json` 的 resource 路径按 `maa-project.json` 中记录的顺序生成，后添加的资源包在 MaaFW 资源查找中有更高覆盖优先级。项目自有文件只在首次创建时写入，之后仅由显式的 `--sync`、`--add`、`--update` 改写对应文件。
 

@@ -28,7 +28,7 @@
 | universal（arm64-v8a + x86_64） | `<前缀>-android-<tag>.apk`       |
 | 单 ABI                          | `<前缀>-android-<abi>-<tag>.apk` |
 
-前缀取 `maa-project.json` 的 `project.displayName`；非 ASCII 或带空白时退回 `project.slug`（应用内更新按资产名选包，前缀必须是 ASCII）。universal 包**故意不带 ABI 段**：带段会让应用内更新绕过 universal 回退。
+前缀取 `maa-project.json` 的 `project.displayName`；非 ASCII 或带空白时退回 `project.slug`（应用内更新按资产名选包，前缀必须是 ASCII）。`displayName` 要填真实显示名，不要填 i18n 的 `$key`——`$` 同样会让前缀退回 slug，`$key` 应写在 `interface.json.label`。universal 包**故意不带 ABI 段**：带段会让应用内更新绕过 universal 回退。
 
 ## 本地出包
 

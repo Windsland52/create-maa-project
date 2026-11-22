@@ -206,6 +206,8 @@ the files:
 - Artifact names: `<prefix>-android-<tag>.apk` (universal, deliberately without an ABI segment) and
   `<prefix>-android-<abi>-<tag>.apk` (single ABI). The prefix is `project.displayName`, falling back to
   `project.slug` when it is not ASCII — in-app updates select assets by name, so the prefix must be.
+  Keep `displayName` as the real display name, not a `$key`; the i18n `$key` belongs in
+  `interface.json.label`.
 - The recipe's `app.id` is validated by the shell: it only takes lowercase package segments (letters,
   digits and underscores, each starting with a letter) and becomes `com.aliothmoon.maafw.<id>`. A
   kebab-case project id is converted (`maa-helper` → `maa_helper`), and one starting with a digit gets
@@ -237,6 +239,11 @@ be reverted with `--restore`.
 `--sync` refreshes only what `maa-project.json` derives, and keeps whatever the project wrote by
 hand into `interface.json`:
 
+- A top-level `label` or a resource entry's `label` written as a `$key` is preserved: the display
+  text lives in the `languages` files. A literal label still follows the config (`project.displayName`
+  at the top level, `resources[].label` on a resource entry). Never put a `$key` in `displayName`
+  itself — it also feeds the Android artifact prefix, and `$` makes the prefix fall back to
+  `project.slug`.
 - Controller entries have their ID and `type` repaired in place for each configured target, while
   `label`, `attach_resource_path`, `icon`, `option`, `display_long_side` and the per-type blocks
   (`linux`, `adb`, …) are left as they are — a tuned `display_short_side` or `label` is not reset. A

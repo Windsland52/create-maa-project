@@ -173,7 +173,8 @@ dev-tools 的产物（Prettier formatter、`tools/schema/*`、`pnpm install`）�
   `--add android`。
 - 产物命名：`<前缀>-android-<tag>.apk`（universal，刻意不带 ABI 段）与
   `<前缀>-android-<abi>-<tag>.apk`（单 ABI）。前缀取 `project.displayName`，非 ASCII 或带空白时退回
-  `project.slug`（应用内更新按资产名选包，前缀必须 ASCII）。
+  `project.slug`（应用内更新按资产名选包，前缀必须 ASCII）。`displayName` 要填真实显示名，不要填
+  `$key`；i18n 的 `$key` 属于 `interface.json.label`。
 - 配方里的 `app.id` 由外壳校验：只收小写包段（字母 / 数字 / 下划线，每段以字母开头），拼成
   `com.aliothmoon.maafw.<id>`。项目 ID 的连字符会换成下划线（`maa-helper` → `maa_helper`），数字开头
   加前缀 `p`；手改配方写回连字符时 `--doctor` 会先报出来，而不是等 Gradle 构建失败。
@@ -199,6 +200,7 @@ create-maa-project --sync network --network official
 
 `--sync` 只刷新由 `maa-project.json` 派生的部分，`interface.json` 里手工写的内容一律保留：
 
+- 顶层 `label` 与资源条目的 `label` 写成 `$key` 时原样保留（多语言项目的显示名在 `languages` 指向的翻译文件里维护）；字面量仍跟随配置（顶层用 `project.displayName`，资源条目用 `resources[].label`）。不要把 `displayName` 本身写成 `$key`：它同时是 Android 资产前缀的来源，`$` 会让前缀退回 `project.slug`。
 - 控制器条目按配置里的控制目标就地修好标识与 `type`；`label`、`attach_resource_path`、`icon`、`option`、`display_long_side` 以及 `linux`／`adb` 这类按类型的子块都原样留下，`display_short_side` 和 `label` 的手工调整也不会被打回去。配置表达不出的控制器（例如第二个 Adb 客户端）保留不动；CLI 早期写过的控制器 ID（`Android`、`WlRoots`）在原地改名，不会另外多出一条；如果某个控制目标由项目自己的条目承担（例如把默认的 Adb 条目换成了自己的云客户端），只修 `type`，标识和显示名不动。
 - 资源包同理：配置已知的包就地刷新并保持配置顺序，配置里关掉的包会被移除，配置不认识的包保留。
 - `github` 只在 `maa-project.json` 里记了仓库地址时才会写入；没有记录时手工写的那条保留，`--doctor` 给出 `[INFO]` 提示可用 `--sync github-url` 记录，不再当作错误。

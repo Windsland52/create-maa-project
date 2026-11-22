@@ -370,12 +370,18 @@ function syncedResources(existing: unknown, config: ProjectConfig): Array<Record
     const current = available.find((entry) => !claimed.has(entry) && entry.name === target.name)
     if (current === undefined) return { ...target }
     claimed.add(current)
-    return { ...current, label: target.label, path: target.path }
+    // A `$key` label is maintained in the language files; keep it like the top-level label.
+    const label = isI18nKey(current.label) ? current.label : target.label
+    return { ...current, label, path: target.path }
   })
   for (const entry of available) {
     if (!claimed.has(entry)) merged.push(entry)
   }
   return merged
+}
+
+function isI18nKey(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('$')
 }
 
 function applyInterfaceMetadata(
@@ -384,7 +390,11 @@ function applyInterfaceMetadata(
   hasDefaultIcon: boolean,
 ): void {
   interfaceJson.name = config.project.slug
-  interfaceJson.label = config.project.displayName
+  // A `$key` label is an i18n reference: the text lives in the `languages` files, so the config's
+  // displayName must not overwrite the reference. Literal labels still follow displayName.
+  if (!isI18nKey(interfaceJson.label)) {
+    interfaceJson.label = config.project.displayName
+  }
   interfaceJson.version = addV(config.project.version)
   if (hasDefaultIcon) {
     if (interfaceJson.icon === undefined || interfaceJson.icon === 'logo.ico') {

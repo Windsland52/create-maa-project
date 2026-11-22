@@ -138,10 +138,13 @@ create-maa-project maa-helper --template agent --slug maa-helper \
 - Sync (`--sync`): `config`, `metadata`, `display-name`, `version`, `license`,
   `github-url`, `network`.
 - `--sync` refreshes only what `maa-project.json` determines. Everything the project wrote by hand
-  into `interface.json` is kept: a controller's `label`, `attach_resource_path`, `icon`, `option`, a
-  per-type block or a tuned `display_short_side`, a controller the config cannot express, a `github`
-  link the config does not record, and an `agent` block on a non-Agent project. Only a controller's
-  ID (including the pre-rename `Android`/`WlRoots`) and its `type` are repaired. The `once` files
+  into `interface.json` is kept: a top-level `label` or resource entry `label` written as a `$key`
+  (the text lives in the `languages` files), a controller's `label`, `attach_resource_path`, `icon`,
+  `option`, a per-type block or a tuned `display_short_side`, a controller the config cannot express,
+  a `github` link the config does not record, and an `agent` block on a non-Agent project. Only a controller's ID
+  (including the pre-rename `Android`/`WlRoots`) and its `type` are repaired. Keep `displayName` as
+  the real display name: it feeds the Android artifact prefix, so a `$key` there falls back to the
+  slug. The `once` files
   under `.vscode/` are not written at all, and `maatools.config.mts` is recreated only when it is
   missing — `--doctor` relies on that for its repair hint. Use `--sync` to fix drift, never to reset
   those; `project.interfaceUnmanaged` in the config skips the `interface.json` write entirely.

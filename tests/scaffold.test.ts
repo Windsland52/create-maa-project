@@ -1638,6 +1638,43 @@ writeFileSync('sync-runtime-args.json', JSON.stringify(process.argv.slice(2)))
     })
   })
 
+  it('keeps i18n $key labels in interface.json when syncing metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cmp-'))
+    process.chdir(root)
+    await createProject(defaultOptions({ name: 'maa-i18n-label', displayName: 'Maa I18n' }))
+    const projectRoot = join(root, 'maa-i18n-label')
+    const interfacePath = join(projectRoot, 'interface.json')
+    const interfaceJson = (await readJson(interfacePath)) as Record<string, unknown>
+    interfaceJson.languages = {
+      zh_cn: 'locales/zh_cn.json',
+    }
+    interfaceJson.label = '$Interface.Label'
+    const resources = interfaceJson.resource as Array<Record<string, unknown>>
+    resources[0]!.label = '$Resource.Base'
+    await writeFile(interfacePath, JSON.stringify(interfaceJson, null, 4) + '\n', 'utf8')
+    await mkdir(join(projectRoot, 'locales'), { recursive: true })
+    await writeFile(
+      join(projectRoot, 'locales/zh_cn.json'),
+      JSON.stringify({ 'Interface.Label': 'Maa I18n', 'Resource.Base': 'Base' }, null, 4) + '\n',
+      'utf8',
+    )
+    process.chdir(projectRoot)
+
+    const assertI18nLabels = async () => {
+      const synced = (await readJson(interfacePath)) as Record<string, any>
+      expect(synced.label).toBe('$Interface.Label')
+      expect(synced.version).toBe('v0.2.0')
+      expect(synced.resource[0].label).toBe('$Resource.Base')
+    }
+
+    await syncProject(defaultOptions({ sync: 'version', version: '0.2.0' }))
+    await assertI18nLabels()
+
+    const result = await syncProject(defaultOptions({ sync: 'display-name', displayName: 'Maa Renamed' }))
+    expect(result.config.project.displayName).toBe('Maa Renamed')
+    await assertI18nLabels()
+  })
+
   it('keeps the hand-tuned parts of interface.json when syncing metadata', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cmp-'))
     process.chdir(root)

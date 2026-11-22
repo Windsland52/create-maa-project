@@ -4,9 +4,14 @@ create-maa-project 的重要更改记录。格式参考 [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [3.9.1] - 2026-11-22
+
 ### 修复
 
+- `--sync` 不再覆盖 `interface.json` 里写成 `$key` 的顶层 `label` 与资源条目 `label`。声明 `languages` 的多语言项目必须用 `$key`（`tools/validate-i18n.mjs` 会把字面量判为未翻译），此前 `--sync version` 等目标会把顶层 `label` 改回 `project.displayName`、把资源条目 `label` 改回配置里的字面量，令 `check:i18n` 失败；现在字面量仍跟随配置，`$key` 由语言文件维护。`displayName` 本身仍是 Android 资产前缀的来源，不要填 `$key`，否则前缀会退回 slug。
 - 控制器类型补齐 MaaFW 5.16.0 新增的 `IOS`：`--controller IOS`、交互式控制目标、MCP 的 `controllers` 与 `--doctor` 都接受该类型，生成的 `interface.json` 条目为 `name: "iOS"`、`type: "IOS"`。此前 `--doctor` 会把合法的 `IOS` 控制器误报为“不是 MaaFW 控制器类型”，并提示无法修复它的 `--sync metadata`。
+
+[3.9.1]: https://github.com/Windsland52/create-maa-project/compare/v3.9.0...v3.9.1
 
 ## [3.9.0] - 2026-11-21
 
